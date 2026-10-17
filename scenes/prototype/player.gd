@@ -3,12 +3,15 @@ extends "res://scenes/player.gd"
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 var equipment: RefCounted
 var health: float = Tuning.PLAYER.health
-var slow_charge: float = Tuning.SLOW.capacity
+var slow_charge: float:
+	get:
+		return equipment.remaining(&"clock") if equipment != null else 0.0
 # Effective enemy-clock multiplier for the current arena tick. On the tick
 # that runs out of charge it averages the slowed and normal portions.
 var world_scale: float = 1.0
 var _slow_held := false
 var _slow_release_required := false
+var _last_repair: StringName = &""
 
 
 func _ready() -> void:
@@ -40,13 +43,19 @@ func _step_slow(delta: float, held: bool) -> void:
 	# A small input/charge helper shared with checks; only step() calls it in
 	# gameplay, using the arena's real delta. It has no independent clock.
 	var dt := maxf(delta, 0.0)
-	var capacity: float = Tuning.SLOW.capacity
-	slow_charge = clampf(slow_charge, 0.0, capacity)
 	_slow_held = held
 	world_scale = 1.0
+	if equipment == null:
+		_slow_release_required = true
+		return
+	if _last_repair != equipment.repairing:
+		_last_repair = equipment.repairing
+		_slow_release_required = true
 	if not held:
 		_slow_release_required = false
-		slow_charge = minf(capacity, slow_charge + Tuning.SLOW.regeneration * dt)
+		return
+	if equipment.repairing == &"clock":
+		_slow_release_required = true
 		return
 	if _slow_release_required:
 		return
@@ -56,11 +65,10 @@ func _step_slow(delta: float, held: bool) -> void:
 	if dt <= 0.0:
 		world_scale = Tuning.SLOW.scale
 		return
-	var active_seconds := minf(dt, slow_charge / Tuning.SLOW.drain)
-	slow_charge = maxf(0.0, slow_charge - Tuning.SLOW.drain * active_seconds)
+	var spent: float = equipment.spend(&"clock", Tuning.SLOW.drain * dt)
+	var active_seconds: float = spent / Tuning.SLOW.drain
 	world_scale = lerpf(1.0, Tuning.SLOW.scale, active_seconds / dt)
-	if slow_charge <= 0.000001:
-		slow_charge = 0.0
+	if not equipment.can_use(&"clock"):
 		_slow_release_required = true
 
 
@@ -73,7 +81,6 @@ func reset_state() -> void:
 	reset_physics_interpolation()
 	velocity = Vector3.ZERO
 	health = Tuning.PLAYER.health
-	slow_charge = Tuning.SLOW.capacity
 	world_scale = 1.0
 	reset_input()
 	if is_instance_valid(model):
@@ -86,14 +93,18 @@ func reset_input() -> void:
 	_slow_held = false
 	_slow_release_required = true
 	world_scale = 1.0
+	_last_repair = equipment.repairing if equipment != null else &""
 
 
 func status_text() -> String:
 	var hint := "hold Space"
-	if _slow_release_required:
+	if equipment != null and equipment.repairing == &"clock":
+		hint = "clock repair; slow disabled"
+	elif slow_charge <= 0.0:
+		hint = "empty; T to repair clock"
+	elif _slow_release_required:
 		hint = "release Space to re-arm"
 	elif _slow_held:
 		hint = "slowing enemies"
-	elif slow_charge < Tuning.SLOW.capacity:
-		hint = "recharging; hold Space to slow"
-	return "Slow %.1f / %.1f | %s" % [slow_charge, Tuning.SLOW.capacity, hint]
+	var capacity: float = equipment.capacity(&"clock") if equipment != null else 0.0
+	return "Slow %.1f / %.1fs | %s" % [slow_charge, capacity, hint]

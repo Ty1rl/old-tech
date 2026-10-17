@@ -47,5 +47,34 @@ func run() -> void:
 	expect(arena.player.health == 100.0 and arena.player.velocity == Vector3.ZERO, "Reset restores player health and clears motion")
 	expect(arena.player.world_scale == 1.0, "Reset restores normal world time")
 	expect(Engine.time_scale == 1.0, "Prototype leaves engine clock unscaled")
+	# Exercise visibility through the real hotkey, and restore the tester's preference.
+	var initial_mode: int = arena.status_hud.readout_mode
+	var toggle := InputEventKey.new()
+	toggle.physical_keycode = KEY_F7
+	toggle.pressed = true
+	var modes: Dictionary = {}
+	for i in range(3):
+		arena._unhandled_input(toggle)
+		modes[arena.status_hud.readout_mode] = true
+		expect(arena.status_hud.visible, "F7 retains the player gauges")
+		if arena.status_hud.readout_mode == 2:
+			expect(not arena.hud.visible and not arena.slow_bar.visible, "Hidden readout hides numbers and old clock bar")
+		elif arena.status_hud.readout_mode == 1:
+			expect(arena.hud.visible and arena.hud.modulate.a < 0.3, "Dim readout retains faint debugging information")
+	expect(modes.size() == 3 and arena.status_hud.readout_mode == initial_mode, "F7 cycles all modes and restores initial choice")
+	var settings := ConfigFile.new()
+	settings.load(arena.StatusHud.READOUT_FILE)
+	expect(int(settings.get_value("hud", "readout", -1)) == initial_mode, "Readout choice is saved across launches")
+	arena.equipment.spend(&"ring", arena.equipment.capacity(&"ring") * 0.75)
+	arena.weapons.select_tool(3)
+	arena._update_hud()
+	expect(is_equal_approx(arena.status_hud.fractions[0], 0.25) and arena.status_hud.selected == 2,
+		"Player gauges reflect real wear and current tool")
+	expect(arena.status_hud.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"Player gauges let weapon mouse input pass through")
+	expect(arena.status_hud.key_hint.get_global_rect().end.y <= root.get_visible_rect().end.y
+		and arena.status_hud.key_hint.global_position.y >= 0,
+		"Readout hotkey hint stays inside the viewport")
+	arena.reset_arena()
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

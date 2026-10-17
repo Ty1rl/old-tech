@@ -13,6 +13,14 @@ R resets the sandbox. F1–F4 spawn a target, swarmer, brute or skirmisher at
 the cursor; F5 adds a mixed group; F6 starts/restarts a bounded encounter.
 Backspace clears enemies and cancels the encounter. Escape pauses.
 
+Four translucent arcs surround an open center around the player: ring (cyan),
+flash (yellow), cone (orange), clock (violet). Each arc shows remaining condition;
+the selected tool has a thin outer highlight and a nearby readiness label.
+The short inner straight bar is health. F7 cycles the upper debugging readout
+through full, dim, and hidden; it starts dim and saves the choice across launches.
+The player gauges remain visible in all three modes. Their radius, spacing and
+opacity are grouped in `status_hud.gd` for early playtest adjustments.
+
 ## Try the resource loop
 
 Start with the stationary blue target, then F5 or F6 for pressure.
@@ -57,7 +65,7 @@ returns to the sandbox or F6 retries. Sandbox has no forced death screen.
 
 All gameplay values are in `tuning.gd`; the arena owns the simulation clock.
 The partner's original main-menu/game scenes and popup managers remain.
-379 headless checks cover components, real weapon/enemy combinations, resource
+Headless checks cover components, real weapon/enemy combinations, resource
 integration, interrupted repairs, cover, control, timing and encounter lifecycle.
 Rendered checks also exercised a real GUI repair trace and retained progress.
 They do not establish game feel: playtest shove strength, repair frequency,

@@ -7,6 +7,7 @@ const Weapons = preload("res://scenes/prototype/weapons.gd")
 const Enemies = preload("res://scenes/prototype/enemies.gd")
 const Equipment = preload("res://scenes/prototype/equipment.gd")
 const Cover = preload("res://scenes/prototype/cover.gd")
+const StatusHud = preload("res://scenes/prototype/status_hud.gd")
 
 var equipment: RefCounted = Equipment.new()
 var cover: RefCounted = Cover.new()
@@ -16,6 +17,7 @@ var weapons: Node3D
 var director: Node3D
 var hud: Label
 var slow_bar: ProgressBar
+var status_hud: Control
 var aim: Vector3 = Vector3.ZERO
 var aim_valid: bool = false
 
@@ -114,6 +116,8 @@ func _build_hud() -> void:
 	slow_bar.show_percentage = false
 	slow_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(slow_bar)
+	status_hud = StatusHud.new()
+	layer.add_child(status_hud)
 
 
 func floor_aim(screen_position: Vector2) -> Vector3:
@@ -141,6 +145,10 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
+			KEY_F7:
+				status_hud.cycle_readout()
+				_update_hud()
+				return
 			KEY_E:
 				var tools := [&"ring", &"beam", &"cone"]
 				_toggle_repair(tools[weapons.selected_tool - 1])
@@ -215,6 +223,12 @@ func _notification(what: int) -> void:
 
 
 func _update_hud() -> void:
+	status_hud.update_status(player, weapons, equipment)
+	var alpha: float = StatusHud.READOUT_ALPHA[status_hud.readout_mode]
+	hud.modulate.a = alpha
+	hud.visible = alpha > 0.0
+	slow_bar.modulate.a = alpha
+	slow_bar.visible = alpha > 0.0
 	hud.text = "WASD move | 1/2/3 tools | LMB draw / click / hold | Space slow | Esc pause\n"
 	hud.text += "E repair tool | T repair clock | R reset | F1–F4 spawn | F5 mixed | F6 encounter | Backspace clear\n"
 	hud.text += "HP %.0f | Enemies %d | World %.2fx\n" % [player.health, director.enemies.size(), player.world_scale]

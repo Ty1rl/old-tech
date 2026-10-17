@@ -4,6 +4,8 @@ const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EquipmentScript = preload("res://scenes/prototype/equipment.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 
+const TOOL_IDS: Array[StringName] = [&"ring", &"beam", &"cone", &"clock"]
+
 var equipment: RefCounted
 var cover: RefCounted
 
@@ -13,27 +15,34 @@ var selected_tool: int = 1
 var ring_drawing: bool = false
 var preview_points: Array[Vector3] = []
 var preview_length: float = 0.0
+var preview_blocked: bool = false
+var preview_cutoff_point: Vector3 = Vector3.ZERO
+var preview_unblocked_points: Array[Vector3] = []
+var preview_blocked_points: Array[Vector3] = []
+
 var ring_phase: String = "idle" # "idle" | "outbound" | "stroke" | "return"
 var ring_pos: Vector3 = Vector3.ZERO
+var ring_launch_origin: Vector3 = Vector3.ZERO
 var ring_points: Array[Vector3] = []
 var ring_stroke_index: int = 0
 var ring_hit_ids: Dictionary = {}
 
-# Tool 2 (Flash / Beam) state
+# Tool 2 (Charged Traveling Flash / Beam) state
+var beam_charging: bool = false
+var beam_charge_time: float = 0.0
+var beam_charge: float = 0.0
 var beam_cooldown: float = 0.0
 var beam_flash_timer: float = 0.0
 var beam_start: Vector3 = Vector3.ZERO
 var beam_end: Vector3 = Vector3.ZERO
-var _pending_beam: bool = false
-var _pending_beam_origin: Vector3 = Vector3.ZERO
-var _pending_beam_aim: Vector3 = Vector3.ZERO
+var beam_pulses: Array[Dictionary] = []
 
 # Tool 3 (Cone) state
 var cone_active: bool = false
 var cone_origin: Vector3 = Vector3.ZERO
 var cone_forward: Vector2 = Vector2(0.0, -1.0)
 var cone_burst_cooldown: float = 0.0
-var _cone_burst_pending: bool = false
+var _cone_fresh_press: bool = false
 
 # Input & feedback state
 var mouse_held: bool = false
@@ -70,7 +79,7 @@ func _setup_visuals() -> void:
 
 
 func select_tool(tool_index: int) -> void:
-	var target_tool := clampi(tool_index, 1, 3)
+	var target_tool := clampi(tool_index, 1, 4)
 	if target_tool == selected_tool:
 		return
 	var held_before := mouse_held
@@ -94,6 +103,9 @@ func handle_event(event: InputEvent, player: Node3D, aim: Vector3) -> void:
 			return
 		elif code == KEY_3:
 			select_tool(3)
+			return
+		elif code == KEY_4:
+			select_tool(4)
 			return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -123,37 +135,44 @@ func _on_left_press(player: Node3D, aim: Vector3) -> void:
 				last_feedback = "Ring in flight"
 				return
 			if not _can_use_tool(&"ring", 1.0):
-				last_feedback = "Ring empty — press E for Repair"
+				last_feedback = "Ring empty — hold E for Repair"
 				return
 			ring_drawing = true
 			preview_points.clear()
 			preview_length = 0.0
 			preview_points.append(_clamp_ring_point(aim, player))
+			_recompute_ring_preview_split()
 			last_feedback = "Drawing ring path"
 		2:
 			if not _can_use_tool(&"beam", 1.0):
-				last_feedback = "Flash empty — press E for Repair"
+				beam_charging = false
+				beam_charge_time = 0.0
+				beam_charge = 0.0
+				last_feedback = "Flash empty — hold E for Repair"
 				return
-			if beam_cooldown > 0.0 or _pending_beam:
+			if beam_cooldown > 0.0:
 				last_feedback = "Flash cooling (%.2fs)" % beam_cooldown
 				return
-			beam_cooldown = float(Tuning.BEAM.cooldown)
-			# Resolve on the next simulation tick against the arena's explicit
-			# roster. Keep the click position even if the player moves meanwhile.
-			_pending_beam = true
-			_pending_beam_origin = player.global_position
-			_pending_beam_aim = aim
-			last_feedback = "Flash pulse"
+			if beam_pulses.size() >= _beam_max_pulses():
+				last_feedback = "Flash max pulses active (%d)" % _beam_max_pulses()
+				return
+			beam_charging = true
+			beam_charge_time = 0.0
+			beam_charge = 0.0
+			last_feedback = "Charging Flash"
 		3:
 			if not _can_use_tool(&"cone"):
 				cone_active = false
-				_cone_burst_pending = false
-				last_feedback = "Cone empty — press E for Repair"
+				_cone_fresh_press = false
+				last_feedback = "Cone empty — hold E for Repair"
 				return
 			cone_active = true
-			_cone_burst_pending = true
+			_cone_fresh_press = true
 			_update_cone_aim(player.global_position, aim)
 			last_feedback = "Cone active"
+		4:
+			# Clock has no left-click action.
+			pass
 
 
 func _on_left_release(player: Node3D, aim: Vector3) -> void:
@@ -165,72 +184,114 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 				_add_ring_sample(aim, player)
 			ring_drawing = false
 			if preview_length < float(Tuning.RING.minimum_length) or preview_points.size() < 2:
-				preview_points.clear()
-				preview_length = 0.0
+				_clear_ring_preview()
 				last_feedback = "Stroke too short (<%.1fm)" % float(Tuning.RING.minimum_length)
 				return
 			if not _can_use_tool(&"ring", 1.0):
-				preview_points.clear()
-				preview_length = 0.0
-				last_feedback = "Ring empty — press E for Repair"
+				_clear_ring_preview()
+				last_feedback = "Ring empty — hold E for Repair"
 				return
 			_spend_tool(&"ring", 1.0)
 			ring_points = preview_points.duplicate()
-			preview_points.clear()
-			preview_length = 0.0
+			_clear_ring_preview()
 			ring_phase = "outbound"
 			ring_stroke_index = 0
 			ring_hit_ids.clear()
 			if player != null:
-				ring_pos = Vector3(player.global_position.x, 0.0, player.global_position.z)
+				ring_launch_origin = Vector3(player.global_position.x, 0.0, player.global_position.z)
 			else:
-				ring_pos = ring_points[0]
+				ring_launch_origin = ring_points[0]
+			ring_pos = ring_launch_origin
 			last_feedback = "Ring launched"
+		2:
+			if not beam_charging:
+				return
+			var charge_frac := clampf(beam_charge_time / _beam_charge_duration(), 0.0, 1.0)
+			beam_charging = false
+			beam_charge_time = 0.0
+			beam_charge = 0.0
+			if player == null:
+				return
+			if not _can_use_tool(&"beam", 1.0):
+				last_feedback = "Flash empty — hold E for Repair"
+				return
+			if beam_pulses.size() >= _beam_max_pulses():
+				last_feedback = "Flash max pulses active (%d)" % _beam_max_pulses()
+				return
+			_spend_tool(&"beam", 1.0)
+			beam_cooldown = _beam_cooldown_duration()
+			var dmg := lerpf(_beam_min_damage(), _beam_max_damage(), charge_frac)
+			var origin_xz := Vector3(player.global_position.x, 0.0, player.global_position.z)
+			var dir := _aim_dir_xz(player.global_position, aim)
+			var pulse: Dictionary = {
+				"pos": origin_xz,
+				"dir": dir,
+				"speed": _beam_speed(),
+				"remaining_range": _beam_max_range(),
+				"radius": _beam_radius(),
+				"damage": dmg,
+				"charge": charge_frac,
+			}
+			beam_pulses.append(pulse)
+			beam_start = origin_xz
+			beam_end = origin_xz + Vector3(dir.x, 0.0, dir.y) * minf(1.5, _beam_max_range())
+			beam_flash_timer = 0.14
+			last_feedback = "Flash launched (%.0f dmg)" % dmg
 		3:
 			if cone_active:
 				cone_active = false
-				_cone_burst_pending = false
+				_cone_fresh_press = false
 				last_feedback = "Cone released"
+		4:
+			pass
 
 
-func step(delta: float, player: Node3D, aim: Vector3, enemies: Array) -> void:
+func step(delta: float, player: Node3D, aim: Vector3, enemies: Array, world_delta: float = -1.0) -> void:
 	last_aim = aim
+	var w_delta: float = delta if world_delta < 0.0 else world_delta
 
-	if _pending_beam:
-		_pending_beam = false
-		if _can_use_tool(&"beam", 1.0):
-			_spend_tool(&"beam", 1.0)
-			_fire_beam(_pending_beam_origin, _pending_beam_aim, enemies)
-		else:
-			beam_cooldown = 0.0
-			last_feedback = "Flash empty — press E for Repair"
-	beam_cooldown = maxf(0.0, beam_cooldown - delta)
-	beam_flash_timer = maxf(0.0, beam_flash_timer - delta)
+	# Real delta drives cooldowns, Flash charge accumulation, and Ring drawing samples.
+	beam_cooldown = maxf(0.0, beam_cooldown - maxf(0.0, delta))
+	beam_flash_timer = maxf(0.0, beam_flash_timer - maxf(0.0, delta))
 
-	if ring_drawing and player != null and not require_fresh_press:
+	if selected_tool == 2 and beam_charging and not require_fresh_press:
+		if not _can_use_tool(&"beam", 1.0):
+			beam_charging = false
+			beam_charge_time = 0.0
+			beam_charge = 0.0
+			last_feedback = "Flash empty — hold E for Repair"
+		elif delta > 0.0:
+			beam_charge_time += delta
+			beam_charge = clampf(beam_charge_time / _beam_charge_duration(), 0.0, 1.0)
+			last_feedback = "Charging Flash %.0f%%" % (beam_charge * 100.0)
+
+	if selected_tool == 1 and ring_drawing and player != null and not require_fresh_press:
 		_add_ring_sample(aim, player)
 
-	if ring_phase != "idle" and player != null:
-		_step_ring(delta, player, enemies)
+	# World delta drives Ring flight, Flash projectile flight, and Cone damage / control pulses.
+	if ring_phase != "idle" and player != null and w_delta > 0.0:
+		_step_ring(w_delta, player, enemies)
+
+	if not beam_pulses.is_empty() and w_delta > 0.0:
+		_step_beam_pulses(w_delta, enemies)
 
 	if selected_tool == 3 and cone_active and player != null and not require_fresh_press:
 		_update_cone_aim(player.global_position, aim)
-		_step_cone(delta, player, enemies)
-	else:
-		cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - delta)
+		_step_cone(delta, w_delta, player, enemies)
+	elif w_delta > 0.0:
+		cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - w_delta)
 
 	_rebuild_visuals(player, aim)
 
 
 func cancel_input() -> void:
 	ring_drawing = false
-	preview_points.clear()
-	preview_length = 0.0
+	_clear_ring_preview()
+	beam_charging = false
+	beam_charge_time = 0.0
+	beam_charge = 0.0
 	cone_active = false
-	_cone_burst_pending = false
-	if _pending_beam:
-		_pending_beam = false
-		beam_cooldown = 0.0
+	_cone_fresh_press = false
 	if mouse_held:
 		require_fresh_press = true
 	_rebuild_visuals(null, last_aim)
@@ -243,23 +304,130 @@ func reset_state() -> void:
 	cancel_input()
 	ring_phase = "idle"
 	ring_pos = Vector3.ZERO
+	ring_launch_origin = Vector3.ZERO
 	ring_points.clear()
 	ring_stroke_index = 0
 	ring_hit_ids.clear()
 	beam_cooldown = 0.0
 	beam_flash_timer = 0.0
+	beam_start = Vector3.ZERO
+	beam_end = Vector3.ZERO
+	beam_pulses.clear()
 	cone_burst_cooldown = 0.0
-	_cone_burst_pending = false
+	_cone_fresh_press = false
 	last_feedback = "Ready"
 	_rebuild_visuals(null, last_aim)
 
 
+func capture_state() -> Dictionary:
+	var pts_copy: Array[Vector3] = []
+	for pt in ring_points:
+		pts_copy.append(Vector3(pt))
+	var hit_ids_copy: Array[int] = []
+	for k in ring_hit_ids.keys():
+		hit_ids_copy.append(int(k))
+	hit_ids_copy.sort()
+	var pulses_copy: Array[Dictionary] = []
+	for p in beam_pulses:
+		var p_dict: Dictionary = p
+		pulses_copy.append({
+			"pos": Vector3(p_dict["pos"]),
+			"dir": Vector2(p_dict["dir"]),
+			"speed": float(p_dict["speed"]),
+			"remaining_range": float(p_dict["remaining_range"]),
+			"radius": float(p_dict["radius"]),
+			"damage": float(p_dict["damage"]),
+			"charge": float(p_dict.get("charge", 0.0)),
+		})
+	return {
+		"selected_tool": int(selected_tool),
+		"ring_phase": String(ring_phase),
+		"ring_pos": Vector3(ring_pos),
+		"ring_launch_origin": Vector3(ring_launch_origin),
+		"ring_points": pts_copy,
+		"ring_stroke_index": int(ring_stroke_index),
+		"ring_hit_ids": hit_ids_copy,
+		"beam_cooldown": float(beam_cooldown),
+		"beam_flash_timer": float(beam_flash_timer),
+		"beam_start": Vector3(beam_start),
+		"beam_end": Vector3(beam_end),
+		"beam_pulses": pulses_copy,
+		"cone_burst_cooldown": float(cone_burst_cooldown),
+		"cone_origin": Vector3(cone_origin),
+		"cone_forward": Vector2(cone_forward),
+		"last_aim": Vector3(last_aim),
+		"last_feedback": String(last_feedback),
+	}
+
+
+func restore_state(data: Dictionary) -> void:
+	# Do not restore a held gesture: cancel drawing/charging/cone and require a fresh press.
+	ring_drawing = false
+	_clear_ring_preview()
+	beam_charging = false
+	beam_charge_time = 0.0
+	beam_charge = 0.0
+	cone_active = false
+	_cone_fresh_press = false
+	require_fresh_press = true
+
+	selected_tool = clampi(int(data.get("selected_tool", 1)), 1, 4)
+	ring_phase = String(data.get("ring_phase", "idle"))
+	ring_pos = Vector3(data.get("ring_pos", Vector3.ZERO))
+	ring_launch_origin = Vector3(data.get("ring_launch_origin", ring_pos))
+
+	ring_points.clear()
+	var raw_pts: Variant = data.get("ring_points", [])
+	if raw_pts is Array:
+		for pt in raw_pts:
+			ring_points.append(Vector3(pt))
+	ring_stroke_index = int(data.get("ring_stroke_index", 0))
+
+	ring_hit_ids.clear()
+	var raw_ids: Variant = data.get("ring_hit_ids", [])
+	if raw_ids is Array:
+		for id_val in raw_ids:
+			ring_hit_ids[int(id_val)] = true
+
+	beam_cooldown = maxf(0.0, float(data.get("beam_cooldown", 0.0)))
+	beam_flash_timer = maxf(0.0, float(data.get("beam_flash_timer", 0.0)))
+	beam_start = Vector3(data.get("beam_start", Vector3.ZERO))
+	beam_end = Vector3(data.get("beam_end", Vector3.ZERO))
+
+	beam_pulses.clear()
+	var raw_pulses: Variant = data.get("beam_pulses", [])
+	if raw_pulses is Array:
+		for p in raw_pulses:
+			if p is Dictionary:
+				var p_dict: Dictionary = p
+				beam_pulses.append({
+					"pos": Vector3(p_dict.get("pos", Vector3.ZERO)),
+					"dir": Vector2(p_dict.get("dir", Vector2(0.0, -1.0))),
+					"speed": float(p_dict.get("speed", _beam_speed())),
+					"remaining_range": float(p_dict.get("remaining_range", 0.0)),
+					"radius": float(p_dict.get("radius", _beam_radius())),
+					"damage": float(p_dict.get("damage", _beam_min_damage())),
+					"charge": float(p_dict.get("charge", 0.0)),
+				})
+
+	cone_burst_cooldown = maxf(0.0, float(data.get("cone_burst_cooldown", 0.0)))
+	cone_origin = Vector3(data.get("cone_origin", Vector3.ZERO))
+	cone_forward = Vector2(data.get("cone_forward", Vector2(0.0, -1.0)))
+	last_aim = Vector3(data.get("last_aim", Vector3(0.0, 0.0, -6.0)))
+	last_feedback = String(data.get("last_feedback", "Ready"))
+
+	_rebuild_visuals(null, last_aim)
+
+
 func status_text() -> String:
-	var names := {1: "1:Ring", 2: "2:Flash", 3: "3:Cone"}
+	var names := {1: "1:Ring", 2: "2:Flash", 3: "3:Cone", 4: "4:Clock"}
 	var rem_len := maxf(0.0, float(Tuning.RING.length) - preview_length)
 	var ring_info := "idle"
 	if ring_drawing:
-		ring_info = "draw %.1f/%.1fm (rem %.1fm)" % [preview_length, float(Tuning.RING.length), rem_len]
+		ring_info = "draw %.1f/%.1fm (rem %.1fm)%s" % [
+			preview_length, float(Tuning.RING.length), rem_len,
+			" BLOCKED" if preview_blocked else ""
+		]
 	elif ring_phase != "idle":
 		ring_info = ring_phase
 	elif not _can_use_tool(&"ring", 1.0):
@@ -267,18 +435,91 @@ func status_text() -> String:
 	var flash_info := "ready"
 	if not _can_use_tool(&"beam", 1.0):
 		flash_info = "REPAIR(E)"
+	elif beam_charging:
+		flash_info = "charge %.0f%%" % (beam_charge * 100.0)
 	elif beam_cooldown > 0.0:
 		flash_info = "%.2fs" % beam_cooldown
+	elif not beam_pulses.is_empty():
+		flash_info = "%d active" % beam_pulses.size()
 	var cone_info := "idle"
 	if not _can_use_tool(&"cone"):
 		cone_info = "REPAIR(E)"
 	elif cone_active:
 		cone_info = "HOLD"
 	elif cone_burst_cooldown > 0.0:
-		cone_info = "burst %.1fs" % cone_burst_cooldown
+		cone_info = "pulse %.1fs" % cone_burst_cooldown
 	return "Tool [%s] | Ring: %s | Flash: %s | Cone: %s\n%s" % [
 		names.get(selected_tool, "1:Ring"), ring_info, flash_info, cone_info, last_feedback
 	]
+
+
+# --- Tuning Helpers with Round D Defaults ---
+
+func _ring_arc_height() -> float:
+	return float(Tuning.RING.get("arc_height", 3.2))
+
+
+func _beam_min_damage() -> float:
+	return float(Tuning.BEAM.get("min_damage", 30.0))
+
+
+func _beam_max_damage() -> float:
+	return float(Tuning.BEAM.get("max_damage", 100.0))
+
+
+func _beam_charge_duration() -> float:
+	return maxf(0.05, float(Tuning.BEAM.get("charge_time", 0.9)))
+
+
+func _beam_speed() -> float:
+	return float(Tuning.BEAM.get("speed", 42.0))
+
+
+func _beam_max_range() -> float:
+	if Tuning.BEAM.has("charge_time") or float(Tuning.BEAM.get("range", 35.0)) > 20.0:
+		return float(Tuning.BEAM.get("range", 35.0))
+	return float(Tuning.BEAM.get("pulse_range", 35.0))
+
+
+func _beam_radius() -> float:
+	return float(Tuning.BEAM.get("radius", 0.35))
+
+
+func _beam_cooldown_duration() -> float:
+	if Tuning.BEAM.has("pulse_cooldown"):
+		return float(Tuning.BEAM.get("pulse_cooldown", 0.25))
+	if Tuning.BEAM.has("charge_time"):
+		return float(Tuning.BEAM.get("cooldown", 0.25))
+	return minf(0.25, float(Tuning.BEAM.get("cooldown", 0.25)))
+
+
+func _beam_max_pulses() -> int:
+	return int(Tuning.BEAM.get("max_pulses", 8))
+
+
+func _cone_pulse_interval() -> float:
+	if Tuning.CONTROL.has("pulse_interval"):
+		return float(Tuning.CONTROL.get("pulse_interval", 1.2))
+	var bi := float(Tuning.CONTROL.get("burst_interval", 1.2))
+	return bi if not is_equal_approx(bi, 1.5) else 1.2
+
+
+func _cone_pulse_cost() -> float:
+	return float(Tuning.CONTROL.get("pulse_cost", Tuning.CONTROL.get("burst_cost", 1.5)))
+
+
+func _cone_pulse_impulse() -> float:
+	if Tuning.CONTROL.has("pulse_impulse"):
+		return float(Tuning.CONTROL.get("pulse_impulse", 22.0))
+	var imp := float(Tuning.CONTROL.get("impulse", 22.0))
+	return imp if not is_equal_approx(imp, 13.0) else 22.0
+
+
+func _cone_pulse_stagger() -> float:
+	if Tuning.CONTROL.has("pulse_stagger"):
+		return float(Tuning.CONTROL.get("pulse_stagger", 0.85))
+	var stg := float(Tuning.CONTROL.get("stagger", 0.85))
+	return stg if not is_equal_approx(stg, 0.65) else 0.85
 
 
 func _can_use_tool(tool: StringName, amount: float = 0.000001) -> bool:
@@ -291,6 +532,28 @@ func _spend_tool(tool: StringName, amount: float) -> float:
 	if equipment == null:
 		return amount
 	return float(equipment.spend(tool, amount))
+
+
+func _enemy_combat_id(enemy_node: Node3D) -> int:
+	if enemy_node.has_method("combat_id"):
+		var cid: int = int(enemy_node.call("combat_id"))
+		if cid > 0:
+			return cid
+	var prop_id: Variant = enemy_node.get("rewind_id")
+	if prop_id != null and int(prop_id) > 0:
+		return int(prop_id)
+	return enemy_node.get_instance_id()
+
+
+# --- Tool 1: Ring Helpers ---
+
+func _clear_ring_preview() -> void:
+	preview_points.clear()
+	preview_length = 0.0
+	preview_blocked = false
+	preview_cutoff_point = Vector3.ZERO
+	preview_unblocked_points.clear()
+	preview_blocked_points.clear()
 
 
 func _clamp_ring_point(raw_aim: Vector3, player: Node3D) -> Vector3:
@@ -333,12 +596,51 @@ func _add_ring_sample(raw_aim: Vector3, player: Node3D) -> void:
 		left_to_walk -= step_len
 		if step_len < spacing:
 			break
+	_recompute_ring_preview_split()
 
 
-func _step_ring(delta: float, player: Node3D, enemies: Array) -> void:
-	var time_left := delta
+func _recompute_ring_preview_split() -> void:
+	preview_blocked = false
+	preview_cutoff_point = Vector3.ZERO
+	preview_unblocked_points.clear()
+	preview_blocked_points.clear()
+	if preview_points.is_empty():
+		return
+	var r_ring := float(Tuning.RING.radius)
+	preview_unblocked_points.append(preview_points[0])
+	if cover != null and preview_points.size() == 1:
+		var init_clip: Dictionary = cover.clip_segment(preview_points[0], preview_points[0], r_ring)
+		if bool(init_clip["blocked"]):
+			preview_blocked = true
+			preview_cutoff_point = preview_points[0]
+			preview_blocked_points.append(preview_points[0])
+			return
+	for i in range(preview_points.size() - 1):
+		var a: Vector3 = preview_points[i]
+		var b: Vector3 = preview_points[i + 1]
+		if not preview_blocked:
+			if cover != null:
+				var clip: Dictionary = cover.clip_segment(a, b, r_ring)
+				if bool(clip["blocked"]):
+					preview_blocked = true
+					var cpos: Vector3 = clip["position"]
+					preview_cutoff_point = Vector3(cpos.x, 0.0, cpos.z)
+					if preview_unblocked_points[-1].distance_to(preview_cutoff_point) > 1e-5:
+						preview_unblocked_points.append(preview_cutoff_point)
+					preview_blocked_points.append(preview_cutoff_point)
+					if preview_cutoff_point.distance_to(b) > 1e-5:
+						preview_blocked_points.append(b)
+					continue
+			preview_unblocked_points.append(b)
+		else:
+			preview_blocked_points.append(b)
+
+
+func _step_ring(w_delta: float, player: Node3D, enemies: Array) -> void:
+	var time_left := w_delta
 	var guard := 0
 	var r_ring := float(Tuning.RING.radius)
+	var arc_peak := _ring_arc_height()
 	while time_left > 1e-6 and ring_phase != "idle" and guard < 256:
 		guard += 1
 		if ring_phase == "outbound":
@@ -346,57 +648,45 @@ func _step_ring(delta: float, player: Node3D, enemies: Array) -> void:
 				ring_phase = "idle"
 				break
 			var target: Vector3 = ring_points[0]
-			var to_t := Vector2(target.x - ring_pos.x, target.z - ring_pos.z)
+			var cur_xz := Vector2(ring_pos.x, ring_pos.z)
+			var target_xz := Vector2(target.x, target.z)
+			var to_t := target_xz - cur_xz
 			var dist := to_t.length()
 			var speed := float(Tuning.RING.outbound_speed)
 			var step_d := speed * time_left
-			var prev := ring_pos
-			var reaching_start := dist <= step_d + 1e-5
-			var intended_end: Vector3
-			var intended_dist: float
-			if reaching_start:
-				intended_end = target
-				intended_dist = dist
-			else:
-				var move := (to_t / dist) * step_d
-				intended_end = ring_pos + Vector3(move.x, 0.0, move.y)
-				intended_dist = step_d
-			if cover != null:
-				var clip: Dictionary = cover.clip_segment(prev, intended_end, r_ring)
-				if bool(clip["blocked"]):
-					var frac: float = float(clip["fraction"])
-					var clip_pos: Vector3 = clip["position"]
-					ring_pos = Vector3(clip_pos.x, 0.0, clip_pos.z)
-					time_left -= ((intended_dist * frac) / speed) if speed > 0.0 else time_left
-					ring_phase = "return"
-					last_feedback = "Ring blocked by cover"
-					continue
-			ring_pos = intended_end
-			if reaching_start:
+			var start_xz := Vector2(ring_launch_origin.x, ring_launch_origin.z)
+			var total_out_dist := start_xz.distance_to(target_xz)
+			if dist <= step_d + 1e-5:
+				ring_pos = Vector3(target.x, 0.0, target.z)
 				time_left -= (dist / speed) if speed > 0.0 else time_left
 				ring_phase = "stroke"
 				ring_stroke_index = 0
 			else:
+				var next_xz := cur_xz + (to_t / dist) * step_d
+				var u := clampf(start_xz.distance_to(next_xz) / total_out_dist, 0.0, 1.0) if total_out_dist > 1e-5 else 1.0
+				var arc_y := 4.0 * arc_peak * u * (1.0 - u)
+				ring_pos = Vector3(next_xz.x, arc_y, next_xz.y)
 				time_left = 0.0
 		elif ring_phase == "stroke":
 			if ring_stroke_index >= ring_points.size() - 1:
+				ring_pos.y = 0.0
 				ring_phase = "return"
 				continue
 			var seg_target: Vector3 = ring_points[ring_stroke_index + 1]
-			var to_s := Vector2(seg_target.x - ring_pos.x, seg_target.z - ring_pos.z)
+			var prev := Vector3(ring_pos.x, 0.0, ring_pos.z)
+			var to_s := Vector2(seg_target.x - prev.x, seg_target.z - prev.z)
 			var dist := to_s.length()
 			var speed := float(Tuning.RING.stroke_speed)
 			var step_d := speed * time_left
-			var prev := ring_pos
 			var reaching_waypoint := dist <= step_d + 1e-5
 			var intended_end: Vector3
 			var intended_dist: float
 			if reaching_waypoint:
-				intended_end = seg_target
+				intended_end = Vector3(seg_target.x, 0.0, seg_target.z)
 				intended_dist = dist
 			else:
 				var move := (to_s / dist) * step_d
-				intended_end = ring_pos + Vector3(move.x, 0.0, move.y)
+				intended_end = prev + Vector3(move.x, 0.0, move.y)
 				intended_dist = step_d
 			if cover != null:
 				var clip: Dictionary = cover.clip_segment(prev, intended_end, r_ring)
@@ -423,8 +713,7 @@ func _step_ring(delta: float, player: Node3D, enemies: Array) -> void:
 				time_left = 0.0
 				_sweep_ring_segment(prev, ring_pos, enemies)
 		elif ring_phase == "return":
-			# Prototype simplification: returning ring homes directly back to the player
-			# through cover without dealing damage.
+			# Returning ring homes directly back to the current player harmlessly.
 			var home := Vector3(player.global_position.x, 0.0, player.global_position.z)
 			var to_h := Vector2(home.x - ring_pos.x, home.z - ring_pos.z)
 			var dist := to_h.length()
@@ -439,7 +728,7 @@ func _step_ring(delta: float, player: Node3D, enemies: Array) -> void:
 				last_feedback = "Ring returned"
 			else:
 				var move := (to_h / dist) * step_d
-				ring_pos += Vector3(move.x, 0.0, move.y)
+				ring_pos = Vector3(ring_pos.x + move.x, 0.0, ring_pos.z + move.y)
 				time_left = 0.0
 
 
@@ -454,7 +743,7 @@ func _sweep_ring_segment(seg_start: Vector3, seg_end: Vector3, enemies: Array) -
 		if not _is_live_enemy(enemy):
 			continue
 		var enemy_node := enemy as Node3D
-		var id: int = enemy_node.get_instance_id()
+		var id: int = _enemy_combat_id(enemy_node)
 		if ring_hit_ids.has(id):
 			continue
 		var c := Vector2(enemy_node.global_position.x, enemy_node.global_position.z)
@@ -497,108 +786,163 @@ func _sweep_ring_segment(seg_start: Vector3, seg_end: Vector3, enemies: Array) -
 		_record_hit_feedback("Ring", res)
 
 
-func _fire_beam(origin_world: Vector3, aim_world: Vector3, enemies: Array) -> void:
-	var start_xz := Vector2(origin_world.x, origin_world.z)
-	var start_3d := Vector3(start_xz.x, 0.0, start_xz.y)
-	var dir := _aim_dir_xz(origin_world, aim_world)
-	var max_range := float(Tuning.BEAM.range)
-	var raw_end_xz := start_xz + dir * max_range
-	var raw_end_3d := Vector3(raw_end_xz.x, 0.0, raw_end_xz.y)
-	var r_beam := float(Tuning.BEAM.radius)
+# --- Tool 2: Charged Traveling Flash Pulses ---
 
-	var wall_blocked := false
-	var wall_pos := raw_end_3d
-	var effective_range := max_range
-	if cover != null:
-		var clip: Dictionary = cover.clip_segment(start_3d, raw_end_3d, 0.0)
-		wall_blocked = bool(clip["blocked"])
-		wall_pos = clip["position"]
-		effective_range = max_range * float(clip["fraction"])
-	var end_xz := Vector2(wall_pos.x, wall_pos.z)
+func _step_beam_pulses(w_delta: float, enemies: Array) -> void:
+	if w_delta <= 0.0 or beam_pulses.is_empty():
+		return
+	var surviving: Array[Dictionary] = []
+	for p in beam_pulses:
+		var pulse: Dictionary = p
+		var start_pos: Vector3 = pulse["pos"]
+		var dir: Vector2 = pulse["dir"]
+		var speed: float = float(pulse["speed"])
+		var rem_range: float = float(pulse["remaining_range"])
+		var r_beam: float = float(pulse["radius"])
+		var dmg: float = float(pulse["damage"])
 
-	var best_t := 2.0
-	var best_enemy: Node3D = null
-	var best_contact := Vector3.ZERO
+		if rem_range <= 1e-5 or speed <= 0.0:
+			continue
 
-	if effective_range > 1e-6:
-		for enemy in enemies:
-			if not _is_live_enemy(enemy):
-				continue
-			var enemy_node := enemy as Node3D
-			var c := Vector2(enemy_node.global_position.x, enemy_node.global_position.z)
-			var r_enemy: float = float(enemy_node.get("radius"))
-			var t := _swept_circle_entry_t(start_xz, end_xz, c, r_beam + r_enemy)
-			if t < 0.0 or t >= best_t:
-				continue
-			var beam_pt := start_xz + dir * (effective_range * t)
-			var from_enemy := beam_pt - c
-			var c_dir := from_enemy.normalized() if from_enemy.length_squared() > 1e-6 else -dir
-			var contact_xz := c + c_dir * r_enemy
-			var contact_3d := Vector3(contact_xz.x, 0.0, contact_xz.y)
-			var enemy_3d := Vector3(c.x, 0.0, c.y)
-			if cover != null:
-				var los_center: Dictionary = cover.clip_segment(start_3d, enemy_3d, 0.0)
-				var los_contact: Dictionary = cover.clip_segment(start_3d, contact_3d, 0.0)
-				if bool(los_center["blocked"]) or bool(los_contact["blocked"]):
+		var step_dist := minf(rem_range, speed * w_delta)
+		var start_xz := Vector2(start_pos.x, start_pos.z)
+		var raw_end_xz := start_xz + dir * step_dist
+		var start_3d := Vector3(start_xz.x, 0.0, start_xz.y)
+		var raw_end_3d := Vector3(raw_end_xz.x, 0.0, raw_end_xz.y)
+
+		var wall_blocked := false
+		var wall_pos := raw_end_3d
+		var effective_dist := step_dist
+		if cover != null:
+			var clip: Dictionary = cover.clip_segment(start_3d, raw_end_3d, 0.0)
+			wall_blocked = bool(clip["blocked"])
+			wall_pos = clip["position"]
+			effective_dist = step_dist * float(clip["fraction"])
+		var end_xz := Vector2(wall_pos.x, wall_pos.z)
+
+		var best_t := 2.0
+		var best_enemy: Node3D = null
+		var best_contact := Vector3.ZERO
+
+		if effective_dist > 1e-6 or start_xz.distance_to(end_xz) <= 1e-6:
+			for enemy in enemies:
+				if not _is_live_enemy(enemy):
 					continue
-			best_t = t
-			best_enemy = enemy_node
-			best_contact = contact_3d
+				var enemy_node := enemy as Node3D
+				var c := Vector2(enemy_node.global_position.x, enemy_node.global_position.z)
+				var r_enemy: float = float(enemy_node.get("radius"))
+				var t := _swept_circle_entry_t(start_xz, end_xz, c, r_beam + r_enemy)
+				if t < 0.0 or t >= best_t:
+					continue
+				var pulse_pt := start_xz + dir * (effective_dist * t)
+				var from_enemy := pulse_pt - c
+				var c_dir := from_enemy.normalized() if from_enemy.length_squared() > 1e-6 else -dir
+				var contact_xz := c + c_dir * r_enemy
+				var contact_3d := Vector3(contact_xz.x, 0.0, contact_xz.y)
+				var enemy_3d := Vector3(c.x, 0.0, c.y)
+				if cover != null:
+					var los_center: Dictionary = cover.clip_segment(start_3d, enemy_3d, 0.0)
+					var los_contact: Dictionary = cover.clip_segment(start_3d, contact_3d, 0.0)
+					if bool(los_center["blocked"]) or bool(los_contact["blocked"]):
+						continue
+				best_t = t
+				best_enemy = enemy_node
+				best_contact = contact_3d
 
-	beam_start = start_3d
-	beam_flash_timer = 0.14
-	if best_enemy != null:
-		beam_end = best_contact
-		var res: Dictionary = best_enemy.call("hit", float(Tuning.BEAM.damage), best_contact)
-		_record_hit_feedback("Flash", res)
-	elif wall_blocked:
-		beam_end = Vector3(wall_pos.x, 0.0, wall_pos.z)
-		last_feedback = "Flash blocked by cover"
-	else:
-		beam_end = raw_end_3d
-		last_feedback = "Flash missed"
+		beam_start = start_3d
+		if best_enemy != null:
+			beam_end = best_contact
+			beam_flash_timer = 0.14
+			var res: Dictionary = best_enemy.call("hit", dmg, best_contact)
+			_record_hit_feedback("Flash", res)
+		elif wall_blocked:
+			beam_end = Vector3(wall_pos.x, 0.0, wall_pos.z)
+			beam_flash_timer = 0.14
+			last_feedback = "Flash blocked by cover"
+		else:
+			pulse["pos"] = raw_end_3d
+			pulse["remaining_range"] = rem_range - step_dist
+			beam_end = raw_end_3d
+			if float(pulse["remaining_range"]) <= 1e-5:
+				last_feedback = "Flash missed"
+			else:
+				surviving.append(pulse)
+	beam_pulses = surviving
 
+
+# --- Tool 3: Cone Repeating Pulses & Edge-Volume Sector ---
 
 func _update_cone_aim(origin_world: Vector3, aim_world: Vector3) -> void:
 	cone_origin = Vector3(origin_world.x, 0.0, origin_world.z)
 	cone_forward = _aim_dir_xz(origin_world, aim_world)
 
 
-func _step_cone(delta: float, player: Node3D, enemies: Array) -> void:
+func _step_cone(delta: float, w_delta: float, player: Node3D, enemies: Array) -> void:
 	if delta <= 0.0:
 		return
 	if not _can_use_tool(&"cone"):
 		cone_active = false
-		_cone_burst_pending = false
-		cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - delta)
-		last_feedback = "Cone empty — press E for Repair"
+		_cone_fresh_press = false
+		if w_delta > 0.0:
+			cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - w_delta)
+		last_feedback = "Cone empty — hold E for Repair"
 		return
+
+	# Continuous wear uses REAL delta; continuous damage & pulse cadence use WORLD delta.
+	var actual_real_dt := _spend_tool(&"cone", delta)
+	if actual_real_dt <= 0.0:
+		cone_active = false
+		_cone_fresh_press = false
+		if w_delta > 0.0:
+			cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - w_delta)
+		last_feedback = "Cone empty — hold E for Repair"
+		return
+
+	var afford_fraction := clampf(actual_real_dt / delta, 0.0, 1.0)
+	var actual_world_dt := maxf(0.0, w_delta) * afford_fraction
 
 	var do_burst := false
-	var burst_cost := float(Tuning.CONTROL.burst_cost)
-	if _cone_burst_pending:
-		_cone_burst_pending = false
-		if cone_burst_cooldown <= 0.0 and _can_use_tool(&"cone", burst_cost):
-			_spend_tool(&"cone", burst_cost)
-			cone_burst_cooldown = float(Tuning.CONTROL.burst_interval)
-			do_burst = true
+	var burst_scale := 0.0
+	var pulse_interval := _cone_pulse_interval()
+	var pulse_cost := _cone_pulse_cost()
 
-	cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - delta)
-
-	var actual_dt := _spend_tool(&"cone", delta)
-	if actual_dt <= 0.0 and not do_burst:
-		cone_active = false
-		last_feedback = "Cone empty — press E for Repair"
-		return
+	if _cone_fresh_press:
+		_cone_fresh_press = false
+		if cone_burst_cooldown <= 1e-6 and w_delta > 0.0:
+			var pulse_spent := _spend_tool(&"cone", pulse_cost)
+			if pulse_spent > 1e-6:
+				do_burst = true
+				burst_scale = clampf(pulse_spent / pulse_cost, 0.0, 1.0)
+				cone_burst_cooldown = maxf(0.0, pulse_interval - actual_world_dt)
+		else:
+			cone_burst_cooldown -= actual_world_dt
+			if cone_burst_cooldown <= 1e-6 and w_delta > 0.0:
+				var pulse_spent := _spend_tool(&"cone", pulse_cost)
+				if pulse_spent > 1e-6:
+					do_burst = true
+					burst_scale = clampf(pulse_spent / pulse_cost, 0.0, 1.0)
+					cone_burst_cooldown = maxf(0.0, cone_burst_cooldown + pulse_interval)
+				else:
+					cone_burst_cooldown = 0.0
+	else:
+		cone_burst_cooldown -= actual_world_dt
+		if cone_burst_cooldown <= 1e-6 and w_delta > 0.0:
+			var pulse_spent := _spend_tool(&"cone", pulse_cost)
+			if pulse_spent > 1e-6:
+				do_burst = true
+				burst_scale = clampf(pulse_spent / pulse_cost, 0.0, 1.0)
+				cone_burst_cooldown = maxf(0.0, cone_burst_cooldown + pulse_interval)
+			else:
+				cone_burst_cooldown = 0.0
 
 	var p_xz := Vector2(player.global_position.x, player.global_position.z)
 	var origin_3d := Vector3(p_xz.x, 0.0, p_xz.y)
 	var max_r := float(Tuning.CONE.range)
 	var half_ang := float(Tuning.CONE.half_angle)
-	var amount := float(Tuning.CONE.damage_per_second) * actual_dt
-	var burst_impulse := float(Tuning.CONTROL.impulse)
-	var burst_stagger := float(Tuning.CONTROL.stagger)
-	var sustained_impulse := float(Tuning.CONTROL.sustained_push) * actual_dt
+	var amount := float(Tuning.CONE.damage_per_second) * actual_world_dt
+	var burst_impulse := _cone_pulse_impulse() * burst_scale
+	var burst_stagger := _cone_pulse_stagger() * burst_scale
+	var sustained_impulse := float(Tuning.CONTROL.get("sustained_push", 5.0)) * actual_world_dt
 	var hit_any := false
 	var any_armored := false
 	var total_dealt := 0.0
@@ -615,7 +959,8 @@ func _step_cone(delta: float, player: Node3D, enemies: Array) -> void:
 			continue
 		if dist > 1e-5:
 			var ang := absf(cone_forward.angle_to(to_enemy))
-			if ang > half_ang:
+			var edge_allowance: float = asin(clampf(r_enemy / dist, 0.0, 1.0)) if dist > r_enemy else PI
+			if ang > half_ang + edge_allowance:
 				continue
 		var dir_from_enemy := (p_xz - c).normalized() if dist > 1e-5 else -cone_forward
 		var contact_xz := c + dir_from_enemy * r_enemy
@@ -628,7 +973,7 @@ func _step_cone(delta: float, player: Node3D, enemies: Array) -> void:
 
 		var push_2d := to_enemy.normalized() if dist > 1e-5 else cone_forward
 		var push_dir := Vector3(push_2d.x, 0.0, push_2d.y)
-		if do_burst:
+		if do_burst and burst_impulse > 0.0:
 			enemy_node.call("apply_control", push_dir, burst_impulse, burst_stagger)
 		elif sustained_impulse > 0.0:
 			enemy_node.call("apply_control", push_dir, sustained_impulse, 0.0)
@@ -643,16 +988,16 @@ func _step_cone(delta: float, player: Node3D, enemies: Array) -> void:
 					any_armored = true
 
 	if hit_any:
-		var burst_tag := " BURST" if do_burst else ""
+		var burst_tag := " PULSE" if do_burst else ""
 		var armor_tag := " (ARMORED)" if any_armored else ""
 		last_feedback = "Cone%s %.1f dmg%s" % [burst_tag, total_dealt, armor_tag]
 	elif do_burst:
-		last_feedback = "Cone burst"
+		last_feedback = "Cone pulse"
 
 	if not _can_use_tool(&"cone"):
 		cone_active = false
 		if not hit_any:
-			last_feedback = "Cone empty — press E for Repair"
+			last_feedback = "Cone empty — hold E for Repair"
 
 
 func _record_hit_feedback(tool_label: String, res: Dictionary) -> void:
@@ -706,30 +1051,92 @@ func _swept_circle_entry_t(a: Vector2, b: Vector2, center: Vector2, radius: floa
 	return -1.0
 
 
-func _rebuild_visuals(player: Node3D, _aim: Vector3) -> void:
+# --- Visuals ---
+
+func _rebuild_visuals(player: Node3D, aim: Vector3) -> void:
 	if _draw_mesh == null:
 		return
 	_draw_mesh.clear_surfaces()
 
 	if ring_drawing and preview_points.size() >= 1:
 		if player != null:
-			_draw_circle_outline(Vector3(player.global_position.x, 0.06, player.global_position.z), float(Tuning.RING.range), Color(0.4, 0.78, 0.96, 0.25))
-		_draw_polyline_ribbon(preview_points, 0, preview_points.size() - 1, 0.12, Color("67c9f5"), 0.10)
+			var p_ground := Vector3(player.global_position.x, 0.06, player.global_position.z)
+			_draw_circle_outline(p_ground, float(Tuning.RING.range), Color(0.4, 0.78, 0.96, 0.22))
+			_draw_arc_ribbon(p_ground, preview_points[0], _ring_arc_height(), 0.07, Color(0.55, 0.85, 1.0, 0.45))
+		if preview_unblocked_points.size() >= 2:
+			_draw_polyline_ribbon(preview_unblocked_points, 0, preview_unblocked_points.size() - 1, 0.12, Color("67c9f5"), 0.10)
+		if preview_blocked:
+			_draw_circle_outline(Vector3(preview_cutoff_point.x, 0.16, preview_cutoff_point.z), float(Tuning.RING.radius), Color("ff5c4d"))
+			if preview_blocked_points.size() >= 2:
+				_draw_polyline_ribbon(preview_blocked_points, 0, preview_blocked_points.size() - 1, 0.09, Color(0.95, 0.34, 0.28, 0.45), 0.08)
 
 	if ring_phase != "idle" and ring_points.size() >= 2:
+		if ring_phase == "outbound":
+			_draw_arc_ribbon(ring_launch_origin, ring_points[0], _ring_arc_height(), 0.08, Color(0.55, 0.85, 1.0, 0.55))
+			_draw_circle_outline(Vector3(ring_pos.x, 0.08, ring_pos.z), float(Tuning.RING.radius) * 0.75, Color(0.2, 0.35, 0.45, 0.35))
 		if ring_stroke_index > 0:
 			_draw_polyline_ribbon(ring_points, 0, ring_stroke_index, 0.10, Color("4b8a63"), 0.08)
 		if ring_stroke_index < ring_points.size() - 1:
 			_draw_polyline_ribbon(ring_points, ring_stroke_index, ring_points.size() - 1, 0.14, Color("f5c267"), 0.11)
 		var ring_col := Color("ff7a59") if ring_phase == "stroke" else Color("67c9f5")
-		_draw_circle_outline(Vector3(ring_pos.x, 0.22, ring_pos.z), float(Tuning.RING.radius), ring_col)
+		var ring_y := maxf(0.22, ring_pos.y + 0.22) if ring_phase == "outbound" else 0.22
+		_draw_circle_outline(Vector3(ring_pos.x, ring_y, ring_pos.z), float(Tuning.RING.radius), ring_col)
+
+	if selected_tool == 2 and beam_charging and player != null:
+		var origin_xz := Vector3(player.global_position.x, 0.28, player.global_position.z)
+		var dir := _aim_dir_xz(player.global_position, aim)
+		var preview_len := lerpf(2.2, 6.5, beam_charge)
+		var tip := origin_xz + Vector3(dir.x, 0.0, dir.y) * preview_len
+		var charge_col := Color("f0d77b").lerp(Color("ffffff"), beam_charge * 0.6)
+		_draw_polyline_ribbon([origin_xz, tip], 0, 1, lerpf(0.06, 0.16, beam_charge), Color(charge_col, 0.75), 0.28)
+		_draw_circle_outline(origin_xz + Vector3(dir.x, 0.0, dir.y) * 0.9, lerpf(0.20, 0.50, beam_charge), charge_col)
+
+	for p in beam_pulses:
+		var pulse: Dictionary = p
+		var pos: Vector3 = pulse["pos"]
+		var dir: Vector2 = pulse["dir"]
+		var r_p: float = float(pulse["radius"])
+		var chg: float = float(pulse.get("charge", 0.5))
+		var tail_len := lerpf(1.1, 2.4, chg)
+		var head := Vector3(pos.x, 0.32, pos.z)
+		var tail := head - Vector3(dir.x, 0.0, dir.y) * tail_len
+		_draw_polyline_ribbon([tail, head], 0, 1, lerpf(0.09, 0.18, chg), Color("fff07a"), 0.32)
+		_draw_circle_outline(head, r_p, Color("ffffff"))
 
 	if beam_flash_timer > 0.0:
-		_draw_polyline_ribbon([beam_start, beam_end], 0, 1, 0.12, Color("fff07a"), 0.30)
-		_draw_circle_outline(Vector3(beam_end.x, 0.30, beam_end.z), float(Tuning.BEAM.radius), Color("fff07a"))
+		_draw_polyline_ribbon([beam_start, beam_end], 0, 1, 0.10, Color(1.0, 0.94, 0.48, 0.65), 0.30)
+		_draw_circle_outline(Vector3(beam_end.x, 0.30, beam_end.z), _beam_radius(), Color("fff07a"))
 
 	if selected_tool == 3 and cone_active and player != null:
 		_draw_cone_sector(Vector3(player.global_position.x, 0.10, player.global_position.z), cone_forward, float(Tuning.CONE.range), float(Tuning.CONE.half_angle), Color(1.0, 0.58, 0.22, 0.28))
+
+
+func _draw_arc_ribbon(start_pos: Vector3, end_pos: Vector3, peak_height: float, half_width: float, col: Color) -> void:
+	var steps := 16
+	var diff_xz := Vector2(end_pos.x - start_pos.x, end_pos.z - start_pos.z)
+	if diff_xz.length_squared() <= 1e-6:
+		return
+	var n := Vector2(-diff_xz.y, diff_xz.x).normalized() * half_width
+	_draw_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(steps):
+		var u0 := float(i) / float(steps)
+		var u1 := float(i + 1) / float(steps)
+		var c0 := start_pos.lerp(end_pos, u0)
+		var c1 := start_pos.lerp(end_pos, u1)
+		c0.y = 0.12 + 4.0 * peak_height * u0 * (1.0 - u0)
+		c1.y = 0.12 + 4.0 * peak_height * u1 * (1.0 - u1)
+		var p1 := Vector3(c0.x + n.x, c0.y, c0.z + n.y)
+		var p2 := Vector3(c0.x - n.x, c0.y, c0.z - n.y)
+		var p3 := Vector3(c1.x + n.x, c1.y, c1.z + n.y)
+		var p4 := Vector3(c1.x - n.x, c1.y, c1.z - n.y)
+		_draw_mesh.surface_set_color(col)
+		_draw_mesh.surface_add_vertex(p1)
+		_draw_mesh.surface_add_vertex(p2)
+		_draw_mesh.surface_add_vertex(p3)
+		_draw_mesh.surface_add_vertex(p2)
+		_draw_mesh.surface_add_vertex(p4)
+		_draw_mesh.surface_add_vertex(p3)
+	_draw_mesh.surface_end()
 
 
 func _draw_polyline_ribbon(pts: Array[Vector3], start_idx: int, end_idx: int, half_width: float, col: Color, y_height: float) -> void:

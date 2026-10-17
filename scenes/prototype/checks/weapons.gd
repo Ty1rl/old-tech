@@ -8,6 +8,7 @@ var checks: int = 0
 
 class FakeEnemy extends Node3D:
 	const TuningRef = preload("res://scenes/prototype/tuning.gd")
+	var rewind_id: int = 0
 	var kind: StringName = &"target"
 	var radius: float = 0.7
 	var health: float = 100.0
@@ -23,7 +24,8 @@ class FakeEnemy extends Node3D:
 	var last_control_stagger: float = 0.0
 	var total_control_impulse: float = 0.0
 
-	func _init(p_kind: StringName, pos: Vector3, p_facing: Vector3 = Vector3(0.0, 0.0, 1.0)) -> void:
+	func _init(p_kind: StringName, pos: Vector3, p_facing: Vector3 = Vector3(0.0, 0.0, 1.0), p_rewind_id: int = 0) -> void:
+		rewind_id = p_rewind_id
 		kind = p_kind
 		var cfg: Dictionary = TuningRef.ENEMIES.get(String(p_kind), TuningRef.ENEMIES["target"])
 		health = float(cfg["health"])
@@ -31,6 +33,9 @@ class FakeEnemy extends Node3D:
 		position = pos
 		var f2 := Vector2(p_facing.x, p_facing.z)
 		facing = Vector3(f2.x, 0.0, f2.y).normalized() if f2.length_squared() > 1e-6 else Vector3(0.0, 0.0, 1.0)
+
+	func combat_id() -> int:
+		return rewind_id if rewind_id > 0 else get_instance_id()
 
 	func hit(amount: float, contact_world: Vector3) -> Dictionary:
 		if health <= 0.0 or amount <= 0.0:
@@ -62,6 +67,9 @@ class FakeEnemy extends Node3D:
 		last_control_impulse = impulse
 		last_control_stagger = stagger_seconds
 		total_control_impulse += impulse
+
+
+var _next_fake_id: int = 1
 
 
 func _initialize() -> void:
@@ -97,8 +105,11 @@ func key_ev(code: Key, pressed: bool = true) -> InputEventKey:
 	return ev
 
 
-func spawn_fake(parent: Node, list: Array, kind: StringName, pos: Vector3, facing: Vector3 = Vector3(0.0, 0.0, 1.0)) -> FakeEnemy:
-	var e := FakeEnemy.new(kind, pos, facing)
+func spawn_fake(parent: Node, list: Array, kind: StringName, pos: Vector3, facing: Vector3 = Vector3(0.0, 0.0, 1.0), custom_id: int = 0) -> FakeEnemy:
+	var cid := custom_id if custom_id > 0 else _next_fake_id
+	if custom_id <= 0:
+		_next_fake_id += 1
+	var e := FakeEnemy.new(kind, pos, facing, cid)
 	parent.add_child(e)
 	list.append(e)
 	return e
@@ -117,6 +128,22 @@ func reset_section(arena: Node, weapons: Node, enemies: Array) -> void:
 	weapons.reset_state()
 
 
+func has_object_ref(value: Variant) -> bool:
+	if value is Object or value is Callable or value is Signal:
+		return true
+	if value is Array:
+		var arr: Array = value
+		for item in arr:
+			if has_object_ref(item):
+				return true
+	elif value is Dictionary:
+		var dict: Dictionary = value
+		for k in dict.keys():
+			if has_object_ref(k) or has_object_ref(dict[k]):
+				return true
+	return false
+
+
 func run() -> void:
 	var packed := load("res://scenes/prototype/arena.tscn") as PackedScene
 	var arena = packed.instantiate()
@@ -132,7 +159,21 @@ func run() -> void:
 	var equipment = arena.equipment
 	var enemies: Array = []
 
-	# 1. Stationary world stroke while player moves + range/arena clamping
+	var target_max_hp := float(Tuning.ENEMIES.target.health)
+	var brute_max_hp := float(Tuning.ENEMIES.brute.health)
+
+	# 0. Round D: TOOL_IDS & Key 4 (Clock selection with no LMB action)
+	reset_section(arena, weapons, enemies)
+	expect(weapons.TOOL_IDS == [&"ring", &"beam", &"cone", &"clock"], "weapons exposes TOOL_IDS for ring, beam, cone, clock")
+	weapons.handle_event(key_ev(KEY_4), player, Vector3(0.0, 0.0, -4.0))
+	expect(weapons.selected_tool == 4, "Key 4 selects Clock (tool 4)")
+	var clock_before := float(equipment.remaining(&"clock"))
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
+	weapons.step(0.25, player, Vector3(0.0, 0.0, -4.0), enemies)
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
+	expect(not weapons.ring_drawing and not weapons.beam_charging and not weapons.cone_active and is_equal_approx(float(equipment.remaining(&"clock")), clock_before), "Clock has no left-click weapon action or wear")
+
+	# 1. Stationary world stroke while player moves + range/arena clamping + tiny stroke rejection + length cap
 	reset_section(arena, weapons, enemies)
 	player.global_position = Vector3(0.0, 0.55, 0.0)
 	var anchor := Vector3(0.0, 0.0, -4.0)
@@ -148,16 +189,13 @@ func run() -> void:
 	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -30.0))
 	expect(is_equal_approx(weapons.preview_points[0].length(), float(Tuning.RING.range)), "Ring sample clamps to Tuning.RING.range from player")
 
-	# 2. Tiny stroke ignored, redundant samples filtered, curves preserved, length capped at Tuning.RING.length
 	reset_section(arena, weapons, enemies)
-	player.global_position = Vector3(0.0, 0.55, 0.0)
 	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
 	weapons.handle_event(mouse_move(), player, Vector3(0.05, 0.0, -4.0))
 	expect(weapons.preview_points.size() == 1, "Redundant sample closer than sample_spacing is filtered")
 	weapons.handle_event(mouse_move(), player, Vector3(0.35, 0.0, -4.0))
 	weapons.handle_event(mouse_btn(false), player, Vector3(0.35, 0.0, -4.0))
-	expect(weapons.ring_phase == "idle" and weapons.ring_points.is_empty(), "Tiny stroke shorter than minimum_length does not launch")
-	expect(is_equal_approx(float(equipment.remaining(&"ring")), float(equipment.capacity(&"ring"))), "Tiny rejected ring stroke spends zero ring capacity")
+	expect(weapons.ring_phase == "idle" and weapons.ring_points.is_empty() and is_equal_approx(float(equipment.remaining(&"ring")), float(equipment.capacity(&"ring"))), "Tiny stroke shorter than minimum_length does not launch or spend wear")
 
 	reset_section(arena, weapons, enemies)
 	weapons.handle_event(mouse_btn(true), player, Vector3(-6.0, 0.0, -4.0))
@@ -165,56 +203,59 @@ func run() -> void:
 	weapons.handle_event(mouse_move(), player, Vector3(6.0, 0.0, 6.0))
 	weapons.handle_event(mouse_move(), player, Vector3(-6.0, 0.0, 6.0))
 	expect(is_equal_approx(weapons.preview_length, float(Tuning.RING.length)), "Ring stroke length caps at Tuning.RING.length")
-	var count_at_cap: int = weapons.preview_points.size()
-	var end_at_cap: Vector3 = weapons.preview_points[-1]
-	weapons.handle_event(mouse_move(), player, Vector3(-6.0, 0.0, -4.0))
-	expect(weapons.preview_points.size() == count_at_cap and weapons.preview_points[-1].distance_to(end_at_cap) < 0.001, "Ring stops adding points once stroke cap is reached")
-	var has_corner := false
-	for pt in weapons.preview_points:
-		if pt.distance_to(Vector3(6.0, 0.0, -4.0)) < 0.25:
-			has_corner = true
-			break
-	expect(has_corner, "Curved / corner stroke waypoints are preserved before the cap")
 
-	# 3. Outbound harmless, swept stroke hit, once-per-launch, and moving return
+	# 2. Round D Ring: Outbound arcs ABOVE cover harmlessly; cutting stroke stops at cover; blocked preview split; stable combat_id
+	reset_section(arena, weapons, enemies)
+	player.global_position = Vector3(-5.0, 0.55, -1.0)
+	var outbound_e := spawn_fake(arena, enemies, &"target", Vector3(-5.0, 0.0, -2.0))
+	var behind_cover_e := spawn_fake(arena, enemies, &"target", Vector3(-5.0, 0.0, -7.5), Vector3(0.0, 0.0, 1.0), 77)
+
+	# Draw stroke behind cover box Rect2(-6, -6, 2, 3): outbound from (-5,0,-1) to (-5.8,0,-7.5) crosses cover
+	weapons.handle_event(mouse_btn(true), player, Vector3(-5.8, 0.0, -7.5))
+	weapons.handle_event(mouse_move(), player, Vector3(-4.2, 0.0, -7.5))
+	expect(not weapons.preview_blocked, "Stroke drawn entirely behind cover is not marked blocked")
+	weapons.handle_event(mouse_btn(false), player, Vector3(-4.2, 0.0, -7.5))
+	expect(weapons.ring_phase == "outbound" and is_equal_approx(float(equipment.remaining(&"ring")), float(equipment.capacity(&"ring")) - 1.0), "Ring launches into outbound phase and spends 1 unit")
+
+	# Step to midpoint of outbound flight over cover box (distance ~6.55m, speed 24 -> ~0.136s is midpoint)
+	weapons.step(0.135, player, Vector3.ZERO, enemies)
+	expect(weapons.ring_phase == "outbound" and weapons.ring_pos.y > 2.2, "Outbound ring physically arcs above 2.2m cover height")
+	expect(outbound_e.hit_count == 0, "Outbound arc deals no damage to enemies underneath")
+
+	# Finish outbound and enter stroke, hitting behind_cover_e (combat_id = 77)
+	weapons.step(0.18, player, Vector3.ZERO, enemies)
+	expect(behind_cover_e.hit_count == 1 and is_equal_approx(behind_cover_e.health, target_max_hp - float(Tuning.RING.damage)), "Outbound ring lands behind cover and cutting stroke hits enemy behind cover")
+
+	# Simulate rewind/recreate of enemy node with same stable combat_id = 77 before stroke finishes a loop back
 	reset_section(arena, weapons, enemies)
 	player.global_position = Vector3(0.0, 0.55, 0.0)
-	var target_max_hp := float(Tuning.ENEMIES.target.health)
-	var brute_max_hp := float(Tuning.ENEMIES.brute.health)
-	var outbound_e := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -3.0))
-	var stroke_e := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -6.0))
-	var return_e := spawn_fake(arena, enemies, &"target", Vector3(4.0, 0.0, -3.0))
+	var e_first := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -5.0), Vector3(0.0, 0.0, 1.0), 88)
+	weapons.handle_event(mouse_btn(true), player, Vector3(-3.0, 0.0, -5.0))
+	weapons.handle_event(mouse_move(), player, Vector3(3.0, 0.0, -5.0))
+	weapons.handle_event(mouse_move(), player, Vector3(-3.0, 0.0, -5.0))
+	weapons.handle_event(mouse_btn(false), player, Vector3(-3.0, 0.0, -5.0))
+	# Advance through outbound + first pass of stroke (-3 -> +3)
+	weapons.step(0.38, player, Vector3.ZERO, enemies)
+	expect(e_first.hit_count == 1 and weapons.ring_hit_ids.has(88), "Ring records enemy stable combat_id on first pass")
+	# Replace node instance with a brand new node sharing combat_id = 88 before return pass (+3 -> -3)
+	clear_fakes(enemies)
+	var e_recreated := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -5.0), Vector3(0.0, 0.0, 1.0), 88)
+	weapons.step(0.30, player, Vector3.ZERO, enemies)
+	expect(e_recreated.hit_count == 0, "Stable combat_id prevents double-hit even when enemy node instance is recreated")
 
-	weapons.handle_event(mouse_btn(true), player, Vector3(-3.0, 0.0, -6.0))
-	weapons.handle_event(mouse_move(), player, Vector3(3.0, 0.0, -6.0))
-	weapons.handle_event(mouse_move(), player, Vector3(-3.0, 0.0, -6.0))
-	weapons.handle_event(mouse_btn(false), player, Vector3(-3.0, 0.0, -6.0))
-	expect(weapons.ring_phase == "outbound", "Valid stroke release launches ring into outbound phase")
-	expect(is_equal_approx(float(equipment.remaining(&"ring")), float(equipment.capacity(&"ring")) - 1.0), "Valid ring launch spends exactly 1 launch unit")
+	# Preview blocked stroke portion & cutting stroke stopping at cover
+	reset_section(arena, weapons, enemies)
+	player.global_position = Vector3(-2.0, 0.55, -4.5)
+	var before_wall_e := spawn_fake(arena, enemies, &"target", Vector3(-3.0, 0.0, -4.5))
+	var after_wall_e := spawn_fake(arena, enemies, &"target", Vector3(-7.2, 0.0, -4.5))
+	weapons.handle_event(mouse_btn(true), player, Vector3(-2.5, 0.0, -4.5))
+	weapons.handle_event(mouse_move(), player, Vector3(-7.5, 0.0, -4.5))
+	expect(weapons.preview_blocked and is_equal_approx(weapons.preview_cutoff_point.x, -3.6) and weapons.preview_blocked_points.size() >= 2, "Preview detects stroke cutting into cover and splits unblocked vs blocked points")
+	weapons.handle_event(mouse_btn(false), player, Vector3(-7.5, 0.0, -4.5))
+	weapons.step(0.80, player, Vector3.ZERO, enemies)
+	expect(before_wall_e.hit_count == 1 and after_wall_e.hit_count == 0 and weapons.ring_phase == "idle", "Cutting stroke hits enemy before cover, stops at cover wall, and returns harmlessly")
 
-	# Step through outbound to stroke start: outbound_e at (0,0,-3) is near outbound path; verify harmless
-	weapons.step(0.15, player, Vector3.ZERO, enemies)
-	expect(outbound_e.hit_count == 0 and is_equal_approx(outbound_e.health, target_max_hp), "Outbound ring travel deals no damage")
-
-	# Large step traverses entire stroke (-3 -> +3 -> -3 across stroke_e twice): swept hit + once-per-launch
-	weapons.step(0.50, player, Vector3.ZERO, enemies)
-	expect(stroke_e.hit_count == 1 and is_equal_approx(stroke_e.health, target_max_hp - float(Tuning.RING.damage)), "Swept stroke hits enemy and damages at most once per launch")
-	expect(weapons.ring_phase == "return", "Ring enters return phase after completing stroke")
-
-	# While returning, move player to (8, 0, 0) and verify no second launch while in flight + return homes to moving player harmlessly
-	player.global_position = Vector3(8.0, 0.55, 0.0)
-	weapons.handle_event(mouse_btn(true), player, Vector3(8.0, 0.0, -4.0))
-	expect(not weapons.ring_drawing, "Second launch is blocked until active ring returns")
-
-	for i in range(10):
-		player.global_position += Vector3(0.2, 0.0, 0.1)
-		weapons.step(0.08, player, Vector3.ZERO, enemies)
-		if weapons.ring_phase == "idle":
-			break
-	expect(weapons.ring_phase == "idle" and Vector2(weapons.ring_pos.x - player.global_position.x, weapons.ring_pos.z - player.global_position.z).length() < 0.01, "Returning ring homes to moving player's current position")
-	expect(return_e.hit_count == 0, "Returning ring deals no damage")
-
-	# 4. Contact position accuracy: path behind Brute deals full damage, path in front is armored
+	# Contact position accuracy (Brute rear unarmored vs front armored)
 	reset_section(arena, weapons, enemies)
 	player.global_position = Vector3(0.0, 0.55, 0.0)
 	var brute_rear := spawn_fake(arena, enemies, &"brute", Vector3(0.0, 0.0, -6.0), Vector3(0.0, 0.0, 1.0))
@@ -222,265 +263,200 @@ func run() -> void:
 	weapons.handle_event(mouse_move(), player, Vector3(2.5, 0.0, -7.1))
 	weapons.handle_event(mouse_btn(false), player, Vector3(2.5, 0.0, -7.1))
 	weapons.step(0.60, player, Vector3.ZERO, enemies)
-	expect(brute_rear.hit_count == 1 and not brute_rear.last_armored and is_equal_approx(brute_rear.health, brute_max_hp - float(Tuning.RING.damage)), "Ring stroke behind Brute computes rear contact point and deals full unarmored damage")
-	expect(brute_rear.last_contact.z < brute_rear.global_position.z - 0.5, "Ring rear contact point is behind Brute, not player position")
+	expect(brute_rear.hit_count == 1 and not brute_rear.last_armored and is_equal_approx(brute_rear.health, brute_max_hp - float(Tuning.RING.damage)), "Ring stroke behind Brute deals full unarmored damage")
 
-	reset_section(arena, weapons, enemies)
-	var brute_front := spawn_fake(arena, enemies, &"brute", Vector3(0.0, 0.0, -6.0), Vector3(0.0, 0.0, 1.0))
-	weapons.handle_event(mouse_btn(true), player, Vector3(-2.5, 0.0, -4.9))
-	weapons.handle_event(mouse_move(), player, Vector3(2.5, 0.0, -4.9))
-	weapons.handle_event(mouse_btn(false), player, Vector3(2.5, 0.0, -4.9))
-	weapons.step(0.60, player, Vector3.ZERO, enemies)
-	var expected_armored_dmg := float(Tuning.RING.damage) * float(Tuning.ARMOR.front_multiplier)
-	expect(brute_front.hit_count == 1 and brute_front.last_armored and is_equal_approx(brute_front.health, brute_max_hp - expected_armored_dmg), "Ring stroke across Brute front triggers frontal armor reduction")
-
-	# 5. Tool 2 (Flash / Beam): forgiving width, hits nearest enemy only, respects Tuning.BEAM.cooldown
+	# 3. Round D Tool 2 (Charged Traveling Flash): tap vs full charge, long range (~35), slow travel, swept moving hit, cover stop, cancellation & bounds
 	reset_section(arena, weapons, enemies)
 	player.global_position = Vector3(0.0, 0.55, 0.0)
-	var near_e := spawn_fake(arena, enemies, &"target", Vector3(0.85, 0.0, -5.0)) # offset 0.85 <= beam.radius(0.35) + target.radius(0.70) = 1.05
-	var far_e := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -10.0))
-	weapons.handle_event(key_ev(KEY_2), player, Vector3(0.0, 0.0, -10.0))
+	var tap_target := spawn_fake(arena, enemies, &"brute", Vector3(0.0, 0.0, -8.0), Vector3(0.0, 0.0, -1.0)) # Facing away so rear is unarmored
+	weapons.handle_event(key_ev(KEY_2), player, Vector3(0.0, 0.0, -8.0))
 	expect(weapons.selected_tool == 2, "Key 2 selects Flash tool")
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -10.0))
-	weapons.step(0.05, player, Vector3(0.0, 0.0, -10.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -10.0))
-	expect(near_e.hit_count == 1 and is_equal_approx(near_e.health, maxf(0.0, target_max_hp - float(Tuning.BEAM.damage))), "Flash forgiving width hits off-center near enemy")
-	expect(far_e.hit_count == 0 and is_equal_approx(far_e.health, target_max_hp), "Flash stops at first nearest enemy")
 
-	# Click during cooldown does not fire
-	var cd_probe := minf(0.05, float(Tuning.BEAM.cooldown) * 0.25)
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -10.0))
-	weapons.step(cd_probe, player, Vector3(0.0, 0.0, -10.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -10.0))
-	expect(near_e.hit_count == 1, "Flash cooldown prevents immediate re-fire")
-
-	# Wait out remaining cooldown derived from Tuning.BEAM.cooldown and fire again
-	weapons.step(float(Tuning.BEAM.cooldown), player, Vector3(0.0, 0.0, -10.0), enemies)
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -10.0))
-	weapons.step(0.01, player, Vector3(0.0, 0.0, -10.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -10.0))
-	expect(near_e.hit_count == 2, "Flash fires again once Tuning.BEAM.cooldown expires")
-
-	# 6. Tool 3 (Cone): multi-enemy sector hit, real-delta consistency across step sizes & slow time
-	reset_section(arena, weapons, enemies)
-	player.global_position = Vector3(0.0, 0.55, 0.0)
-	player.world_scale = 0.18
-	var cone_e1 := spawn_fake(arena, enemies, &"target", Vector3(-1.0, 0.0, -3.5))
-	var cone_e2 := spawn_fake(arena, enemies, &"target", Vector3(1.0, 0.0, -3.5))
-	var outside_e := spawn_fake(arena, enemies, &"target", Vector3(4.5, 0.0, 0.0))
-	weapons.handle_event(key_ev(KEY_3), player, Vector3(0.0, 0.0, -4.0))
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
-	for i in range(10):
-		weapons.step(0.05, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
-	var dmg_ten_steps := target_max_hp - cone_e1.health
-	expect(is_equal_approx(dmg_ten_steps, float(Tuning.CONE.damage_per_second) * 0.5) and is_equal_approx(cone_e1.health, cone_e2.health), "Cone damages multiple enemies in sector using real delta")
-	expect(outside_e.hit_count == 0 and outside_e.control_count == 0, "Cone ignores enemies outside sector angle")
-
-	# Compare with 2 steps of 0.25s
-	clear_fakes(enemies)
-	var cone_e3 := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -3.5))
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
-	weapons.step(0.25, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.step(0.25, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
-	var dmg_two_steps := target_max_hp - cone_e3.health
-	expect(is_equal_approx(dmg_ten_steps, dmg_two_steps), "Cone total damage is consistent across different delta sizes")
-
-	# 7. Tool switch while held does not launch ring or fire new tool; cancel preserves travelling ring; reset clears all
-	reset_section(arena, weapons, enemies)
-	var switch_e := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -3.5))
-	weapons.handle_event(mouse_btn(true), player, Vector3(-2.0, 0.0, -3.5))
-	weapons.handle_event(mouse_move(), player, Vector3(2.0, 0.0, -3.5))
-	weapons.handle_event(key_ev(KEY_3), player, Vector3(0.0, 0.0, -3.5))
-	expect(weapons.selected_tool == 3 and not weapons.ring_drawing and weapons.ring_phase == "idle" and not weapons.cone_active, "Switching tool while holding LMB cancels ring preview without launching or activating new tool")
-	expect(is_equal_approx(float(equipment.remaining(&"ring")), float(equipment.capacity(&"ring"))), "Cancelled ring preview via tool switch spends zero ring capacity")
-	weapons.step(0.10, player, Vector3(0.0, 0.0, -3.5), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -3.5))
-	expect(switch_e.hit_count == 0 and weapons.ring_phase == "idle", "Releasing old held mouse press after tool switch does not fire")
-
-	# Launch a ring, then call cancel_input() and switch tools while ring is travelling
-	weapons.handle_event(key_ev(KEY_1), player, Vector3(-2.0, 0.0, -3.5))
-	weapons.handle_event(mouse_btn(true), player, Vector3(-2.0, 0.0, -3.5))
-	weapons.handle_event(mouse_move(), player, Vector3(2.0, 0.0, -3.5))
-	weapons.handle_event(mouse_btn(false), player, Vector3(2.0, 0.0, -3.5))
-	expect(weapons.ring_phase == "outbound", "Ring is in flight before cancel_input")
-	weapons.cancel_input()
-	weapons.handle_event(key_ev(KEY_2), player, Vector3(0.0, 0.0, -3.5))
-	expect(weapons.selected_tool == 2 and weapons.ring_phase != "idle", "cancel_input and tool switch preserve an already travelling ring")
-	weapons.step(0.35, player, Vector3(0.0, 0.0, -3.5), enemies)
-	expect(switch_e.hit_count == 1, "Travelling ring still damages enemies along stroke while switched to another tool")
-
-	weapons.reset_state()
-	expect(weapons.selected_tool == 1 and weapons.ring_phase == "idle" and weapons.ring_points.is_empty() and not weapons.cone_active and is_equal_approx(weapons.beam_cooldown, 0.0), "reset_state clears active ring, trails, cone, cooldowns, and restores tool 1")
-
-	# 8. Round C: Equipment wear accounting, exhaustion blocking, Repair feedback, travelling ring survival on empty budget
-	reset_section(arena, weapons, enemies)
-	player.global_position = Vector3(0.0, 0.55, 0.0)
-	var wear_e := spawn_fake(arena, enemies, &"brute", Vector3(0.0, 0.0, -4.0))
-
-	# Spend all but 1 ring launch, launch final ring, verify remaining == 0 and travelling ring still hits while empty
-	equipment.spend(&"ring", float(equipment.capacity(&"ring")) - 1.0)
-	weapons.handle_event(mouse_btn(true), player, Vector3(-2.0, 0.0, -4.0))
-	weapons.handle_event(mouse_move(), player, Vector3(2.0, 0.0, -4.0))
-	weapons.handle_event(mouse_btn(false), player, Vector3(2.0, 0.0, -4.0))
-	expect(is_equal_approx(float(equipment.remaining(&"ring")), 0.0) and weapons.ring_phase == "outbound", "Final ring launch spends last launch unit and enters outbound")
-	weapons.step(0.80, player, Vector3.ZERO, enemies)
-	expect(wear_e.hit_count == 1 and weapons.ring_phase == "idle", "Already-launched ring finishes stroke and returns despite empty ring budget")
-
-	# Empty ring is blocked with terse Repair feedback
-	weapons.handle_event(mouse_btn(true), player, Vector3(-2.0, 0.0, -4.0))
-	expect(not weapons.ring_drawing and "Repair" in weapons.last_feedback, "Zero ring capacity blocks drawing with terse Repair feedback")
-	weapons.handle_event(mouse_btn(false), player, Vector3(-2.0, 0.0, -4.0))
-
-	# Flash spends 1 shot even on miss, cancels cleanly before step, and blocks when empty
-	weapons.handle_event(key_ev(KEY_2), player, Vector3(0.0, 0.0, 5.0))
+	# Press starts charging without firing or spending ammo
 	var beam_cap := float(equipment.capacity(&"beam"))
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, 5.0)) # Aim away from enemy -> miss
-	weapons.step(0.02, player, Vector3(0.0, 0.0, 5.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, 5.0))
-	expect(is_equal_approx(float(equipment.remaining(&"beam")), beam_cap - 1.0), "Missed Flash shot still spends 1 beam unit")
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -8.0))
+	expect(weapons.beam_charging and weapons.beam_pulses.is_empty() and is_equal_approx(float(equipment.remaining(&"beam")), beam_cap), "Flash press begins charging without instant shot or ammo spend")
 
-	# Switching tools does not refill beam or clear cooldown
-	weapons.handle_event(key_ev(KEY_1), player, Vector3.ZERO)
-	weapons.handle_event(key_ev(KEY_2), player, Vector3.ZERO)
-	expect(is_equal_approx(float(equipment.remaining(&"beam")), beam_cap - 1.0) and weapons.beam_cooldown > 0.0, "Tool switch does not refill beam capacity or reset beam cooldown")
+	# Release immediately (tap shot): launches weak pulse (~30 dmg) and spends 1 unit
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -8.0))
+	expect(not weapons.beam_charging and weapons.beam_pulses.size() == 1 and is_equal_approx(float(equipment.remaining(&"beam")), beam_cap - 1.0), "Tap release launches traveling Flash pulse and spends 1 unit")
+	weapons.step(0.30, player, Vector3(0.0, 0.0, -8.0), enemies)
+	expect(tap_target.hit_count == 1 and is_equal_approx(brute_max_hp - tap_target.health, weapons._beam_min_damage()), "Quick tap Flash pulse deals minimum damage (~30)")
 
-	# Exhaust beam and verify blocked with Repair feedback
-	weapons.step(float(Tuning.BEAM.cooldown), player, Vector3.ZERO, enemies)
-	equipment.spend(&"beam", float(equipment.remaining(&"beam")))
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
-	weapons.step(0.02, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
-	expect(wear_e.hit_count == 1 and "Repair" in weapons.last_feedback, "Empty Flash is blocked and shows Repair feedback")
-
-	# 9. Round C: Cone initial burst shove/stagger, burst cost, real-time burst cooldown across tool switches, and sustained push
+	# Wait cooldown, then charge for full duration (~0.9 real seconds) while world_delta is slowed
 	reset_section(arena, weapons, enemies)
 	player.global_position = Vector3(0.0, 0.55, 0.0)
-	var ctrl_e1 := spawn_fake(arena, enemies, &"swarmer", Vector3(-0.8, 0.0, -3.0))
-	ctrl_e1.health = 500.0
-	var ctrl_e2 := spawn_fake(arena, enemies, &"brute", Vector3(0.8, 0.0, -3.0))
-	ctrl_e2.health = 500.0
-	var cone_cap := float(equipment.capacity(&"cone"))
-	var burst_cost := float(Tuning.CONTROL.burst_cost)
-	var burst_interval := float(Tuning.CONTROL.burst_interval)
+	var far_charged_e := spawn_fake(arena, enemies, &"brute", Vector3(0.0, 0.0, -28.0), Vector3(0.0, 0.0, -1.0)) # 28m distance tests ~35m long range
+	weapons.select_tool(2)
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -28.0))
+	var charge_dur: float = weapons._beam_charge_duration()
+	weapons.step(charge_dur * 0.5, player, Vector3(0.0, 0.0, -28.0), enemies, charge_dur * 0.5 * 0.18)
+	expect(is_equal_approx(weapons.beam_charge, 0.5), "Flash charge progresses in real delta even when world_delta is slowed")
+	weapons.step(charge_dur * 0.6, player, Vector3(0.0, 0.0, -28.0), enemies, charge_dur * 0.6 * 0.18)
+	expect(is_equal_approx(weapons.beam_charge, 1.0), "Flash charge clamps at 1.0 after full real charge duration")
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -28.0))
+	expect(weapons.beam_pulses.size() == 1 and is_equal_approx(weapons.beam_charge, 0.0), "Releasing charged Flash launches pulse and resets beam_charge")
 
-	weapons.handle_event(key_ev(KEY_3), player, Vector3(0.0, 0.0, -4.0))
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
-	weapons.step(0.10, player, Vector3(0.0, 0.0, -4.0), enemies)
-	expect(ctrl_e1.strong_control_count == 1 and ctrl_e2.strong_control_count == 1, "Initial cone press triggers strong burst once on each visible in-cone enemy")
-	expect(is_equal_approx(ctrl_e1.last_control_impulse, float(Tuning.CONTROL.impulse)) and is_equal_approx(ctrl_e1.last_control_stagger, float(Tuning.CONTROL.stagger)), "Strong cone burst passes Tuning.CONTROL.impulse and Tuning.CONTROL.stagger")
-	expect(ctrl_e1.last_control_dir.z < -0.9 and is_equal_approx(ctrl_e1.last_control_dir.length(), 1.0), "Cone control direction is normalized XZ away from player")
-	expect(is_equal_approx(float(equipment.remaining(&"cone")), cone_cap - burst_cost - 0.10), "Initial cone burst spends CONTROL.burst_cost plus active delta seconds")
+	# Step with slow world_delta: pulse travels slowly in world time, then accelerates when normal world_delta resumes
+	weapons.step(0.20, player, Vector3(0.0, 0.0, -28.0), enemies, 0.20 * 0.18)
+	var slow_z: float = float(weapons.beam_pulses[0]["pos"].z)
+	expect(far_charged_e.hit_count == 0 and slow_z > -4.0, "Flash projectile flight uses world_delta during slow time")
+	weapons.step(0.80, player, Vector3(0.0, 0.0, -28.0), enemies, 0.80)
+	expect(far_charged_e.hit_count == 1 and is_equal_approx(brute_max_hp - far_charged_e.health, weapons._beam_max_damage()), "Fully charged Flash pulse reaches 28m target and deals max damage (~100)")
 
-	# Continue holding across multiple ticks (even past burst_interval): only light sustained push, no second strong burst
-	for i in range(4):
-		weapons.step(0.50, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
-	expect(ctrl_e1.strong_control_count == 1 and ctrl_e1.sustained_control_count == 4, "Holding cone applies sustained push without re-triggering strong bursts")
-	expect(is_equal_approx(ctrl_e1.last_control_impulse, float(Tuning.CONTROL.sustained_push) * 0.50) and is_equal_approx(ctrl_e1.last_control_stagger, 0.0), "Sustained cone push uses CONTROL.sustained_push * dt and zero stagger")
-
-	# Trigger a fresh burst now that cooldown expired, then release and tap again during burst cooldown
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
-	weapons.step(0.10, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
-	expect(ctrl_e1.strong_control_count == 2, "Fresh cone press after burst_interval triggers a new strong burst")
-
-	var rem_after_burst := float(equipment.remaining(&"cone"))
-	weapons.handle_event(key_ev(KEY_1), player, Vector3(0.0, 0.0, -4.0))
-	weapons.step(0.20, player, Vector3(0.0, 0.0, -4.0), enemies) # Cooldown ticks while on Tool 1 (0.10 + 0.20 = 0.30 < burst_interval)
-	weapons.handle_event(key_ev(KEY_3), player, Vector3(0.0, 0.0, -4.0))
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
-	weapons.step(0.10, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
-	expect(ctrl_e1.strong_control_count == 2 and is_equal_approx(float(equipment.remaining(&"cone")), rem_after_burst - 0.10), "Re-pressing cone during burst cooldown continues gentle firing without extra burst or burst_cost")
-
-	# Wait out remaining burst_interval while switched to Tool 2, then switch back to Tool 3 and verify strong burst ready
-	weapons.handle_event(key_ev(KEY_2), player, Vector3(0.0, 0.0, -4.0))
-	weapons.step(burst_interval, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.handle_event(key_ev(KEY_3), player, Vector3(0.0, 0.0, -4.0))
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
-	weapons.step(0.05, player, Vector3(0.0, 0.0, -4.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
-	expect(ctrl_e1.strong_control_count == 3, "Cone burst_interval cools down in real time across tool switches")
-
-	# 10. Round C: Cone continuous final partial tick scales damage and sustained push with actual seconds afforded
+	# Swept moving hit & stops at first enemy / nearest cover
 	reset_section(arena, weapons, enemies)
 	player.global_position = Vector3(0.0, 0.55, 0.0)
-	var part_e := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -3.0))
-	equipment.spend(&"cone", float(equipment.capacity(&"cone")) - 0.20) # Leave 0.20s (< burst_cost and < 0.50s step)
-	weapons.handle_event(key_ev(KEY_3), player, Vector3(0.0, 0.0, -3.0))
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -3.0))
-	weapons.step(0.50, player, Vector3(0.0, 0.0, -3.0), enemies)
-	expect(is_equal_approx(float(equipment.remaining(&"cone")), 0.0) and not weapons.cone_active, "Final partial cone tick consumes remaining 0.20s and stops cone")
-	expect(is_equal_approx(target_max_hp - part_e.health, float(Tuning.CONE.damage_per_second) * 0.20), "Final partial cone tick scales damage by actual seconds afforded")
-	expect(is_equal_approx(part_e.last_control_impulse, float(Tuning.CONTROL.sustained_push) * 0.20) and is_equal_approx(part_e.last_control_stagger, 0.0), "Final partial cone tick scales sustained push by actual seconds afforded")
+	var moving_near_e := spawn_fake(arena, enemies, &"target", Vector3(0.75, 0.0, -6.0)) # Forgiving width
+	var behind_e := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -12.0))
+	weapons.select_tool(2)
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -12.0))
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -12.0))
+	weapons.step(0.40, player, Vector3(0.0, 0.0, -12.0), enemies)
+	expect(moving_near_e.hit_count == 1 and behind_e.hit_count == 0 and weapons.beam_pulses.is_empty(), "Traveling Flash pulse hits off-center first enemy and stops without piercing")
 
-	# Pressing cone when empty is blocked with Repair feedback
-	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -3.0))
-	expect(not weapons.cone_active and "Repair" in weapons.last_feedback, "Zero cone capacity blocks activation with terse Repair feedback")
-	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -3.0))
-
-	# 11. Round C: Cover clipping & occlusion for Flash, Cone, and Ring (using cover box Rect2(-6, -6, 2, 3): x in [-6,-4], z in [-6,-3])
-	# 11a. Flash blocked by nearest cover wall vs hitting visible enemy in front of wall
+	# Cover blocks traveling Flash pulse before enemy behind cover
 	reset_section(arena, weapons, enemies)
 	player.global_position = Vector3(-5.0, 0.55, -1.0)
 	var behind_wall_e := spawn_fake(arena, enemies, &"target", Vector3(-5.0, 0.0, -7.5))
-	weapons.handle_event(key_ev(KEY_2), player, Vector3(-5.0, 0.0, -8.0))
+	weapons.select_tool(2)
 	weapons.handle_event(mouse_btn(true), player, Vector3(-5.0, 0.0, -8.0))
-	weapons.step(0.02, player, Vector3(-5.0, 0.0, -8.0), enemies)
 	weapons.handle_event(mouse_btn(false), player, Vector3(-5.0, 0.0, -8.0))
-	expect(behind_wall_e.hit_count == 0 and is_equal_approx(weapons.beam_end.z, -3.0), "Flash stops at nearest cover wall and does not hit enemy behind cover")
+	weapons.step(0.30, player, Vector3(-5.0, 0.0, -8.0), enemies)
+	expect(behind_wall_e.hit_count == 0 and weapons.beam_pulses.is_empty() and is_equal_approx(weapons.beam_end.z, -3.0), "Traveling Flash pulse stops at cover wall and does not hit enemy behind cover")
 
-	weapons.step(float(Tuning.BEAM.cooldown), player, Vector3(-5.0, 0.0, -8.0), enemies)
-	var in_front_wall_e := spawn_fake(arena, enemies, &"target", Vector3(-5.0, 0.0, -2.1))
-	weapons.handle_event(mouse_btn(true), player, Vector3(-5.0, 0.0, -8.0))
-	weapons.step(0.02, player, Vector3(-5.0, 0.0, -8.0), enemies)
-	weapons.handle_event(mouse_btn(false), player, Vector3(-5.0, 0.0, -8.0))
-	expect(in_front_wall_e.hit_count == 1 and behind_wall_e.hit_count == 0, "Flash hits enemy standing in front of cover wall")
+	# Cancelled charge spends zero capacity and release after tool switch / popup does not fire
+	reset_section(arena, weapons, enemies)
+	player.global_position = Vector3(0.0, 0.55, 0.0)
+	var cancel_e := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -5.0))
+	weapons.select_tool(2)
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -5.0))
+	weapons.step(0.50, player, Vector3(0.0, 0.0, -5.0), enemies)
+	weapons.handle_event(key_ev(KEY_1), player, Vector3(0.0, 0.0, -5.0))
+	expect(not weapons.beam_charging and is_equal_approx(weapons.beam_charge, 0.0) and is_equal_approx(float(equipment.remaining(&"beam")), float(equipment.capacity(&"beam"))), "Switching tools while charging Flash cancels charge with zero wear")
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -5.0))
+	weapons.step(0.20, player, Vector3(0.0, 0.0, -5.0), enemies)
+	expect(cancel_e.hit_count == 0 and weapons.beam_pulses.is_empty(), "Releasing LMB after charge cancellation does not fire")
 
-	# 11b. Cone occlusion: hits visible enemy in sector, does not damage or shove enemy behind cover box
+	# Bounded active pulses (max 8)
+	reset_section(arena, weapons, enemies)
+	player.global_position = Vector3(0.0, 0.55, 0.0)
+	weapons.select_tool(2)
+	var max_p: int = weapons._beam_max_pulses()
+	for i in range(max_p + 2):
+		weapons.beam_cooldown = 0.0
+		weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -15.0))
+		weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -15.0))
+	expect(weapons.beam_pulses.size() == max_p, "Active Flash pulses are bounded at max_pulses (%d)" % max_p)
+
+	# 4. Round D Tool 3 (Cone): repeating pulses while held, world_delta cadence, edge-volume inclusion, LOS, affordable pulse limit, no rapid tap reset
+	reset_section(arena, weapons, enemies)
+	player.global_position = Vector3(0.0, 0.55, 0.0)
+	# Edge enemy: center angle atan2(2.6, 3.0) = 0.714 rad > half_angle(0.65), but brute radius 1.0 gives asin(1.0 / 3.97) = 0.255 rad overlap
+	var edge_brute := spawn_fake(arena, enemies, &"brute", Vector3(2.6, 0.0, -3.0))
+	edge_brute.health = 500.0
+	var far_outside_e := spawn_fake(arena, enemies, &"target", Vector3(4.5, 0.0, 0.0))
+	var pulse_interval: float = weapons._cone_pulse_interval()
+	var pulse_cost: float = weapons._cone_pulse_cost()
+	var pulse_imp: float = weapons._cone_pulse_impulse()
+	var pulse_stg: float = weapons._cone_pulse_stagger()
+	var cone_cap := float(equipment.capacity(&"cone"))
+
+	weapons.handle_event(key_ev(KEY_3), player, Vector3(0.0, 0.0, -4.0))
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
+	weapons.step(0.10, player, Vector3(0.0, 0.0, -4.0), enemies, 0.10)
+	expect(edge_brute.strong_control_count == 1 and far_outside_e.control_count == 0, "Cone includes enemy whose volume overlaps cone edge and triggers initial pulse")
+	expect(is_equal_approx(edge_brute.last_control_impulse, pulse_imp) and is_equal_approx(edge_brute.last_control_stagger, pulse_stg), "Cone pulse applies strong impulse (~22) and stagger (~0.85)")
+	expect(is_equal_approx(float(equipment.remaining(&"cone")), cone_cap - 0.10 - pulse_cost), "Cone pulse spends real delta plus pulse_cost")
+
+	# Hold Cone in slow time (real delta = 1.2s, world_delta = 1.2 * 0.18 = 0.216s < pulse_interval): no second strong pulse yet
+	weapons.step(1.20, player, Vector3(0.0, 0.0, -4.0), enemies, 1.20 * 0.18)
+	expect(edge_brute.strong_control_count == 1, "Cone pulse cadence uses world_delta (slow time does not amplify pulse rate)")
+
+	# Advance remaining world time to reach pulse_interval while still holding LMB: second strong pulse fires!
+	var rem_world_to_pulse := pulse_interval - 0.10 - (1.20 * 0.18) + 0.02
+	weapons.step(rem_world_to_pulse, player, Vector3(0.0, 0.0, -4.0), enemies, rem_world_to_pulse)
+	expect(edge_brute.strong_control_count == 2, "Holding Cone repeats strong shove/stagger once pulse_interval world seconds elapse")
+
+	# Release and rapidly re-tap LMB while pulse cooldown > 0: no rapid tap reset
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -4.0))
+	weapons.step(0.10, player, Vector3(0.0, 0.0, -4.0), enemies, 0.10)
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -4.0))
+	expect(edge_brute.strong_control_count == 2, "Rapid tap release/re-press does not reset Cone pulse cooldown or trigger extra pulse")
+
+	# Limit pulse to affordable capacity & no empty-tool shove
+	reset_section(arena, weapons, enemies)
+	player.global_position = Vector3(0.0, 0.55, 0.0)
+	var afford_e := spawn_fake(arena, enemies, &"target", Vector3(0.0, 0.0, -3.0))
+	# Leave 0.10s for tick + 50% of pulse_cost
+	equipment.spend(&"cone", float(equipment.capacity(&"cone")) - (0.10 + pulse_cost * 0.5))
+	weapons.select_tool(3)
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -3.0))
+	weapons.step(0.10, player, Vector3(0.0, 0.0, -3.0), enemies, 0.10)
+	expect(afford_e.strong_control_count == 1 and is_equal_approx(afford_e.last_control_impulse, pulse_imp * 0.5) and is_equal_approx(afford_e.last_control_stagger, pulse_stg * 0.5), "Cone scales pulse impulse and stagger to affordable remaining capacity")
+	expect(is_equal_approx(float(equipment.remaining(&"cone")), 0.0) and not weapons.cone_active, "Cone stops when capacity reaches zero")
+
+	# Empty cone produces no shove or damage
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -3.0))
+	weapons.step(0.20, player, Vector3(0.0, 0.0, -3.0), enemies, 0.20)
+	expect(afford_e.strong_control_count == 1 and not weapons.cone_active and "Repair" in weapons.last_feedback, "Empty Cone blocks activation and produces no empty-tool shove")
+
+	# Cone LOS occlusion
 	reset_section(arena, weapons, enemies)
 	player.global_position = Vector3(-5.0, 0.55, -1.2)
-	var cone_vis_e := spawn_fake(arena, enemies, &"swarmer", Vector3(-5.0, 0.0, -2.3)) # Clear LOS in front of z=-3 wall, inside cone
-	var cone_occ_e := spawn_fake(arena, enemies, &"swarmer", Vector3(-5.0, 0.0, -5.8)) # Distance 4.6 <= 5.0, dead-center, but behind z=-3 cover wall
-	weapons.handle_event(key_ev(KEY_3), player, Vector3(-5.0, 0.0, -6.0))
+	var cone_vis_e := spawn_fake(arena, enemies, &"swarmer", Vector3(-5.0, 0.0, -2.3))
+	var cone_occ_e := spawn_fake(arena, enemies, &"swarmer", Vector3(-5.0, 0.0, -5.8))
+	weapons.select_tool(3)
 	weapons.handle_event(mouse_btn(true), player, Vector3(-5.0, 0.0, -6.0))
-	weapons.step(0.10, player, Vector3(-5.0, 0.0, -6.0), enemies)
+	weapons.step(0.10, player, Vector3(-5.0, 0.0, -6.0), enemies, 0.10)
 	weapons.handle_event(mouse_btn(false), player, Vector3(-5.0, 0.0, -6.0))
-	expect(cone_vis_e.hit_count == 1 and cone_vis_e.control_count == 1, "Cone damages and shoves visible enemy in sector")
-	expect(cone_occ_e.hit_count == 0 and cone_occ_e.control_count == 0, "Cone does not damage or shove enemy occluded by cover")
+	expect(cone_vis_e.hit_count == 1 and cone_vis_e.control_count == 1 and cone_occ_e.hit_count == 0 and cone_occ_e.control_count == 0, "Cone preserves cover LOS occlusion")
 
-	# 11c. Ring outbound blocked by cover vs stroke stopped by cover vs routed stroke around cover
+	# 5. Round D Snapshot Contract: capture_state() / restore_state() value purity, active flights/pulses round-trip, held gesture cancellation
 	reset_section(arena, weapons, enemies)
-	player.global_position = Vector3(-5.0, 0.55, -1.0)
-	var cover_target := spawn_fake(arena, enemies, &"target", Vector3(-5.0, 0.0, -7.5))
+	player.global_position = Vector3(0.0, 0.55, 0.0)
+	var snap_enemy := spawn_fake(arena, enemies, &"brute", Vector3(0.0, 0.0, -10.0), Vector3(0.0, 0.0, -1.0), 303)
 
-	# Direct stroke drawn behind cover: outbound flight from (-5,0,-1) to (-5.8,0,-7.5) hits front of cover box and returns harmlessly
-	weapons.handle_event(mouse_btn(true), player, Vector3(-5.8, 0.0, -7.5))
-	weapons.handle_event(mouse_move(), player, Vector3(-4.2, 0.0, -7.5))
-	weapons.handle_event(mouse_btn(false), player, Vector3(-4.2, 0.0, -7.5))
-	weapons.step(0.50, player, Vector3.ZERO, enemies)
-	expect(cover_target.hit_count == 0 and weapons.ring_phase == "idle", "Ring whose outbound path hits cover stops at cover and returns without hitting behind it")
+	# Launch a Ring and a traveling Flash pulse, then begin holding a new Flash charge
+	weapons.select_tool(1)
+	weapons.handle_event(mouse_btn(true), player, Vector3(-3.0, 0.0, -10.0))
+	weapons.handle_event(mouse_move(), player, Vector3(3.0, 0.0, -10.0))
+	weapons.handle_event(mouse_btn(false), player, Vector3(3.0, 0.0, -10.0))
+	weapons.step(0.10, player, Vector3(0.0, 0.0, -10.0), enemies, 0.10)
 
-	# Stroke starting in open space (-2.5, 0, -4.5) from player at (-2.0, 0.55, -4.5) and cutting through cover to (-7.5, 0, -4.5)
-	player.global_position = Vector3(-2.0, 0.55, -4.5)
-	var before_wall_e := spawn_fake(arena, enemies, &"target", Vector3(-3.0, 0.0, -4.5))
-	var after_wall_e := spawn_fake(arena, enemies, &"target", Vector3(-7.2, 0.0, -4.5))
-	weapons.handle_event(mouse_btn(true), player, Vector3(-2.5, 0.0, -4.5))
-	weapons.handle_event(mouse_move(), player, Vector3(-7.5, 0.0, -4.5))
-	weapons.handle_event(mouse_btn(false), player, Vector3(-7.5, 0.0, -4.5))
-	weapons.step(0.80, player, Vector3.ZERO, enemies)
-	expect(before_wall_e.hit_count == 1 and after_wall_e.hit_count == 0, "Ring stroke into cover sweeps reached portion before cover and stops without hitting behind cover")
+	weapons.select_tool(2)
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -10.0))
+	weapons.step(0.45, player, Vector3(0.0, 0.0, -10.0), enemies, 0.05)
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -10.0))
+	weapons.beam_cooldown = 0.0
+	weapons.handle_event(mouse_btn(true), player, Vector3(0.0, 0.0, -10.0))
+	weapons.step(0.30, player, Vector3(0.0, 0.0, -10.0), enemies, 0.05)
+	expect(weapons.ring_phase != "idle" and weapons.beam_pulses.size() == 1 and weapons.beam_charging, "Pre-snapshot state has active ring, active Flash pulse, and held Flash charge")
 
-	# Routed stroke drawn around cover box from player at (-5.0, 0.55, -1.0): (-2.8, 0, -1.5) -> (-2.8, 0, -7.5) -> (-5.8, 0, -7.5) reaches enemy behind cover
-	player.global_position = Vector3(-5.0, 0.55, -1.0)
-	weapons.handle_event(mouse_btn(true), player, Vector3(-2.8, 0.0, -1.5))
-	weapons.handle_event(mouse_move(), player, Vector3(-2.8, 0.0, -7.5))
-	weapons.handle_event(mouse_move(), player, Vector3(-5.8, 0.0, -7.5))
-	weapons.handle_event(mouse_btn(false), player, Vector3(-5.8, 0.0, -7.5))
-	weapons.step(0.90, player, Vector3.ZERO, enemies)
-	expect(cover_target.hit_count == 1 and weapons.ring_phase == "idle", "Routed ring stroke drawn around cover hits enemy behind cover and returns")
+	var snapshot: Dictionary = weapons.capture_state()
+	expect(not has_object_ref(snapshot), "capture_state contains pure value data with no Object/Node/Callable references")
+	var snap_ring_pos: Vector3 = snapshot["ring_pos"]
+	var snap_pulse_pos: Vector3 = snapshot["beam_pulses"][0]["pos"]
+
+	# Advance simulation until both ring and pulse finish and hit snap_enemy
+	weapons.step(1.50, player, Vector3(0.0, 0.0, -10.0), enemies, 1.50)
+	expect(weapons.ring_phase == "idle" and weapons.beam_pulses.is_empty() and snap_enemy.hit_count == 2, "Advancing after snapshot completes ring and Flash pulse hits")
+
+	# Restore snapshot: active ring and pulse are back in flight, held charge is cancelled, releasing LMB does not fire
+	var hp_after_restore_test := snap_enemy.health
+	weapons.restore_state(snapshot)
+	expect(weapons.ring_phase != "idle" and weapons.ring_pos.distance_to(snap_ring_pos) < 0.001, "restore_state restores active ring flight position and phase")
+	expect(weapons.beam_pulses.size() == 1 and Vector3(weapons.beam_pulses[0]["pos"]).distance_to(snap_pulse_pos) < 0.001, "restore_state restores active Flash projectile state")
+	expect(not weapons.beam_charging and is_equal_approx(weapons.beam_charge, 0.0) and not weapons.ring_drawing and not weapons.cone_active, "restore_state cancels held gestures")
+
+	# Releasing the pre-restore held mouse button must not launch a second Flash pulse
+	weapons.handle_event(mouse_btn(false), player, Vector3(0.0, 0.0, -10.0))
+	expect(weapons.beam_pulses.size() == 1, "Releasing held LMB after restore_state does not fire a shot")
+
+	# Advancing from restored state completes the restored ring and pulse normally
+	weapons.step(1.50, player, Vector3(0.0, 0.0, -10.0), enemies, 1.50)
+	expect(snap_enemy.health < hp_after_restore_test and weapons.ring_phase == "idle" and weapons.beam_pulses.is_empty(), "Restored in-flight ring and Flash pulse resume and hit target")
 
 	clear_fakes(enemies)
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))

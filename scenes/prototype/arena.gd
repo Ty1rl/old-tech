@@ -232,6 +232,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if selected != weapons.selected_tool:
 				player.reset_input()
 				_space_release_required = _space_held
+			_update_hud()
 			return
 		match code:
 			KEY_F7:
@@ -439,6 +440,8 @@ func _on_repaired(_tool: StringName, restored: float) -> void:
 
 
 func _update_hud() -> void:
+	if player.visual_tool != weapons.selected_tool:
+		player.set_visual_tool(weapons.selected_tool)
 	status_hud.update_status(player, weapons, equipment)
 	status_hud.set_combat_hint(feedback.muted)
 	var clock_after: float = _available_clock(_preview) - inspection_cost() if history.inspecting else equipment.remaining(&"clock")

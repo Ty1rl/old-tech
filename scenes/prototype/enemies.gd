@@ -1,6 +1,6 @@
 extends Node3D
 
-# jam-4 owns this implementation and enemy.gd. No independent process clock.
+# Arena drives this director with world time; there is no independent clock.
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EnemyNode = preload("res://scenes/prototype/enemy.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
@@ -16,38 +16,31 @@ var encounter_state: StringName = &"sandbox" # &"sandbox", &"running", &"victory
 var encounter_elapsed: float = 0.0
 var encounter_wave_index: int = 0
 
+# Small introductions leave room to try each tool before the groups overlap.
 const WAVE_TEMPLATES: Array[Array] = [
 	[
 		{"kind": &"swarmer", "pos": Vector3(-7.5, 0.0, -9.5)},
 		{"kind": &"swarmer", "pos": Vector3(7.5, 0.0, -9.5)},
+	],
+	[
 		{"kind": &"skirmisher", "pos": Vector3(0.0, 0.0, -11.5)},
 	],
 	[
-		{"kind": &"swarmer", "pos": Vector3(-9.5, 0.0, -4.0)},
-		{"kind": &"swarmer", "pos": Vector3(9.5, 0.0, -4.0)},
-		{"kind": &"brute", "pos": Vector3(0.0, 0.0, -12.0)},
-	],
-	[
-		{"kind": &"skirmisher", "pos": Vector3(-8.5, 0.0, 5.5)},
-		{"kind": &"skirmisher", "pos": Vector3(8.5, 0.0, 5.5)},
-		{"kind": &"swarmer", "pos": Vector3(0.0, 0.0, -10.5)},
+		{"kind": &"warden", "pos": Vector3(0.0, 0.0, -12.0)},
 	],
 	[
 		{"kind": &"swarmer", "pos": Vector3(-8.0, 0.0, -8.5)},
 		{"kind": &"swarmer", "pos": Vector3(8.0, 0.0, -8.5)},
-		{"kind": &"brute", "pos": Vector3(-2.5, 0.0, -12.0)},
 	],
 	[
-		{"kind": &"swarmer", "pos": Vector3(-9.0, 0.0, 6.0)},
-		{"kind": &"swarmer", "pos": Vector3(9.0, 0.0, 6.0)},
 		{"kind": &"skirmisher", "pos": Vector3(-6.5, 0.0, -10.5)},
-		{"kind": &"brute", "pos": Vector3(2.5, 0.0, -12.0)},
+	],
+	[
+		{"kind": &"warden", "pos": Vector3(2.5, 0.0, -12.0)},
 	],
 	[
 		{"kind": &"swarmer", "pos": Vector3(-7.0, 0.0, -10.0)},
 		{"kind": &"swarmer", "pos": Vector3(7.0, 0.0, -10.0)},
-		{"kind": &"skirmisher", "pos": Vector3(0.0, 0.0, 9.5)},
-		{"kind": &"brute", "pos": Vector3(0.0, 0.0, -12.5)},
 	],
 ]
 
@@ -143,7 +136,7 @@ func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
 func spawn_group() -> void:
 	spawn(&"swarmer", Vector3(-6.0, 0.0, -7.5))
 	spawn(&"swarmer", Vector3(6.0, 0.0, -7.5))
-	spawn(&"brute", Vector3(0.0, 0.0, -10.5))
+	spawn(&"warden", Vector3(0.0, 0.0, -10.5))
 	spawn(&"skirmisher", Vector3(-7.5, 0.0, 4.0))
 
 

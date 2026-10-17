@@ -501,7 +501,7 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 			var ray_end := start + direction * maxf(start.distance_to(end), along + radius * 2.0)
 			if along >= 0.0 and _point_segment_distance(core_pos, start, ray_end) <= _part("core_radius", 0.28) + sweep_radius:
 				core_broken = true
-				bonus += _part("core_bonus", 90.0)
+				bonus += _part("core_bonus", 140.0)
 				cue = &"core_break"
 
 	var result := hit((0.0 if already_hit else amount) + bonus, contact_world)

@@ -124,6 +124,9 @@ func run() -> void:
 	director.clear()
 	director.spawn_group()
 	expect(director.enemies.size() == 4, "spawn_group() creates modest 4-enemy mixed encounter")
+	var mixed_kinds: Array = director.enemies.map(func(e): return e.kind)
+	expect(mixed_kinds.count(&"swarmer") == 2 and mixed_kinds.count(&"skirmisher") == 1 and mixed_kinds.count(&"warden") == 1,
+		"Mixed group pairs two swarmers with a skirmisher and a mechanized guard")
 	director.reset_state()
 	expect(director.enemies.size() == 1 and director.enemies[0].kind == &"target", "reset_state() clears mixed group and restores single target")
 
@@ -257,6 +260,18 @@ func run() -> void:
 	director.start_encounter()
 	expect(director.encounter_active and director.status_text().begins_with("Encounter Wave 1/"), "start_encounter() enters running state and updates status_text()")
 	expect(director.enemies.size() > 0 and director.enemies.size() <= int(Tuning.ENCOUNTER.max_enemies), "Wave 0 spawns initial enemies within max_enemies cap")
+
+	var first_wave: Array = director.enemies.map(func(e): return e.kind)
+	expect(first_wave == [&"swarmer", &"swarmer"], "Encounter opens with two swarmers instead of every archetype at once")
+	var opening: Dictionary = director.capture_state()
+	director.step(12.0, player)
+	var second_wave: Array = director.enemies.map(func(e): return e.kind)
+	expect(second_wave.count(&"skirmisher") == 1 and not second_wave.has(&"warden"), "Skirmisher arrives before the first guard")
+	director.step(12.0, player)
+	var third_wave: Array = director.enemies.map(func(e): return e.kind)
+	expect(third_wave.count(&"warden") == 1 and third_wave.size() <= 6, "First guard joins after two tool introductions, within live cap")
+	director.restore_state(opening)
+	player.reset_state()
 
 	# Step across multiple 12s wave intervals without killing enemies to verify live cap <= 6
 	var cap_exceeded := false

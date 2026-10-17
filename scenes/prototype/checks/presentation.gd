@@ -24,10 +24,10 @@ func fresh(location: Vector3) -> Node3D:
 	arena.director.clear()
 	return arena.director.spawn(&"warden", location)
 
-func flash(aim: Vector3) -> void:
+func flash(aim: Vector3, charge_seconds: float = 0.9) -> void:
 	arena.weapons.select_tool(2)
 	arena.weapons.handle_event(mouse(true), arena.player, aim)
-	arena.weapons.step(0.9, arena.player, aim, arena.director.enemies, 0)
+	arena.weapons.step(charge_seconds, arena.player, aim, arena.director.enemies, 0)
 	arena.weapons.handle_event(mouse(false), arena.player, aim)
 	arena.weapons.step(0.3, arena.player, aim, arena.director.enemies)
 
@@ -38,6 +38,13 @@ func run() -> void:
 	await physics_frame
 	await physics_frame
 	arena.set_physics_process(false)
+	for index in range(1, 5):
+		var select := InputEventKey.new()
+		select.physical_keycode = KEY_1 + index - 1
+		select.pressed = true
+		arena._unhandled_input(select)
+		expect(arena.player.visual_tool == index and arena.player.visual.tool_index == index,
+			"Equipping tool updates the visible held model: " + str(index))
 	var guard := fresh(Vector3(0, 0, -4))
 	var uncut: Dictionary = arena.capture_state()
 	var cable: Array = guard.cable_world_points()
@@ -83,8 +90,13 @@ func run() -> void:
 	expect(guard.is_core_exposed() and not guard.cable_cut, "Actual cone opens moving guard through heat")
 	expect(guard.position.distance_to(arena.player.position) < 6, "Heavy guard stays within useful cone range despite shove")
 	var before: float = guard.health
+	var heated: Dictionary = arena.capture_state()
 	flash(guard.core_world_position())
-	expect(guard.core_broken and before - guard.health >= minf(before, 180), "Actual heat then charged flash severely damages exposed core")
+	expect(guard.core_broken and guard.health <= 0.0, "Actual heat then one fully charged core hit kills guard")
+	arena._restore_world(heated, arena.player.slow_charge)
+	flash(guard.core_world_position(), 0.05)
+	expect(guard.health > 0.0 and guard.health < before and not guard.core_broken,
+		"Quick shot into heated core deals ordinary damage without finishing guard")
 
 	fresh(Vector3(0, 0, -5))
 	for tick in range(30):

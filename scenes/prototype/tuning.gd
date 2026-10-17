@@ -16,7 +16,8 @@ const ENEMIES = {
 	"skirmisher": {"health": 65.0, "speed": 3.2, "radius": 0.55, "damage": 7.0},
 	"warden": {"health": 240.0, "speed": 1.3, "radius": 1.1, "damage": 12.0},
 }
-const PARTS = {"cable_bonus": 65.0, "core_bonus": 90.0, "core_min_charge": 0.6,
+# A fully charged 100-damage flash plus this bonus finishes a 240-health guard.
+const PARTS = {"cable_bonus": 65.0, "core_bonus": 140.0, "core_min_charge": 0.6,
 	"heat_threshold": 1.1, "heat_decay": 0.25, "open_seconds": 4.0,
 	"cable_radius": 0.10, "core_radius": 0.28, "armor_multiplier": 0.35,
 	"push_resistance": 0.25, "stagger_resistance": 0.8}

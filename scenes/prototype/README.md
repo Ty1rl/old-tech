@@ -37,12 +37,17 @@ The guard has a more detailed metal chassis and three color-coded mechanisms:
 - **Orange shield vents:** keep the cone on the guard to heat it. The shield
   opens temporarily, revealing the core; the heavy chassis resists displacement
   while still visibly staggering.
-- **Yellow core:** aim a charged flash into it while exposed for a large,
-  once-only damage bonus. Quick shots and ordinary body hits still do damage.
+- **Yellow core:** one fully charged flash into the exposed core finishes the
+  guard after either opening route. Quick shots and ordinary body hits still
+  do damage, but do not receive that finishing damage without enough charge.
 
 Try cut → charged flash, or heat → charged flash. The original four enemy
 archetypes remain. Both mechanisms and their opening timers rewind correctly.
 The guard is a worked example rather than a finished boss.
+
+The player now has an articulated model with walking/idle motion and a visible
+equipped tool. Tool colors match the nearby gauges; movement and collision are
+unchanged. Cosmetic animation stops during frozen inspection.
 
 Tool colors are shared across HUD, vulnerable parts and effects. Placeholder
 audio is synthesized in memory: spinning cutter, rising charge, cone hiss,
@@ -119,7 +124,9 @@ stays 1. Player input, movement, flash charge, cooldowns, wear and repair use
 real time. Enemy behavior, attack flight, cone damage and shove cadence use
 world time. During inspection only its real-time clock wear advances.
 
-F6 is a 75-world-second encounter capped at six live enemies. Clear survivors
+F5 adds two swarmers, a skirmisher and a guard. F6 introduces swarmers first,
+then a skirmisher at 12 seconds and a guard at 24 seconds, with small later
+reinforcements. The 75-world-second encounter is capped at six live enemies. Clear survivors
 after the schedule to win. Final art, bosses and authored levels are later work.
 Tests establish behavior and state restoration, not enjoyable balance.
 

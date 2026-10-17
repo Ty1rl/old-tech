@@ -1,7 +1,10 @@
 extends "res://scenes/player.gd"
 
 const Tuning = preload("res://scenes/prototype/tuning.gd")
+const PlayerVisual = preload("res://scenes/prototype/player_visual.gd")
 var equipment: RefCounted
+var visual: Node3D
+var visual_tool: int = 1
 var health: float = Tuning.PLAYER.health
 var slow_charge: float:
 	get:
@@ -16,6 +19,31 @@ var _last_repair: StringName = &""
 
 func _ready() -> void:
 	set_physics_process(false)
+	_ensure_visual()
+
+
+func _ensure_visual() -> void:
+	if not is_instance_valid(model):
+		model = get_node_or_null("MeshInstance3D")
+	if not is_instance_valid(model):
+		return
+	if model is MeshInstance3D and model.mesh != null:
+		model.mesh = null
+	var legacy_arrow := model.get_node_or_null("MeshInstance3D2") as Node3D
+	if legacy_arrow != null:
+		legacy_arrow.visible = false
+	if not is_instance_valid(visual):
+		visual = PlayerVisual.new()
+		model.add_child(visual)
+		visual.build()
+		visual.set_tool_index(visual_tool)
+
+
+func set_visual_tool(index: int) -> void:
+	visual_tool = clampi(index, 1, 4)
+	_ensure_visual()
+	if is_instance_valid(visual):
+		visual.set_tool_index(visual_tool)
 
 
 # The arena is the only simulation clock. Do not also run the inherited tick.
@@ -28,6 +56,7 @@ func _unhandled_input(_event: InputEvent) -> void:
 
 
 func step(delta: float, aim: Vector3, slow_held: Variant = null, repair_slow: bool = false) -> void:
+	_ensure_visual()
 	_step_slow(delta, Input.is_physical_key_pressed(KEY_SPACE) if slow_held == null else bool(slow_held), repair_slow)
 	_input_dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	speed = Tuning.PLAYER.speed
@@ -37,6 +66,8 @@ func step(delta: float, aim: Vector3, slow_held: Variant = null, repair_slow: bo
 	direction.y = 0.0
 	if direction.length_squared() > 0.001 and is_instance_valid(model):
 		model.global_basis = Basis.looking_at(direction)
+	if is_instance_valid(visual):
+		visual.step_visual(delta, Vector2(velocity.x, velocity.z).length(), speed)
 
 
 func _step_slow(delta: float, held: bool, automatic: bool = false) -> void:
@@ -77,6 +108,7 @@ func take_damage(amount: float) -> void:
 
 
 func reset_state() -> void:
+	_ensure_visual()
 	global_position = Vector3(0, 0.55, 0)
 	reset_physics_interpolation()
 	velocity = Vector3.ZERO
@@ -85,6 +117,9 @@ func reset_state() -> void:
 	reset_input()
 	if is_instance_valid(model):
 		model.basis = Basis.IDENTITY
+	set_visual_tool(1)
+	if is_instance_valid(visual):
+		visual.reset_pose()
 
 
 func reset_input() -> void:

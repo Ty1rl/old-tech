@@ -17,7 +17,7 @@ The partner's original menu/game scenes and popup managers remain intact.
 - Cone: hold left mouse for continuous heat and repeating shove/stun pulses.
 - Hold E to repair the equipped item; release E to resume. Full gear ignores E.
 - Space with ring/flash/cone: slow the world; movement and aiming remain normal.
-- Space with clock: freeze and inspect history. Wheel up goes backward, down
+- Space with clock: freeze and inspect history. Wheel down goes backward, up
   returns toward now. Release Space to jump to the selected moment. At NOW,
   release simply resumes. Escape cancels to the original present.
 - R resets. F1–F4 spawn target/swarmer/brute/skirmisher at cursor. F5 adds a
@@ -51,8 +51,10 @@ contact 1 through the marked end, then release the mouse. Each section restores
 the next quarter boundary. Slight damage needs a shorter trace; completed
 capacity survives interruption. Full repair closes automatically. Only an
 unfinished gesture is lost on E release, damage, pause or focus loss.
-Movement/enemies continue during repairs. The clock can slow another item's
-repair, but cannot power its own. No separate T repair path exists.
+Movement/enemies continue during repairs. Repairing ring/flash/cone automatically
+uses clock-powered slow, spending clock condition at its normal real-time rate.
+An empty clock leaves repairs at normal speed; the clock cannot power its own
+repair. Release E to stop the automatic slow. No separate T repair path exists.
 
 ## Rewind
 

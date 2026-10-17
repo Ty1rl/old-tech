@@ -2,7 +2,7 @@ extends Control
 
 
 func _on_play_button_pressed() -> void:
-	SceneManager.go_to("Game")
+	SceneManager.go_to("Prototype")
 	GameState.start_game()
 
 

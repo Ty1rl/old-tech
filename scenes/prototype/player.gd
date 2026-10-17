@@ -27,8 +27,8 @@ func _unhandled_input(_event: InputEvent) -> void:
 	pass
 
 
-func step(delta: float, aim: Vector3, slow_held: Variant = null) -> void:
-	_step_slow(delta, Input.is_physical_key_pressed(KEY_SPACE) if slow_held == null else bool(slow_held))
+func step(delta: float, aim: Vector3, slow_held: Variant = null, repair_slow: bool = false) -> void:
+	_step_slow(delta, Input.is_physical_key_pressed(KEY_SPACE) if slow_held == null else bool(slow_held), repair_slow)
 	_input_dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	speed = Tuning.PLAYER.speed
 	_update_velocity(delta)
@@ -39,11 +39,11 @@ func step(delta: float, aim: Vector3, slow_held: Variant = null) -> void:
 		model.global_basis = Basis.looking_at(direction)
 
 
-func _step_slow(delta: float, held: bool) -> void:
+func _step_slow(delta: float, held: bool, automatic: bool = false) -> void:
 	# A small input/charge helper shared with checks; only step() calls it in
 	# gameplay, using the arena's real delta. It has no independent clock.
 	var dt := maxf(delta, 0.0)
-	_slow_held = held
+	_slow_held = held or automatic
 	world_scale = 1.0
 	if equipment == null:
 		_slow_release_required = true
@@ -51,13 +51,13 @@ func _step_slow(delta: float, held: bool) -> void:
 	if _last_repair != equipment.repairing:
 		_last_repair = equipment.repairing
 		_slow_release_required = true
-	if not held:
+	if not held and not automatic:
 		_slow_release_required = false
 		return
 	if equipment.repairing == &"clock":
 		_slow_release_required = true
 		return
-	if _slow_release_required:
+	if _slow_release_required and not automatic:
 		return
 	if slow_charge <= 0.0:
 		_slow_release_required = true

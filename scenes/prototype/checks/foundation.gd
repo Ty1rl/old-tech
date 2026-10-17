@@ -81,5 +81,21 @@ func run() -> void:
 	expect(absf(arena.status_hud.center.x - root.get_visible_rect().size.x * 0.5) < 0.01,
 		"Gauges stay centered on the rendered player when camera and player jump together")
 	arena.reset_arena()
+	# Follow the actual pause-menu exit and Play button, avoiding the legacy Game scene.
+	var old_fade: float = scenes.fade_duration
+	scenes.fade_duration = 0.0
+	state.pause()
+	var pause_menu: Control = scenes._popups.back().get_child(1)
+	pause_menu._on_exit_button_pressed()
+	for frame in range(12):
+		await process_frame
+	expect(current_scene.scene_file_path == "res://scenes/main.tscn" and state.is_in_menu(),
+		"Pause-menu exit returns to main menu")
+	current_scene.get_node("MainMenu").get_node("%PlayButton").pressed.emit()
+	for frame in range(12):
+		await process_frame
+	expect(current_scene.scene_file_path == "res://scenes/prototype/arena.tscn" and state.is_playing(),
+		"Main-menu Play launches current combat build instead of legacy 3D test")
+	scenes.fade_duration = old_fade
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

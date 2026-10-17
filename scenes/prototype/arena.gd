@@ -146,7 +146,8 @@ func _physics_process(delta: float) -> void:
 		_update_hud()
 		return # Keep the final live history available for a do-over.
 	aim = floor_aim(get_viewport().get_mouse_position())
-	player.step(delta, aim, _space_held and not _space_release_required and weapons.selected_tool != 4)
+	var repair_slow: bool = equipment.repairing != &"" and equipment.repairing != &"clock"
+	player.step(delta, aim, _space_held and not _space_release_required and weapons.selected_tool != 4, repair_slow)
 	player.position.x = clampf(player.position.x, -19.0, 19.0)
 	player.position.z = clampf(player.position.z, -19.0, 19.0)
 	var world_delta: float = delta * player.world_scale
@@ -184,9 +185,9 @@ func _input(event: InputEvent) -> void:
 			return
 	if history.inspecting:
 		if event is InputEventMouseButton and event.pressed:
-			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 				_seek_inspection(history.selected_seconds_ago + Tuning.REWIND.scroll_step)
-			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
 				_seek_inspection(history.selected_seconds_ago - Tuning.REWIND.scroll_step)
 		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ESCAPE:
 			_finish_inspection(false)

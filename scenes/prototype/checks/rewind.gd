@@ -61,9 +61,32 @@ func run() -> void:
 		arena.equipment.spend(arena.Weapons.TOOL_IDS[tool - 1], 1)
 		key(KEY_E)
 		expect(scenes.has_popup(&"Repair") and arena.equipment.repairing == arena.Weapons.TOOL_IDS[tool - 1], "E repairs selected tool %d" % tool)
+		var clock_before: float = arena.player.slow_charge
+		arena._physics_process(0.1)
+		if tool < 4:
+			expect(is_equal_approx(arena.player.world_scale, Tuning.SLOW.scale)
+				and is_equal_approx(arena.player.slow_charge, clock_before - 0.1 * Tuning.SLOW.drain),
+				"Tool %d repair automatically spends clock to slow world" % tool)
+		else:
+			expect(arena.player.world_scale == 1 and arena.player.slow_charge == clock_before,
+				"Clock repair cannot power its own slow")
 		key(KEY_E, false)
 		await process_frame
+		clock_before = arena.player.slow_charge
+		arena._physics_process(0.1)
+		expect(arena.player.world_scale == 1 and arena.player.slow_charge == clock_before,
+			"E release stops automatic repair slow for tool %d" % tool)
 		expect(not scenes.has_popup(&"Repair") and arena.equipment.repairing == &"", "Releasing E resumes tool %d" % tool)
+
+	fresh()
+	arena.equipment.spend(&"ring", 1)
+	arena.equipment.spend(&"clock", arena.player.slow_charge)
+	key(KEY_E)
+	arena._physics_process(0.1)
+	expect(arena.player.world_scale == 1 and scenes.has_popup(&"Repair"),
+		"Empty clock leaves other equipment repair usable at normal speed")
+	key(KEY_E, false)
+	await process_frame
 
 	seed_history()
 	var present_position: Vector3 = arena.player.position
@@ -75,8 +98,8 @@ func run() -> void:
 	Input.action_release("move_right")
 	expect(arena.player.position == present_position and arena.player.health == 30, "Inspection freezes movement and combat")
 	expect(is_equal_approx(arena.player.slow_charge, present_clock - 0.1), "Inspection drains clock in real time")
-	wheel(MOUSE_BUTTON_WHEEL_UP)
-	wheel(MOUSE_BUTTON_WHEEL_UP)
+	wheel(MOUSE_BUTTON_WHEEL_DOWN)
+	wheel(MOUSE_BUTTON_WHEEL_DOWN)
 	expect(arena.history.selected_seconds_ago > 0.4 and arena.player.health == 100, "Wheel selects an earlier undamaged state")
 	expect(arena.director.enemies[0].health == 100 and arena.equipment.remaining(&"ring") == 32, "Preview restores enemy damage and other gear")
 	var reserved_age: float = arena.history.selected_seconds_ago
@@ -85,10 +108,10 @@ func run() -> void:
 	key(KEY_R)
 	expect(arena.weapons.selected_tool == 4 and not scenes.has_popup() and arena.history.selected_seconds_ago == reserved_age, "Inspection blocks equip, repair and debug actions")
 	key(KEY_E, false)
-	wheel(MOUSE_BUTTON_WHEEL_DOWN)
-	wheel(MOUSE_BUTTON_WHEEL_DOWN)
-	expect(arena.history.selected_seconds_ago == 0 and arena.player.health == 30, "Scrolling forward recovers exact present")
 	wheel(MOUSE_BUTTON_WHEEL_UP)
+	wheel(MOUSE_BUTTON_WHEEL_UP)
+	expect(arena.history.selected_seconds_ago == 0 and arena.player.health == 30, "Scrolling forward recovers exact present")
+	wheel(MOUSE_BUTTON_WHEEL_DOWN)
 	key(KEY_ESCAPE)
 	expect(not arena.history.inspecting and not paused and arena.player.health == 30, "Escape cancels preview without changing outcomes or opening pause")
 	expect(is_equal_approx(arena.player.slow_charge, present_clock - 0.1), "Cancellation retains inspection wear and charges no jump")

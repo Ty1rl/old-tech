@@ -70,7 +70,7 @@ func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> vo
 		fractions[i] = clampf(equipment.remaining(TOOLS[i]) / equipment.capacity(TOOLS[i]), 0.0, 1.0)
 	caption = NAMES[selected]
 	if repairing:
-		caption += " · repairing"
+		caption += " · repair · slow" if slowing else " · repair · normal time"
 	elif not equipment.can_use(TOOLS[selected], 1.0 if selected < 2 else 0.000001):
 		caption += " · empty · E repair"
 	elif selected == 0 and weapons.ring_drawing:
@@ -153,7 +153,7 @@ func _draw() -> void:
 		draw_line(cursor - Vector2(0, 5), cursor + Vector2(0, 5), COLORS[3], 2, true)
 		_draw_centered("−%.1fs" % history_seconds, left + Vector2(0, 20), 11, COLORS[3])
 		_draw_centered("NOW", right + Vector2(0, 20), 11, COLORS[3])
-		var hint := "Wheel ↑ past / ↓ present · Esc cancel" if selected_age < 0.000001 else "Wheel ↑ past / ↓ present · release Space to jump · Esc cancel"
+		var hint := "Wheel ↓ past / ↑ present · Esc cancel" if selected_age < 0.000001 else "Wheel ↓ past / ↑ present · release Space to jump · Esc cancel"
 		_draw_centered(time_feedback if not time_feedback.is_empty() else hint, center + Vector2(0, RADIUS + 100), 12, Color(COLORS[3], 0.85))
 
 

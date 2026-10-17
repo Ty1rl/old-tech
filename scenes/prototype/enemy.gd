@@ -3,6 +3,12 @@ extends Node3D
 # jam-4 owns enemy.gd. No independent _process or _physics_process clock.
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
+var cover: RefCounted
+
+
+func apply_control(_direction: Vector3, _impulse: float, _stagger_seconds: float) -> void:
+	# Round C: jam-4 replaces this with cover-safe displacement and stagger.
+	pass
 
 var kind: StringName = &"target"
 var radius: float = 0.7

@@ -1,6 +1,7 @@
 extends "res://scenes/player.gd"
 
 const Tuning = preload("res://scenes/prototype/tuning.gd")
+var equipment: RefCounted
 var health: float = Tuning.PLAYER.health
 var slow_charge: float = Tuning.SLOW.capacity
 # Effective enemy-clock multiplier for the current arena tick. On the tick

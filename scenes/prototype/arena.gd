@@ -5,6 +5,11 @@ const PlayerScene = preload("res://scenes/player.tscn")
 const PlayerController = preload("res://scenes/prototype/player.gd")
 const Weapons = preload("res://scenes/prototype/weapons.gd")
 const Enemies = preload("res://scenes/prototype/enemies.gd")
+const Equipment = preload("res://scenes/prototype/equipment.gd")
+const Cover = preload("res://scenes/prototype/cover.gd")
+
+var equipment: RefCounted = Equipment.new()
+var cover: RefCounted = Cover.new()
 
 var player: CharacterBody3D
 var weapons: Node3D
@@ -17,8 +22,10 @@ var aim_valid: bool = false
 
 func _ready() -> void:
 	_build_floor()
+	_build_cover()
 	player = PlayerScene.instantiate()
 	player.set_script(PlayerController)
+	player.equipment = equipment
 	player.camera = player.get_node("Camera3D")
 	player.model = player.get_node("MeshInstance3D")
 	add_child(player)
@@ -28,13 +35,38 @@ func _ready() -> void:
 	player.camera.size = 30
 	player.camera.current = true
 	weapons = Weapons.new()
+	weapons.equipment = equipment
+	weapons.cover = cover
 	add_child(weapons)
 	director = Enemies.new()
+	director.cover = cover
 	add_child(director)
 	_build_hud()
 	GameState.state_changed.connect(_on_state_changed)
+	SceneManager.popup_opened.connect(_on_popup_opened)
+	SceneManager.popup_closed.connect(_on_popup_closed)
 	GameState.start_game()
 	reset_arena()
+
+
+func _build_cover() -> void:
+	for rectangle in Cover.RECTANGLES:
+		var body := StaticBody3D.new()
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(rectangle.size.x, 2.2, rectangle.size.y)
+		shape.shape = box
+		body.add_child(shape)
+		var mesh := MeshInstance3D.new()
+		var geometry := BoxMesh.new()
+		geometry.size = box.size
+		mesh.mesh = geometry
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("65717a")
+		mesh.material_override = material
+		body.add_child(mesh)
+		body.position = Vector3(rectangle.get_center().x, 1.1, rectangle.get_center().y)
+		add_child(body)
 
 
 func _build_floor() -> void:
@@ -98,7 +130,10 @@ func _physics_process(delta: float) -> void:
 	player.position.x = clampf(player.position.x, -19.0, 19.0)
 	player.position.z = clampf(player.position.z, -19.0, 19.0)
 	# Engine.time_scale stays 1. Player/tools use real delta; enemies use world delta.
+	var health_before: float = player.health
 	director.step(delta * player.world_scale, player)
+	if player.health < health_before and SceneManager.has_popup(&"Repair"):
+		SceneManager.close_popup(&"Repair")
 	weapons.step(delta, player, aim, director.enemies)
 	_update_hud()
 
@@ -106,6 +141,13 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
+			KEY_E:
+				var tools := [&"ring", &"beam", &"cone"]
+				_toggle_repair(tools[weapons.selected_tool - 1])
+				return
+			KEY_T:
+				_toggle_repair(&"clock")
+				return
 			KEY_R:
 				reset_arena()
 				return
@@ -119,6 +161,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_F5:
 				director.spawn_group()
 				return
+			KEY_F6:
+				reset_arena()
+				director.start_encounter()
+				return
 	aim = floor_aim(get_viewport().get_mouse_position())
 	if aim_valid and not SceneManager.has_popup():
 		weapons.handle_event(event, player, aim)
@@ -129,10 +175,30 @@ func _spawn_position() -> Vector3:
 
 
 func reset_arena() -> void:
+	SceneManager.close_popup(&"Repair")
+	equipment.reset_state()
 	weapons.reset_state()
 	player.reset_state()
 	director.reset_state()
 	_update_hud()
+
+
+func _toggle_repair(tool: StringName) -> void:
+	if SceneManager.has_popup(&"Repair"):
+		SceneManager.close_popup(&"Repair")
+		return
+	if not SceneManager.has_popup():
+		SceneManager.push_popup(&"Repair", {"equipment": equipment, "tool": tool})
+
+
+func _on_popup_opened(_key: StringName, _popup: Node) -> void:
+	weapons.cancel_input()
+	player.reset_input()
+
+
+func _on_popup_closed(_key: StringName) -> void:
+	weapons.cancel_input()
+	player.reset_input()
 
 
 func _on_state_changed(_old: int, _new: int) -> void:
@@ -150,8 +216,9 @@ func _notification(what: int) -> void:
 
 func _update_hud() -> void:
 	hud.text = "WASD move | 1/2/3 tools | LMB draw / click / hold | Space slow | Esc pause\n"
-	hud.text += "R reset | F1 target | F2 swarm | F3 brute | F4 skirmisher | F5 mixed | Backspace clear\n"
+	hud.text += "E repair tool | T repair clock | R reset | F1–F4 spawn | F5 mixed | F6 encounter | Backspace clear\n"
 	hud.text += "HP %.0f | Enemies %d | World %.2fx\n" % [player.health, director.enemies.size(), player.world_scale]
 	hud.text += player.status_text() + "\n" + weapons.status_text()
+	hud.text += "\n" + equipment.status_text() + " | " + director.status_text()
 	slow_bar.position.y = hud.position.y + hud.get_minimum_size().y + 8
 	slow_bar.value = player.slow_charge

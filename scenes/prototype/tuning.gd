@@ -17,3 +17,15 @@ const ENEMIES = {
 const ARMOR = {"front_multiplier": 0.25, "front_half_angle": 1.05}
 const CONTACT_COOLDOWN = 1.0 # World seconds: time slow delays enemy attacks too.
 const ARENA_HALF_SIZE = 20.0
+
+# Generous first-pass service intervals, measured in actual use, not wall time.
+const GEAR = {
+	"ring": {"capacity": 32.0, "unit": "launches"},
+	"beam": {"capacity": 48.0, "unit": "shots"},
+	"cone": {"capacity": 45.0, "unit": "seconds"},
+	"clock": {"capacity": 24.0, "unit": "seconds"},
+}
+const REPAIR_STEPS = 4
+const CONTROL = {"burst_interval": 1.5, "burst_cost": 1.5, "impulse": 13.0, "stagger": 0.65,
+	"sustained_push": 5.0, "drag": 5.0, "brute_resistance": 0.25}
+const ENCOUNTER = {"duration": 75.0, "interval": 12.0, "max_enemies": 6}

@@ -1,6 +1,8 @@
 extends Node3D
 
 const Tuning = preload("res://scenes/prototype/tuning.gd")
+var equipment: RefCounted
+var cover: RefCounted
 
 var selected_tool: int = 1
 

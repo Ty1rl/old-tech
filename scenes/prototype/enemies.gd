@@ -5,6 +5,7 @@ const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EnemyNode = preload("res://scenes/prototype/enemy.gd")
 
 var enemies: Array[Node3D] = []
+var cover: RefCounted
 var _spawn_counter: int = 0
 
 
@@ -31,6 +32,7 @@ func _prune_dead_enemies() -> void:
 
 func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
 	var enemy := EnemyNode.new()
+	enemy.cover = cover
 	_spawn_counter += 1
 	var limit := float(Tuning.ARENA_HALF_SIZE) - 1.0
 	var clamped_pos := Vector3(
@@ -62,3 +64,13 @@ func reset_state() -> void:
 	clear()
 	_spawn_counter = 0
 	spawn(&"target", Vector3(0.0, 0.0, -6.0))
+
+
+func start_encounter() -> void:
+	# Round C: jam-4 replaces this with the bounded encounter sequence.
+	clear()
+	spawn_group()
+
+
+func status_text() -> String:
+	return "Sandbox"

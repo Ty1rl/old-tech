@@ -1,5 +1,10 @@
 # Combat prototype
 
+Round C development: shared equipment/cover interfaces are ready; repair puzzles,
+wear consumption, crowd control and the encounter sequence are being assigned.
+The repair panel is currently a placeholder. The published playable Round B
+remains on `origin/prototype/combat-playground` at `1419d7a`.
+
 Godot 4.7.2 Standard / Compatibility. Open the root project and run
 `scenes/prototype/arena.tscn` with F6, or from the Ubuntu host:
 

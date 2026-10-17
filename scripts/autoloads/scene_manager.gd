@@ -13,7 +13,8 @@ const SCENES: Dictionary[StringName, String] = {
 
 # Scenes shown on top of everything.
 const POPUPS: Dictionary[StringName, String] = {
-	&"PauseMenu": "uid://c1f3c6w6w2oy0"
+	&"PauseMenu": "uid://c1f3c6w6w2oy0",
+	&"Repair": "res://scenes/prototype/repair.tscn"
 }
 
 const POPUP_LAYER: int = 100

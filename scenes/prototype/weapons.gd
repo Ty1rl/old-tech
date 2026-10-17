@@ -33,7 +33,6 @@ var mouse_held: bool = false
 var require_fresh_press: bool = false
 var last_aim: Vector3 = Vector3(0.0, 0.0, -6.0)
 var last_feedback: String = "Ready"
-var _last_enemies: Array = []
 
 # Visual nodes
 var _draw_mesh: ImmediateMesh
@@ -92,10 +91,10 @@ func handle_event(event: InputEvent, player: Node3D, aim: Vector3) -> void:
 			require_fresh_press = false
 			_on_left_press(player, aim)
 		else:
-			var was_Blocked := require_fresh_press
+			var was_blocked := require_fresh_press
 			mouse_held = false
 			require_fresh_press = false
-			if not was_Blocked:
+			if not was_blocked:
 				_on_left_release(player, aim)
 	elif event is InputEventMouseMotion:
 		if mouse_held and not require_fresh_press and selected_tool == 1 and ring_drawing:
@@ -122,19 +121,12 @@ func _on_left_press(player: Node3D, aim: Vector3) -> void:
 				last_feedback = "Flash cooling (%.2fs)" % beam_cooldown
 				return
 			beam_cooldown = float(Tuning.BEAM.cooldown)
-			var live := _resolve_available_enemies()
-			if not live.is_empty():
-				_fire_beam(player.global_position, aim, live)
-				_pending_beam = false
-			else:
-				_pending_beam = true
-				_pending_beam_origin = player.global_position
-				_pending_beam_aim = aim
-				beam_start = Vector3(player.global_position.x, 0.0, player.global_position.z)
-				var dir := _aim_dir_xz(player.global_position, aim)
-				beam_end = beam_start + Vector3(dir.x, 0.0, dir.y) * float(Tuning.BEAM.range)
-				beam_flash_timer = 0.12
-				last_feedback = "Flash pulse"
+			# Resolve on the next simulation tick against the arena's explicit
+			# roster. Keep the click position even if the player moves meanwhile.
+			_pending_beam = true
+			_pending_beam_origin = player.global_position
+			_pending_beam_aim = aim
+			last_feedback = "Flash pulse"
 		3:
 			cone_active = true
 			_update_cone_aim(player.global_position, aim)
@@ -173,14 +165,11 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 
 func step(delta: float, player: Node3D, aim: Vector3, enemies: Array) -> void:
 	last_aim = aim
-	_last_enemies = enemies
 
 	if _pending_beam:
 		_pending_beam = false
 		_fire_beam(_pending_beam_origin, _pending_beam_aim, enemies)
-		beam_cooldown = maxf(0.0, beam_cooldown - delta)
-	else:
-		beam_cooldown = maxf(0.0, beam_cooldown - delta)
+	beam_cooldown = maxf(0.0, beam_cooldown - delta)
 
 	beam_flash_timer = maxf(0.0, beam_flash_timer - delta)
 
@@ -220,7 +209,6 @@ func reset_state() -> void:
 	ring_hit_ids.clear()
 	beam_cooldown = 0.0
 	beam_flash_timer = 0.0
-	_last_enemies = []
 	last_feedback = "Ready"
 	_rebuild_visuals(null, last_aim)
 
@@ -235,7 +223,7 @@ func status_text() -> String:
 		ring_info = ring_phase
 	var flash_info := "ready" if beam_cooldown <= 0.0 else "%.2fs" % beam_cooldown
 	var cone_info := "HOLD" if cone_active else "idle"
-	return "Tool [%s] | Ring: %s | Flash: %s | Cone: %s | %s" % [
+	return "Tool [%s] | Ring: %s | Flash: %s | Cone: %s\n%s" % [
 		names.get(selected_tool, "1:Ring"), ring_info, flash_info, cone_info, last_feedback
 	]
 
@@ -494,17 +482,6 @@ func _is_live_enemy(enemy: Variant) -> bool:
 	if float(enemy.get("health")) <= 0.0:
 		return false
 	return true
-
-
-func _resolve_available_enemies() -> Array:
-	var parent: Node = get_parent()
-	if parent != null:
-		var director_node: Variant = parent.get("director")
-		if director_node != null:
-			var dir_enemies: Variant = director_node.get("enemies")
-			if dir_enemies is Array and not dir_enemies.is_empty():
-				return dir_enemies
-	return _last_enemies
 
 
 func _aim_dir_xz(origin_world: Vector3, aim_world: Vector3) -> Vector2:

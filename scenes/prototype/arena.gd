@@ -153,4 +153,5 @@ func _update_hud() -> void:
 	hud.text += "R reset | F1 target | F2 swarm | F3 brute | F4 skirmisher | F5 mixed | Backspace clear\n"
 	hud.text += "HP %.0f | Enemies %d | World %.2fx\n" % [player.health, director.enemies.size(), player.world_scale]
 	hud.text += player.status_text() + "\n" + weapons.status_text()
+	slow_bar.position.y = hud.position.y + hud.get_minimum_size().y + 8
 	slow_bar.value = player.slow_charge

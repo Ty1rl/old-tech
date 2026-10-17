@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="Old Tech"
+run/main_scene="uid://dc1k8c1u03wl2"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 

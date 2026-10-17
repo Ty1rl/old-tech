@@ -24,6 +24,31 @@ The partner's original menu/game scenes and popup managers remain intact.
   mixed group; F6 starts/restarts a bounded encounter. Backspace clears it.
 - Escape normally pauses. F7 cycles upper numbers through full/dim/hidden;
   the preference persists. Player gauges remain visible in every mode.
+- F9 starts the mechanized guard showcase with a closer camera. R returns to
+  the normal sandbox. M toggles sound and saves the choice across launches.
+
+## Mechanized guard
+
+The guard has a more detailed metal chassis and three color-coded mechanisms:
+
+- **Cyan cable:** physically cross it with a cutting stroke. Severing it deals
+  substantial damage and permanently opens the shield. A stroke can hit the
+  body first and cut the cable later, without repeating its ordinary damage.
+- **Orange shield vents:** keep the cone on the guard to heat it. The shield
+  opens temporarily, revealing the core; the heavy chassis resists displacement
+  while still visibly staggering.
+- **Yellow core:** aim a charged flash into it while exposed for a large,
+  once-only damage bonus. Quick shots and ordinary body hits still do damage.
+
+Try cut → charged flash, or heat → charged flash. The original four enemy
+archetypes remain. Both mechanisms and their opening timers rewind correctly.
+The guard is a worked example rather than a finished boss.
+
+Tool colors are shared across HUD, vulnerable parts and effects. Placeholder
+audio is synthesized in memory: spinning cutter, rising charge, cone hiss,
+impacts, mechanism breaks, repair clicks and a mechanical clock loop. Clock
+playback speed/pitch ramps down into slow time and spins up on release; scrub
+speed changes it too. No hit/break sounds replay while browsing history.
 
 ## Equipment and repairs
 
@@ -62,6 +87,9 @@ Equipping 4 does not activate time manipulation. A fresh Space press begins
 inspection; changing tools while already holding Space requires release first.
 Inspection blocks movement, attacks, repair and debug mutations. Its nearby
 readout shows NOW or selected age, proposed jump wear, and a short timeline.
+Positions and orientations ease between selected snapshots over 0.14 real
+seconds. Health, destroyed parts and other discrete state stay recorded values;
+commit/cancel restores the exact selected state before gameplay resumes.
 
 Inspection costs 0.2 clock units per real second. A committed jump additionally
 costs 1 clock unit per second rewound. Preview never refunds clock condition;
@@ -92,7 +120,7 @@ real time. Enemy behavior, attack flight, cone damage and shove cadence use
 world time. During inspection only its real-time clock wear advances.
 
 F6 is a 75-world-second encounter capped at six live enemies. Clear survivors
-after the schedule to win. Art, bosses, sound and authored levels are later work.
+after the schedule to win. Final art, bosses and authored levels are later work.
 Tests establish behavior and state restoration, not enjoyable balance.
 
 ```sh
@@ -100,7 +128,8 @@ python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 ```
 
 Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
-resource_integration, integration. Use import after script/scene changes.
+resource_integration, integration, parts, feedback, scrub_view, presentation.
+Use import after script/scene changes.
 The shared lab runner bounds execution and saves full logs in seat state.
 On another machine: `timeout 60s godot --headless --path . --script
 res://scenes/prototype/checks/rewind.gd` (one shell line).

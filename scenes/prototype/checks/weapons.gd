@@ -459,5 +459,9 @@ func run() -> void:
 	expect(snap_enemy.health < hp_after_restore_test and weapons.ring_phase == "idle" and weapons.beam_pulses.is_empty(), "Restored in-flight ring and Flash pulse resume and hit target")
 
 	clear_fakes(enemies)
+	arena.queue_free()
+	await process_frame
+	# Allow the audio server to release generated playback after scene removal.
+	await create_timer(0.10).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

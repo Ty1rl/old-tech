@@ -1,8 +1,9 @@
 extends Node3D
 
-# jam-4 owns enemy.gd. No independent _process or _physics_process clock.
+# No independent _process or _physics_process clock.
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
+const WardenVisual = preload("res://scenes/prototype/warden_visual.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
 const MAX_KNOCKBACK_SPEED := 32.0
 
@@ -16,6 +17,12 @@ var health: float = 100.0
 var move_speed: float = 0.0
 var contact_damage: float = 0.0
 var contact_cooldown: float = 0.0
+var cable_cut: bool = false
+var shield_heat: float = 0.0
+var shield_open_timer: float = 0.0
+var core_broken: bool = false
+var warden_visual: Node3D
+var status_root: Node3D
 
 # Crowd control / knockback / stagger state (world units and world seconds)
 var knockback_vel: Vector3 = Vector3.ZERO
@@ -71,6 +78,10 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	radius = float(cfg.get("radius", 0.7))
 	contact_damage = float(cfg.get("damage", 0.0))
 	contact_cooldown = 0.0
+	cable_cut = false
+	shield_heat = 0.0
+	shield_open_timer = 0.0
+	core_broken = false
 	knockback_vel = Vector3.ZERO
 	stagger_timer = 0.0
 	skirmish_phase = &"orbit"
@@ -104,6 +115,11 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 
 	var impulse_resist := float(Tuning.CONTROL.get("brute_resistance", 0.4)) if kind == &"brute" else 1.0
 	var stagger_resist := float(Tuning.CONTROL.get("brute_stagger_resistance", 0.8)) if kind == &"brute" else 1.0
+	if kind == &"warden":
+		# A braced shield carrier can be heated without every pulse ejecting it
+		# from cone range. It still moves and visibly staggers.
+		impulse_resist = _part("push_resistance", 0.25)
+		stagger_resist = _part("stagger_resistance", 0.8)
 	var eff_impulse := maxf(0.0, impulse) * impulse_resist
 	var eff_stagger := maxf(0.0, stagger_seconds) * stagger_resist
 
@@ -143,6 +159,11 @@ func capture_state() -> Dictionary:
 		"flash_timer": float(flash_timer),
 		"feedback_timer": float(feedback_timer),
 	}
+	if kind == &"warden":
+		state["cable_cut"] = cable_cut
+		state["shield_heat"] = shield_heat
+		state["shield_open_timer"] = shield_open_timer
+		state["core_broken"] = core_broken
 	if flash_timer > 0.0 or feedback_timer > 0.0:
 		state["feedback_text"] = feedback_label.text if is_instance_valid(feedback_label) else ""
 		state["feedback_color"] = feedback_label.modulate if is_instance_valid(feedback_label) else Color.WHITE
@@ -172,6 +193,10 @@ func restore_state(data: Dictionary) -> void:
 	facing = data.get("facing", facing)
 	health = clampf(float(data.get("health", max_health)), 0.0, max_health)
 	contact_cooldown = maxf(0.0, float(data.get("contact_cooldown", data.get("contact_timer", 0.0))))
+	cable_cut = bool(data.get("cable_cut", false))
+	shield_heat = maxf(0.0, float(data.get("shield_heat", 0.0)))
+	shield_open_timer = maxf(0.0, float(data.get("shield_open_timer", 0.0)))
+	core_broken = bool(data.get("core_broken", false))
 	var raw_kb: Vector3 = data.get("knockback_vel", Vector3.ZERO)
 	knockback_vel = Vector3(raw_kb.x, 0.0, raw_kb.z)
 	stagger_timer = maxf(0.0, float(data.get("stagger_timer", 0.0)))
@@ -197,6 +222,7 @@ func restore_state(data: Dictionary) -> void:
 func _sync_derived_visuals(fb_text: String, fb_color: Color) -> void:
 	_update_visual_facing()
 	_update_health_visuals()
+	_update_warden_visuals()
 	if is_instance_valid(body_material):
 		if flash_timer > 0.0:
 			if stagger_timer > 0.0 or fb_text == "STAGGER" or fb_text == "SHOVE":
@@ -228,8 +254,13 @@ func _make_mat(color: Color, unshaded: bool = false) -> StandardMaterial3D:
 func _build_visuals() -> void:
 	if is_instance_valid(visual_root):
 		visual_root.queue_free()
+	if is_instance_valid(status_root):
+		status_root.queue_free()
+	warden_visual = null
 	visual_root = Node3D.new()
 	add_child(visual_root)
+	status_root = Node3D.new()
+	add_child(status_root)
 
 	var body_height := 1.2
 	match kind:
@@ -245,6 +276,9 @@ func _build_visuals() -> void:
 		&"skirmisher":
 			base_body_color = Color("45b69c")
 			body_height = 1.25
+		&"warden":
+			base_body_color = Color("495962")
+			body_height = 1.7
 
 	body_material = _make_mat(base_body_color)
 	body_mesh = MeshInstance3D.new()
@@ -261,15 +295,22 @@ func _build_visuals() -> void:
 	body_mesh.position = Vector3(0.0, body_height * 0.5, 0.0)
 	body_mesh.material_override = body_material
 	visual_root.add_child(body_mesh)
+	if kind == &"warden":
+		body_mesh.scale = Vector3(0.73, 0.82, 0.67)
+		warden_visual = WardenVisual.new()
+		visual_root.add_child(warden_visual)
+		warden_visual.build(radius)
+		_update_warden_visuals()
 
 	# Forward facing marker (-Z in local visual_root space aligns with `facing`)
-	var nose := MeshInstance3D.new()
-	var nose_mesh := BoxMesh.new()
-	nose_mesh.size = Vector3(radius * 0.55, 0.24, radius * 0.65)
-	nose.mesh = nose_mesh
-	nose.position = Vector3(0.0, body_height * 0.62, -radius * 0.92)
-	nose.material_override = _make_mat(Color("f4f7fa"), true)
-	visual_root.add_child(nose)
+	if kind != &"warden":
+		var nose := MeshInstance3D.new()
+		var nose_mesh := BoxMesh.new()
+		nose_mesh.size = Vector3(radius * 0.55, 0.24, radius * 0.65)
+		nose.mesh = nose_mesh
+		nose.position = Vector3(0.0, body_height * 0.62, -radius * 0.92)
+		nose.material_override = _make_mat(Color("f4f7fa"), true)
+		visual_root.add_child(nose)
 
 	# Distinct front shield & rear vulnerable marker for Brute (and subtle rear marker for others)
 	if kind == &"brute":
@@ -288,7 +329,7 @@ func _build_visuals() -> void:
 		rear_core.position = Vector3(0.0, body_height * 0.5, radius * 0.92)
 		rear_core.material_override = _make_mat(Color("7be08a"), true)
 		visual_root.add_child(rear_core)
-	else:
+	elif kind != &"warden":
 		var rear_tab := MeshInstance3D.new()
 		var tab_mesh := BoxMesh.new()
 		tab_mesh.size = Vector3(radius * 0.5, 0.18, 0.18)
@@ -298,14 +339,14 @@ func _build_visuals() -> void:
 		visual_root.add_child(rear_tab)
 
 	# Overhead health bar (kept unrotated in world space on self)
-	var bar_y := body_height + 0.45
+	var bar_y := body_height + (0.85 if kind == &"warden" else 0.45)
 	var hp_bg := MeshInstance3D.new()
 	var bg_mesh := BoxMesh.new()
 	bg_mesh.size = Vector3(radius * 2.0, 0.11, 0.11)
 	hp_bg.mesh = bg_mesh
 	hp_bg.position = Vector3(0.0, bar_y, 0.0)
 	hp_bg.material_override = _make_mat(Color("1c222b"), true)
-	add_child(hp_bg)
+	status_root.add_child(hp_bg)
 
 	hp_bar_material = _make_mat(Color("67d97e"), true)
 	hp_bar_fill = MeshInstance3D.new()
@@ -314,7 +355,7 @@ func _build_visuals() -> void:
 	hp_bar_fill.mesh = fill_mesh
 	hp_bar_fill.position = Vector3(0.0, bar_y, 0.0)
 	hp_bar_fill.material_override = hp_bar_material
-	add_child(hp_bar_fill)
+	status_root.add_child(hp_bar_fill)
 
 	feedback_label = Label3D.new()
 	feedback_label.position = Vector3(0.0, bar_y + 0.38, 0.0)
@@ -323,7 +364,7 @@ func _build_visuals() -> void:
 	feedback_label.font_size = 28
 	feedback_label.outline_size = 6
 	feedback_label.text = ""
-	add_child(feedback_label)
+	status_root.add_child(feedback_label)
 
 
 func _update_visual_facing() -> void:
@@ -359,6 +400,117 @@ func is_front_contact(contact_world: Vector3) -> bool:
 	return f.dot(dir) >= cos_limit
 
 
+func _part(key: String, fallback: float) -> float:
+	return float(Tuning.PARTS.get(key, fallback))
+
+
+func is_core_exposed() -> bool:
+	return cable_cut or shield_open_timer > 0.0
+
+
+func _update_warden_visuals() -> void:
+	if kind == &"warden" and is_instance_valid(warden_visual):
+		warden_visual.sync(cable_cut, is_core_exposed(), core_broken, shield_heat / maxf(0.01, _part("heat_threshold", 1.1)))
+
+
+func attack_radius(tool: StringName) -> float:
+	return radius + 0.5 if kind == &"warden" and tool == &"ring" and not cable_cut else radius
+
+
+func has_cuttable_part() -> bool:
+	return kind == &"warden" and not cable_cut and health > 0.0
+
+
+func _local_part_world(local: Vector3) -> Vector3:
+	var orientation := Basis.looking_at(facing, Vector3.UP)
+	return position + orientation * local
+
+
+func cable_world_points() -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	for point: Vector3 in [Vector3(radius * 0.9, 0.0, -0.48), Vector3(radius + 0.38, 0.0, -0.48), Vector3(radius + 0.38, 0.0, 0.48), Vector3(radius * 0.9, 0.0, 0.48)]:
+		points.append(_local_part_world(point))
+	return points
+
+
+func core_world_position() -> Vector3:
+	return _local_part_world(Vector3(0.0, 1.05, -0.74))
+
+
+func _point_segment_distance(point: Vector3, a: Vector3, b: Vector3) -> float:
+	var p := Vector2(point.x, point.z)
+	var start := Vector2(a.x, a.z)
+	var end := Vector2(b.x, b.z)
+	return p.distance_to(Geometry2D.get_closest_point_to_segment(p, start, end))
+
+
+func _segment_distance(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> float:
+	if Geometry2D.segment_intersects_segment(Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z), Vector2(d.x, d.z)) != null:
+		return 0.0
+	return minf(minf(_point_segment_distance(a, c, d), _point_segment_distance(b, c, d)), minf(_point_segment_distance(c, a, b), _point_segment_distance(d, a, b)))
+
+
+func receive_attack(tool: StringName, amount: float, contact_world: Vector3, context: Dictionary = {}) -> Dictionary:
+	var miss := {"dealt": 0.0, "armored": false, "killed": false, "connected": false, "cue": &""}
+	if health <= 0.0 or amount <= 0.0:
+		return miss
+	if kind != &"warden":
+		var ordinary := hit(amount, contact_world)
+		ordinary["connected"] = true
+		ordinary["cue"] = &""
+		return ordinary
+
+	var has_segment := context.has("segment_start") and context.has("segment_end")
+	var start: Vector3 = context.get("segment_start", contact_world)
+	var end: Vector3 = context.get("segment_end", contact_world)
+	var sweep_radius := maxf(0.0, float(context.get("radius", 0.0)))
+	var body_connected := _point_segment_distance(position, start, end) <= radius + sweep_radius + 0.001
+	var cable_connected := false
+	if tool == &"ring" and not cable_cut and has_segment:
+		var points := cable_world_points()
+		for i in range(points.size() - 1):
+			if _segment_distance(start, end, points[i], points[i + 1]) <= sweep_radius + _part("cable_radius", 0.1):
+				cable_connected = true
+				break
+	if not body_connected and not cable_connected:
+		return miss
+	var already_hit := tool == &"ring" and bool(context.get("already_hit", false))
+	if already_hit and not cable_connected:
+		return miss
+
+	var bonus := 0.0
+	var cue: StringName = &""
+	if cable_connected:
+		cable_cut = true
+		shield_heat = 0.0
+		bonus += _part("cable_bonus", 65.0)
+		cue = &"cable_cut"
+	elif tool == &"cone" and not is_core_exposed():
+		shield_heat += maxf(0.0, float(context.get("dt", 0.0)))
+		if shield_heat >= _part("heat_threshold", 1.1):
+			shield_heat = 0.0
+			shield_open_timer = _part("open_seconds", 4.0)
+			cue = &"vent"
+	elif tool == &"beam" and is_core_exposed() and not core_broken and has_segment and float(context.get("charge", 0.0)) >= _part("core_min_charge", 0.6):
+		# Extend the incoming ray through the chassis, preserving its actual aim.
+		var direction := Vector3(end.x - start.x, 0.0, end.z - start.z)
+		if direction.length_squared() > 0.000001:
+			direction = direction.normalized()
+			var core_pos := core_world_position()
+			var along := (core_pos - start).dot(direction)
+			var ray_end := start + direction * maxf(start.distance_to(end), along + radius * 2.0)
+			if along >= 0.0 and _point_segment_distance(core_pos, start, ray_end) <= _part("core_radius", 0.28) + sweep_radius:
+				core_broken = true
+				bonus += _part("core_bonus", 90.0)
+				cue = &"core_break"
+
+	var result := hit((0.0 if already_hit else amount) + bonus, contact_world)
+	result["connected"] = true
+	result["cue"] = cue
+	_update_warden_visuals()
+	return result
+
+
 func hit(amount: float, contact_world: Vector3) -> Dictionary:
 	if health <= 0.0 or amount <= 0.0:
 		return {"dealt": 0.0, "armored": false, "killed": false}
@@ -368,6 +520,9 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 	if kind == &"brute" and is_front_contact(contact_world):
 		armored = true
 		effective = amount * float(Tuning.ARMOR.front_multiplier)
+	elif kind == &"warden" and not is_core_exposed() and is_front_contact(contact_world):
+		armored = true
+		effective = amount * _part("armor_multiplier", 0.35)
 
 	var dealt := minf(health, maxf(0.0, effective))
 	health = maxf(0.0, health - dealt)
@@ -389,6 +544,10 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> void:
 	if health <= 0.0:
 		return
+	if kind == &"warden" and world_delta > 0.0:
+		shield_open_timer = maxf(0.0, shield_open_timer - world_delta)
+		shield_heat = maxf(0.0, shield_heat - world_delta * _part("heat_decay", 0.25))
+		_update_warden_visuals()
 
 	if flash_timer > 0.0:
 		flash_timer = maxf(0.0, flash_timer - world_delta)
@@ -442,9 +601,9 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 			var steered := _steer_around_cover(self_xz, dir_to_player, player_xz)
 			var sep := _compute_separation(neighbors, 1.15)
 			move_dir = (steered + sep * 0.55).normalized() if (steered + sep * 0.55).length_squared() > 0.0001 else steered
-		&"brute":
+		&"brute", &"warden":
 			# Brute turns steadily toward the player so its sides/rear can be flanked
-			facing = _rotate_xz_toward(facing, dir_to_player, 2.4 * active_ai_delta)
+			facing = _rotate_xz_toward(facing, dir_to_player, (1.15 if kind == &"warden" else 2.4) * active_ai_delta)
 			move_dir = _steer_around_cover(self_xz, dir_to_player, player_xz)
 		&"skirmisher":
 			facing = dir_to_player

@@ -1,10 +1,11 @@
 extends Control
 
 const Tuning = preload("res://scenes/prototype/tuning.gd")
+const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 # Screen-space geometry keeps these small gauges readable at any camera zoom.
 # Leave the center empty: neither a filled disc nor a label covers the player.
 const TOOLS: Array[StringName] = [&"ring", &"beam", &"cone", &"clock"]
-const COLORS: Array[Color] = [Color("60dbde"), Color("f0d77b"), Color("ed9966"), Color("ba9ce9")]
+const COLORS: Array[Color] = [ToolStyle.RING, ToolStyle.BEAM, ToolStyle.CONE, ToolStyle.CLOCK]
 const NAMES: Array[String] = ["Ring", "Flash", "Cone", "Clock"]
 const KEYS: Array[String] = ["1", "2", "3", "4"]
 const RADIUS := 51.0
@@ -47,6 +48,18 @@ func _ready() -> void:
 	key_hint.offset_top = -28
 	key_hint.offset_right = 360
 	key_hint.offset_bottom = -8
+	var legend := RichTextLabel.new()
+	legend.bbcode_enabled = true
+	legend.scroll_active = false
+	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	legend.add_theme_font_size_override("normal_font_size", 12)
+	add_child(legend)
+	legend.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	legend.offset_left = 16
+	legend.offset_right = -16
+	legend.offset_top = -52
+	legend.offset_bottom = -30
+	legend.text = "[center][color=#%s]Cut cable[/color] · [color=#%s]Heat shield[/color] · [color=#%s]Charge core[/color][/center]" % [ToolStyle.RING.to_html(false), ToolStyle.CONE.to_html(false), ToolStyle.BEAM.to_html(false)]
 
 
 func cycle_readout() -> void:
@@ -54,6 +67,10 @@ func cycle_readout() -> void:
 	var settings := ConfigFile.new()
 	settings.set_value("hud", "readout", readout_mode)
 	settings.save(READOUT_FILE)
+
+
+func set_combat_hint(muted: bool) -> void:
+	key_hint.text = "F9 guard demo · M sound: %s · F7 numbers" % ("off" if muted else "on")
 
 
 func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> void:

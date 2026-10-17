@@ -159,6 +159,10 @@ func run() -> void:
 	await process_frame
 	expect(arena.equipment.repairing == &"" and arena.equipment.remaining(&"clock") == 24,
 		"Arena reset clears repair popup and refills equipment")
+	arena.queue_free()
+	await process_frame
+	# Allow the audio server to release generated playback after scene removal.
+	await create_timer(0.10).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)
 

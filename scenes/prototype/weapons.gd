@@ -1,5 +1,8 @@
 extends Node3D
 
+signal combat_event(kind: StringName, point: Vector3, strength: float)
+
+const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EquipmentScript = preload("res://scenes/prototype/equipment.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
@@ -203,6 +206,7 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 				ring_launch_origin = ring_points[0]
 			ring_pos = ring_launch_origin
 			last_feedback = "Ring launched"
+			combat_event.emit(&"ring_launch", ring_pos, 1.0)
 		2:
 			if not beam_charging:
 				return
@@ -237,6 +241,7 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 			beam_end = origin_xz + Vector3(dir.x, 0.0, dir.y) * minf(1.5, _beam_max_range())
 			beam_flash_timer = 0.14
 			last_feedback = "Flash launched (%.0f dmg)" % dmg
+			combat_event.emit(&"flash_fire", origin_xz, 0.4 + charge_frac * 0.6)
 		3:
 			if cone_active:
 				cone_active = false
@@ -726,6 +731,7 @@ func _step_ring(w_delta: float, player: Node3D, enemies: Array) -> void:
 				ring_points.clear()
 				ring_hit_ids.clear()
 				last_feedback = "Ring returned"
+				combat_event.emit(&"ring_return", home, 0.5)
 			else:
 				var move := (to_h / dist) * step_d
 				ring_pos = Vector3(ring_pos.x + move.x, 0.0, ring_pos.z + move.y)
@@ -744,11 +750,12 @@ func _sweep_ring_segment(seg_start: Vector3, seg_end: Vector3, enemies: Array) -
 			continue
 		var enemy_node := enemy as Node3D
 		var id: int = _enemy_combat_id(enemy_node)
-		if ring_hit_ids.has(id):
+		if ring_hit_ids.has(id) and not (enemy_node.has_method("has_cuttable_part") and enemy_node.call("has_cuttable_part")):
 			continue
 		var c := Vector2(enemy_node.global_position.x, enemy_node.global_position.z)
 		var r_enemy: float = float(enemy_node.get("radius"))
-		var entry_t := _swept_circle_entry_t(a, b, c, r_ring + r_enemy)
+		var broad_radius: float = float(enemy_node.call("attack_radius", &"ring")) if enemy_node.has_method("attack_radius") else r_enemy
+		var entry_t := _swept_circle_entry_t(a, b, c, r_ring + broad_radius)
 		if entry_t < 0.0:
 			continue
 		var ring_center := a + d * entry_t
@@ -779,11 +786,13 @@ func _sweep_ring_segment(seg_start: Vector3, seg_end: Vector3, enemies: Array) -
 	for item in hits_along_segment:
 		var enemy_node: Node3D = item["enemy"]
 		var id: int = item["id"]
-		if not _is_live_enemy(enemy_node) or ring_hit_ids.has(id):
+		if not _is_live_enemy(enemy_node):
 			continue
-		ring_hit_ids[id] = true
-		var res: Dictionary = enemy_node.call("hit", float(Tuning.RING.damage), item["contact"])
-		_record_hit_feedback("Ring", res)
+		var res := _attack_enemy(enemy_node, &"ring", Tuning.RING.damage, item["contact"],
+			{"segment_start": seg_start, "segment_end": seg_end, "radius": r_ring, "already_hit": ring_hit_ids.has(id)})
+		if bool(res.get("connected", true)):
+			ring_hit_ids[id] = true
+			_record_hit_feedback("Ring", res)
 
 
 # --- Tool 2: Charged Traveling Flash Pulses ---
@@ -853,7 +862,9 @@ func _step_beam_pulses(w_delta: float, enemies: Array) -> void:
 		if best_enemy != null:
 			beam_end = best_contact
 			beam_flash_timer = 0.14
-			var res: Dictionary = best_enemy.call("hit", dmg, best_contact)
+			var res := _attack_enemy(best_enemy, &"beam", dmg, best_contact,
+				{"segment_start": start_3d, "segment_end": raw_end_3d,
+				"radius": r_beam, "charge": float(pulse.get("charge", 0.0))})
 			_record_hit_feedback("Flash", res)
 		elif wall_blocked:
 			beam_end = Vector3(wall_pos.x, 0.0, wall_pos.z)
@@ -935,6 +946,8 @@ func _step_cone(delta: float, w_delta: float, player: Node3D, enemies: Array) ->
 			else:
 				cone_burst_cooldown = 0.0
 
+	if do_burst:
+		combat_event.emit(&"cone_pulse", player.global_position + Vector3(cone_forward.x, 0, cone_forward.y), burst_scale)
 	var p_xz := Vector2(player.global_position.x, player.global_position.z)
 	var origin_3d := Vector3(p_xz.x, 0.0, p_xz.y)
 	var max_r := float(Tuning.CONE.range)
@@ -979,7 +992,8 @@ func _step_cone(delta: float, w_delta: float, player: Node3D, enemies: Array) ->
 			enemy_node.call("apply_control", push_dir, sustained_impulse, 0.0)
 
 		if amount > 0.0:
-			var res: Dictionary = enemy_node.call("hit", amount, contact_world)
+			var res := _attack_enemy(enemy_node, &"cone", amount, contact_world,
+				{"segment_start": origin_3d, "segment_end": enemy_world, "radius": 0.0, "dt": actual_world_dt})
 			var dealt := float(res.get("dealt", 0.0))
 			if dealt > 0.0:
 				hit_any = true
@@ -998,6 +1012,16 @@ func _step_cone(delta: float, w_delta: float, player: Node3D, enemies: Array) ->
 		cone_active = false
 		if not hit_any:
 			last_feedback = "Cone empty — hold E for Repair"
+
+
+func _attack_enemy(enemy: Node3D, tool: StringName, amount: float, contact: Vector3, context: Dictionary) -> Dictionary:
+	var result: Dictionary = enemy.call("receive_attack", tool, amount, contact, context) if enemy.has_method("receive_attack") else enemy.call("hit", amount, contact)
+	var cue := StringName(result.get("cue", &""))
+	if not cue.is_empty():
+		combat_event.emit(cue, contact, 1.0)
+	elif float(result.get("dealt", 0.0)) > 0.0:
+		combat_event.emit(&"hit", contact, clampf(float(result.dealt) / 80.0, 0.15, 1.2))
+	return result
 
 
 func _record_hit_feedback(tool_label: String, res: Dictionary) -> void:
@@ -1064,7 +1088,7 @@ func _rebuild_visuals(player: Node3D, aim: Vector3) -> void:
 			_draw_circle_outline(p_ground, float(Tuning.RING.range), Color(0.4, 0.78, 0.96, 0.22))
 			_draw_arc_ribbon(p_ground, preview_points[0], _ring_arc_height(), 0.07, Color(0.55, 0.85, 1.0, 0.45))
 		if preview_unblocked_points.size() >= 2:
-			_draw_polyline_ribbon(preview_unblocked_points, 0, preview_unblocked_points.size() - 1, 0.12, Color("67c9f5"), 0.10)
+			_draw_polyline_ribbon(preview_unblocked_points, 0, preview_unblocked_points.size() - 1, 0.12, ToolStyle.RING, 0.10)
 		if preview_blocked:
 			_draw_circle_outline(Vector3(preview_cutoff_point.x, 0.16, preview_cutoff_point.z), float(Tuning.RING.radius), Color("ff5c4d"))
 			if preview_blocked_points.size() >= 2:
@@ -1077,8 +1101,8 @@ func _rebuild_visuals(player: Node3D, aim: Vector3) -> void:
 		if ring_stroke_index > 0:
 			_draw_polyline_ribbon(ring_points, 0, ring_stroke_index, 0.10, Color("4b8a63"), 0.08)
 		if ring_stroke_index < ring_points.size() - 1:
-			_draw_polyline_ribbon(ring_points, ring_stroke_index, ring_points.size() - 1, 0.14, Color("f5c267"), 0.11)
-		var ring_col := Color("ff7a59") if ring_phase == "stroke" else Color("67c9f5")
+			_draw_polyline_ribbon(ring_points, ring_stroke_index, ring_points.size() - 1, 0.14, Color(ToolStyle.RING, 0.45), 0.11)
+		var ring_col := ToolStyle.RING.lightened(0.25) if ring_phase == "stroke" else ToolStyle.RING
 		var ring_y := maxf(0.22, ring_pos.y + 0.22) if ring_phase == "outbound" else 0.22
 		_draw_circle_outline(Vector3(ring_pos.x, ring_y, ring_pos.z), float(Tuning.RING.radius), ring_col)
 
@@ -1100,12 +1124,12 @@ func _rebuild_visuals(player: Node3D, aim: Vector3) -> void:
 		var tail_len := lerpf(1.1, 2.4, chg)
 		var head := Vector3(pos.x, 0.32, pos.z)
 		var tail := head - Vector3(dir.x, 0.0, dir.y) * tail_len
-		_draw_polyline_ribbon([tail, head], 0, 1, lerpf(0.09, 0.18, chg), Color("fff07a"), 0.32)
+		_draw_polyline_ribbon([tail, head], 0, 1, lerpf(0.09, 0.18, chg), ToolStyle.BEAM, 0.32)
 		_draw_circle_outline(head, r_p, Color("ffffff"))
 
 	if beam_flash_timer > 0.0:
 		_draw_polyline_ribbon([beam_start, beam_end], 0, 1, 0.10, Color(1.0, 0.94, 0.48, 0.65), 0.30)
-		_draw_circle_outline(Vector3(beam_end.x, 0.30, beam_end.z), _beam_radius(), Color("fff07a"))
+		_draw_circle_outline(Vector3(beam_end.x, 0.30, beam_end.z), _beam_radius(), ToolStyle.BEAM)
 
 	if selected_tool == 3 and cone_active and player != null:
 		_draw_cone_sector(Vector3(player.global_position.x, 0.10, player.global_position.z), cone_forward, float(Tuning.CONE.range), float(Tuning.CONE.half_angle), Color(1.0, 0.58, 0.22, 0.28))

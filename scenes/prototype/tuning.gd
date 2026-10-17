@@ -14,7 +14,12 @@ const ENEMIES = {
 	"swarmer": {"health": 32.0, "speed": 2.8, "radius": 0.4, "damage": 5.0},
 	"brute": {"health": 180.0, "speed": 1.2, "radius": 1.0, "damage": 12.0},
 	"skirmisher": {"health": 65.0, "speed": 3.2, "radius": 0.55, "damage": 7.0},
+	"warden": {"health": 240.0, "speed": 1.3, "radius": 1.1, "damage": 12.0},
 }
+const PARTS = {"cable_bonus": 65.0, "core_bonus": 90.0, "core_min_charge": 0.6,
+	"heat_threshold": 1.1, "heat_decay": 0.25, "open_seconds": 4.0,
+	"cable_radius": 0.10, "core_radius": 0.28, "armor_multiplier": 0.35,
+	"push_resistance": 0.25, "stagger_resistance": 0.8}
 const ARMOR = {"front_multiplier": 0.25, "front_half_angle": 1.05}
 const CONTACT_COOLDOWN = 1.0 # World seconds: time slow delays enemy attacks too.
 const ARENA_HALF_SIZE = 20.0

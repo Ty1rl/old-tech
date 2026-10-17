@@ -1,5 +1,7 @@
 extends RefCounted
 
+signal repaired(tool: StringName, restored: float)
+
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EPS := 0.000001
 
@@ -99,6 +101,7 @@ func complete_step(tool: StringName, session: int = -1) -> float:
 		_remaining[String(tool)] = capacity(tool)
 	else:
 		_remaining[String(tool)] = minf(capacity(tool), before + restored)
+	repaired.emit(tool, restored)
 	return restored
 
 

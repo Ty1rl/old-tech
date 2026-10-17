@@ -362,5 +362,7 @@ func run() -> void:
 	expect(Engine.time_scale == 1.0, "Repair never changes global engine time or introduces its own clock")
 	arena.queue_free()
 	await frames()
+	# Allow the audio server to release generated playback after scene removal.
+	await create_timer(0.10).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

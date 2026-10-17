@@ -2,13 +2,11 @@ extends Node3D
 
 # jam-4 owns enemy.gd. No independent _process or _physics_process clock.
 const Tuning = preload("res://scenes/prototype/tuning.gd")
+const CoverScript = preload("res://scenes/prototype/cover.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
+const MAX_KNOCKBACK_SPEED := 24.0
+
 var cover: RefCounted
-
-
-func apply_control(_direction: Vector3, _impulse: float, _stagger_seconds: float) -> void:
-	# Round C: jam-4 replaces this with cover-safe displacement and stagger.
-	pass
 
 var kind: StringName = &"target"
 var radius: float = 0.7
@@ -17,6 +15,10 @@ var health: float = 100.0
 var move_speed: float = 0.0
 var contact_damage: float = 0.0
 var contact_cooldown: float = 0.0
+
+# Crowd control / knockback / stagger state (world units and world seconds)
+var knockback_vel: Vector3 = Vector3.ZERO
+var stagger_timer: float = 0.0
 
 var facing: Vector3 = Vector3(0.0, 0.0, 1.0):
 	set(value):
@@ -50,6 +52,8 @@ var feedback_label: Label3D
 
 
 func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> void:
+	if cover == null:
+		cover = CoverScript.new()
 	kind = p_kind if Tuning.ENEMIES.has(String(p_kind)) else &"target"
 	var cfg: Dictionary = Tuning.ENEMIES[String(kind)]
 	max_health = float(cfg.get("health", 100.0))
@@ -58,10 +62,12 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	radius = float(cfg.get("radius", 0.7))
 	contact_damage = float(cfg.get("damage", 0.0))
 	contact_cooldown = 0.0
+	knockback_vel = Vector3.ZERO
+	stagger_timer = 0.0
 	skirmish_phase = &"orbit"
 	skirmish_timer = 0.0
 	skirmish_strafe_sign = -1.0 if (orbit_seed % 2 == 1) else 1.0
-	position = Vector3(spawn_pos.x, 0.0, spawn_pos.z)
+	position = _resolve_cover_overlap(_clamp_to_arena(Vector3(spawn_pos.x, 0.0, spawn_pos.z)))
 	var to_origin := Vector3(-position.x, 0.0, -position.z)
 	if to_origin.length_squared() > 0.001:
 		facing = to_origin.normalized()
@@ -70,6 +76,54 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	_build_visuals()
 	_update_visual_facing()
 	_update_health_visuals()
+
+
+func is_staggered() -> bool:
+	return stagger_timer > 0.0
+
+
+func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -> void:
+	if health <= 0.0:
+		return
+	var dir_xz := Vector3(direction.x, 0.0, direction.z)
+	if dir_xz.length_squared() <= 0.000001:
+		return
+	dir_xz = dir_xz.normalized()
+
+	if kind == &"target":
+		# Stationary test targets stay anchored in place but show brief control feedback
+		knockback_vel = Vector3.ZERO
+		stagger_timer = 0.0
+		flash_timer = maxf(flash_timer, 0.12)
+		feedback_timer = maxf(feedback_timer, 0.45)
+		if is_instance_valid(body_material):
+			body_material.albedo_color = Color("99d6ff")
+		if is_instance_valid(feedback_label) and (impulse >= 1.0 or stagger_seconds > 0.0):
+			feedback_label.text = "ANCHORED"
+			feedback_label.modulate = Color("99d6ff")
+		return
+
+	var resist := float(Tuning.CONTROL.brute_resistance) if kind == &"brute" else 1.0
+	var eff_impulse := maxf(0.0, impulse) * resist
+	var eff_stagger := maxf(0.0, stagger_seconds) * resist
+
+	if eff_impulse > 0.0:
+		knockback_vel += dir_xz * eff_impulse
+		if knockback_vel.length() > MAX_KNOCKBACK_SPEED:
+			knockback_vel = knockback_vel.normalized() * MAX_KNOCKBACK_SPEED
+
+	if eff_stagger > 0.0:
+		var max_bound := float(Tuning.CONTROL.stagger) * 1.5 * resist
+		stagger_timer = clampf(maxf(stagger_timer, eff_stagger), 0.0, max_bound)
+
+	if eff_stagger > 0.0 or eff_impulse >= 2.0:
+		flash_timer = maxf(flash_timer, 0.12)
+		feedback_timer = maxf(feedback_timer, 0.45)
+		if is_instance_valid(body_material):
+			body_material.albedo_color = Color("8de8ff")
+		if is_instance_valid(feedback_label) and eff_stagger > 0.0:
+			feedback_label.text = "STAGGER"
+			feedback_label.modulate = Color("8de8ff")
 
 
 func _make_mat(color: Color, unshaded: bool = false) -> StandardMaterial3D:
@@ -241,14 +295,14 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 	return last_hit_result
 
 
-func step_enemy(world_delta: float, player: Node3D, neighbors: Array[Node3D]) -> void:
+func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> void:
 	if health <= 0.0:
 		return
 
 	if flash_timer > 0.0:
 		flash_timer = maxf(0.0, flash_timer - world_delta)
 		if flash_timer <= 0.0 and is_instance_valid(body_material):
-			body_material.albedo_color = base_body_color
+			body_material.albedo_color = Color("7aa8c9") if stagger_timer > 0.0 else base_body_color
 
 	if feedback_timer > 0.0:
 		feedback_timer = maxf(0.0, feedback_timer - world_delta)
@@ -258,7 +312,30 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array[Node3D]) ->
 	if contact_cooldown > 0.0:
 		contact_cooldown = maxf(0.0, contact_cooldown - world_delta)
 
-	if not is_instance_valid(player) or kind == &"target" or world_delta <= 0.0:
+	if world_delta <= 0.0:
+		return
+
+	if cover == null:
+		cover = CoverScript.new()
+
+	# 1. Exact exponential knockback integration & cover-safe displacement on world_delta
+	if kind != &"target" and knockback_vel.length_squared() > 0.00001:
+		var drag := maxf(0.001, float(Tuning.CONTROL.drag))
+		var decay := exp(-drag * world_delta)
+		var kb_disp := knockback_vel * ((1.0 - decay) / drag)
+		knockback_vel *= decay
+		if knockback_vel.length_squared() < 0.0001:
+			knockback_vel = Vector3.ZERO
+		position = _move_step_cover_safe(position, kb_disp, true)
+
+	# 2. Stagger timer splits the tick so mid-tick recovery is frame-delta invariant
+	var stagger_consumed := minf(world_delta, stagger_timer)
+	stagger_timer = maxf(0.0, stagger_timer - world_delta)
+	if stagger_timer <= 0.0 and flash_timer <= 0.0 and is_instance_valid(body_material):
+		body_material.albedo_color = base_body_color
+
+	var active_ai_delta := world_delta - stagger_consumed
+	if active_ai_delta <= 0.0 or not is_instance_valid(player) or kind == &"target":
 		return
 
 	var player_xz := Vector3(player.position.x, 0.0, player.position.z)
@@ -271,15 +348,16 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array[Node3D]) ->
 	match kind:
 		&"swarmer":
 			facing = dir_to_player
+			var steered := _steer_around_cover(self_xz, dir_to_player, player_xz)
 			var sep := _compute_separation(neighbors, 1.15)
-			move_dir = (dir_to_player + sep * 0.55).normalized() if (dir_to_player + sep * 0.55).length_squared() > 0.0001 else dir_to_player
+			move_dir = (steered + sep * 0.55).normalized() if (steered + sep * 0.55).length_squared() > 0.0001 else steered
 		&"brute":
 			# Brute turns steadily toward the player so its sides/rear can be flanked
-			facing = _rotate_xz_toward(facing, dir_to_player, 2.4 * world_delta)
-			move_dir = dir_to_player
+			facing = _rotate_xz_toward(facing, dir_to_player, 2.4 * active_ai_delta)
+			move_dir = _steer_around_cover(self_xz, dir_to_player, player_xz)
 		&"skirmisher":
 			facing = dir_to_player
-			skirmish_timer += world_delta
+			skirmish_timer += active_ai_delta
 			if skirmish_phase == &"orbit":
 				if skirmish_timer >= SKIRMISH_ORBIT_DURATION:
 					skirmish_phase = &"commit"
@@ -291,38 +369,151 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array[Node3D]) ->
 					skirmish_strafe_sign = -skirmish_strafe_sign
 
 			if skirmish_phase == &"commit":
-				move_dir = dir_to_player
+				move_dir = _steer_around_cover(self_xz, dir_to_player, player_xz)
 			else:
 				# Keep moderate distance within cone range (~3.6 units) while sidestepping; never evade faster than player
 				var tangent := Vector3(-dir_to_player.z * skirmish_strafe_sign, 0.0, dir_to_player.x * skirmish_strafe_sign)
 				var radial_weight := clampf((dist - SKIRMISH_PREFERRED_DIST) * 0.75, -0.35, 1.0)
 				var combined := dir_to_player * radial_weight + tangent * 0.75
-				move_dir = combined.normalized() if combined.length_squared() > 0.0001 else dir_to_player
+				var raw_dir := combined.normalized() if combined.length_squared() > 0.0001 else dir_to_player
+				move_dir = _steer_around_cover(self_xz, raw_dir, self_xz + raw_dir * 3.0)
 
 	var stop_dist := radius + PLAYER_CONTACT_RADIUS - 0.04
 	if dist > stop_dist and move_dir.length_squared() > 0.0001:
-		var step_len := move_speed * world_delta
-		var next_pos := self_xz + move_dir * step_len
-		var limit := float(Tuning.ARENA_HALF_SIZE) - 1.0
-		position.x = clampf(next_pos.x, -limit, limit)
-		position.z = clampf(next_pos.z, -limit, limit)
-		position.y = 0.0
+		var step_len := move_speed * active_ai_delta
+		position = _move_step_cover_safe(self_xz, move_dir * step_len, false)
 
-	# Recompute XZ distance for contact damage
+	# Recompute XZ distance for contact damage (suppressed while staggered)
 	var post_xz := Vector3(position.x, 0.0, position.z)
 	var post_dist := post_xz.distance_to(player_xz)
-	if contact_damage > 0.0 and post_dist <= (radius + PLAYER_CONTACT_RADIUS + 0.05):
+	if stagger_timer <= 0.0 and contact_damage > 0.0 and post_dist <= (radius + PLAYER_CONTACT_RADIUS + 0.05):
 		if float(player.health) > 0.0 and contact_cooldown <= 0.0:
 			player.take_damage(contact_damage)
 			contact_cooldown = float(Tuning.CONTACT_COOLDOWN)
 			if kind == &"skirmisher" and skirmish_phase == &"commit":
-				# After landing a committed strike, skirmisher can pivot to a brief sidestep
 				skirmish_phase = &"orbit"
 				skirmish_timer = 0.0
 				skirmish_strafe_sign = -skirmish_strafe_sign
 
 
-func _compute_separation(neighbors: Array[Node3D], desired_gap: float) -> Vector3:
+func overlaps_cover(margin: float = -0.01) -> bool:
+	if cover == null:
+		return false
+	var pt := Vector2(position.x, position.z)
+	for rect: Rect2 in cover.RECTANGLES:
+		if rect.grow(maxf(0.0, radius + margin)).has_point(pt):
+			return true
+	return false
+
+
+func _clamp_to_arena(pos: Vector3) -> Vector3:
+	var limit := float(Tuning.ARENA_HALF_SIZE) - 1.0
+	return Vector3(clampf(pos.x, -limit, limit), 0.0, clampf(pos.z, -limit, limit))
+
+
+func _resolve_cover_overlap(pos: Vector3) -> Vector3:
+	if cover == null:
+		return pos
+	var out := Vector3(pos.x, 0.0, pos.z)
+	for rect: Rect2 in cover.RECTANGLES:
+		var expanded := rect.grow(radius + 0.003)
+		if expanded.has_point(Vector2(out.x, out.z)):
+			var d_left := absf(out.x - expanded.position.x)
+			var d_right := absf(expanded.end.x - out.x)
+			var d_top := absf(out.z - expanded.position.y)
+			var d_bottom := absf(expanded.end.y - out.z)
+			var min_d := minf(minf(d_left, d_right), minf(d_top, d_bottom))
+			if is_equal_approx(min_d, d_left):
+				out.x = expanded.position.x - 0.002
+			elif is_equal_approx(min_d, d_right):
+				out.x = expanded.end.x + 0.002
+			elif is_equal_approx(min_d, d_top):
+				out.z = expanded.position.y - 0.002
+			else:
+				out.z = expanded.end.y + 0.002
+	return _clamp_to_arena(out)
+
+
+func _move_step_cover_safe(start_pos: Vector3, delta_vec: Vector3, is_knockback: bool) -> Vector3:
+	var clean_start := _resolve_cover_overlap(start_pos)
+	var flat_delta := Vector3(delta_vec.x, 0.0, delta_vec.z)
+	if flat_delta.length_squared() <= 0.0000001 or cover == null:
+		return _clamp_to_arena(clean_start + flat_delta)
+
+	var finish := clean_start + flat_delta
+	var hit: Dictionary = cover.clip_segment(clean_start, finish, radius)
+	if not hit.get("blocked", false):
+		return _resolve_cover_overlap(_clamp_to_arena(finish))
+
+	var frac := clampf(float(hit.get("fraction", 0.0)), 0.0, 1.0)
+	var normal: Vector3 = hit.get("normal", Vector3.ZERO)
+	var safe_pos := clean_start + flat_delta * maxf(0.0, frac - 0.002) + normal * 0.003
+	safe_pos = _resolve_cover_overlap(safe_pos)
+
+	if is_knockback and knockback_vel.dot(normal) < 0.0:
+		knockback_vel -= normal * knockback_vel.dot(normal)
+
+	var remaining := flat_delta * (1.0 - frac)
+	var slide := remaining - normal * remaining.dot(normal)
+	if slide.length_squared() > 0.000001:
+		var hit2: Dictionary = cover.clip_segment(safe_pos, safe_pos + slide, radius)
+		if not hit2.get("blocked", false):
+			safe_pos += slide
+		else:
+			var frac2 := clampf(float(hit2.get("fraction", 0.0)), 0.0, 1.0)
+			var normal2: Vector3 = hit2.get("normal", Vector3.ZERO)
+			safe_pos += slide * maxf(0.0, frac2 - 0.002) + normal2 * 0.003
+
+	return _resolve_cover_overlap(_clamp_to_arena(safe_pos))
+
+
+func _steer_around_cover(self_xz: Vector3, desired_dir: Vector3, goal_xz: Vector3) -> Vector3:
+	if cover == null or desired_dir.length_squared() <= 0.0001:
+		return desired_dir
+	var dist_to_goal := self_xz.distance_to(goal_xz)
+	var lookahead := minf(maxf(dist_to_goal, 0.5), 2.6)
+	var probe: Dictionary = cover.clip_segment(self_xz, self_xz + desired_dir * lookahead, radius + 0.04)
+	if not probe.get("blocked", false):
+		return desired_dir
+
+	# Evaluate expanded corners of the two cover rectangles to pick a clean detour around the box
+	var best_dir := Vector3.ZERO
+	var best_cost := INF
+	for rect: Rect2 in cover.RECTANGLES:
+		var wp_rect := rect.grow(radius + 0.32)
+		var corners: Array[Vector3] = [
+			Vector3(wp_rect.position.x, 0.0, wp_rect.position.y),
+			Vector3(wp_rect.end.x, 0.0, wp_rect.position.y),
+			Vector3(wp_rect.end.x, 0.0, wp_rect.end.y),
+			Vector3(wp_rect.position.x, 0.0, wp_rect.end.y),
+		]
+		for c in corners:
+			var d_self := self_xz.distance_to(c)
+			if d_self < 0.18:
+				continue
+			var to_c: Dictionary = cover.clip_segment(self_xz, c, radius + 0.01)
+			if to_c.get("blocked", false):
+				continue
+			var to_goal: Dictionary = cover.clip_segment(c, goal_xz, radius + 0.01)
+			var penalty := 4.0 if to_goal.get("blocked", false) else 0.0
+			var cost := d_self + c.distance_to(goal_xz) + penalty
+			if cost < best_cost:
+				best_cost = cost
+				best_dir = (c - self_xz) / d_self
+
+	if best_dir.length_squared() > 0.0001:
+		return best_dir
+
+	# Fallback tangent slide along hit normal
+	var n: Vector3 = probe.get("normal", Vector3.ZERO)
+	var t1 := Vector3(-n.z, 0.0, n.x)
+	var t2 := -t1
+	var p1 := (self_xz + t1).distance_squared_to(goal_xz)
+	var p2 := (self_xz + t2).distance_squared_to(goal_xz)
+	return t1 if p1 <= p2 else t2
+
+
+func _compute_separation(neighbors: Array, desired_gap: float) -> Vector3:
 	var push := Vector3.ZERO
 	var self_xz := Vector3(position.x, 0.0, position.z)
 	for other in neighbors:
@@ -341,5 +532,5 @@ func _rotate_xz_toward(from_dir: Vector3, to_dir: Vector3, max_angle: float) -> 
 	var angle_diff := a.angle_to(b)
 	if absf(angle_diff) <= max_angle:
 		return Vector3(b.x, 0.0, b.y)
-	var rotated := a.rotated( clampf(angle_diff, -max_angle, max_angle) )
+	var rotated := a.rotated(clampf(angle_diff, -max_angle, max_angle))
 	return Vector3(rotated.x, 0.0, rotated.y).normalized()

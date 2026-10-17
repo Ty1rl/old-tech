@@ -127,5 +127,133 @@ func run() -> void:
 	director.reset_state()
 	expect(director.enemies.size() == 1 and director.enemies[0].kind == &"target", "reset_state() clears mixed group and restores single target")
 
+	# 9. Round C: Crowd control (shove knockback + stagger suppression + recovery) on swarmer
+	director.clear()
+	player.reset_state()
+	player.position = Vector3.ZERO
+	var shoved_swarmer = director.spawn(&"swarmer", Vector3(0.0, 0.0, -1.0))
+	shoved_swarmer.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
+	expect(shoved_swarmer.is_staggered() and is_equal_approx(shoved_swarmer.stagger_timer, float(Tuning.CONTROL.stagger)), "apply_control sets stagger_timer on swarmer")
+	director.step(0.2, player)
+	expect(shoved_swarmer.position.z < -2.2, "Strong shove visibly displaces swarmer away from player")
+	expect(is_equal_approx(player.health, 100.0), "Staggered enemy suppresses contact attack even when starting in contact range")
+
+	# Place staggered swarmer right on top of player while still staggered: still no contact damage
+	shoved_swarmer.position = Vector3(0.0, 0.0, -0.5)
+	shoved_swarmer.knockback_vel = Vector3.ZERO
+	director.step(0.2, player)
+	expect(shoved_swarmer.is_staggered() and is_equal_approx(player.health, 100.0), "Staggered swarmer does not deal contact damage while stagger_timer > 0")
+
+	# Advance past remaining stagger (0.25s left) so swarmer recovers and resumes AI + contact attack
+	director.step(0.4, player)
+	expect(not shoved_swarmer.is_staggered() and is_equal_approx(player.health, 95.0), "Recovered swarmer resumes normal AI and contact attack after stagger expires")
+
+	# 10. Round C: Brute knockback & stagger resistance + Target anchored feedback
+	director.clear()
+	var ctrl_swarmer = director.spawn(&"swarmer", Vector3(-3.0, 0.0, -4.0))
+	var ctrl_brute = director.spawn(&"brute", Vector3(0.0, 0.0, -4.0))
+	var ctrl_target = director.spawn(&"target", Vector3(3.0, 0.0, -4.0))
+	var shove_dir := Vector3(0.0, 0.0, -1.0)
+	ctrl_swarmer.apply_control(shove_dir, float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
+	ctrl_brute.apply_control(shove_dir, float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
+	ctrl_target.apply_control(shove_dir, float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
+
+	var resist := float(Tuning.CONTROL.brute_resistance)
+	expect(is_equal_approx(ctrl_brute.stagger_timer, float(Tuning.CONTROL.stagger) * resist), "Brute stagger duration scales by Tuning.CONTROL.brute_resistance (0.25)")
+	expect(is_equal_approx(ctrl_brute.knockback_vel.length(), ctrl_swarmer.knockback_vel.length() * resist), "Brute knockback impulse scales by Tuning.CONTROL.brute_resistance (0.25)")
+	expect(not ctrl_target.is_staggered() and is_equal_approx(ctrl_target.knockback_vel.length(), 0.0) and ctrl_target.feedback_label.text == "ANCHORED", "Target remains unstaggered with zero knockback velocity and shows ANCHORED feedback")
+
+	director.step(0.15, player)
+	var swarmer_disp := absf(ctrl_swarmer.position.z - (-4.0))
+	var brute_disp := absf(ctrl_brute.position.z - (-4.0))
+	var target_disp: float = ctrl_target.position.distance_to(Vector3(3.0, 0.0, -4.0))
+	expect(is_equal_approx(brute_disp, swarmer_disp * resist), "Brute displacement over world_delta scales by brute_resistance")
+	expect(target_disp < 0.0001, "Stationary target stays anchored in place after step()")
+
+	# 11. Round C: Frame-delta and time-slow consistency for knockback + stagger recovery
+	director.clear()
+	player.reset_state()
+	player.position = Vector3(0.0, 0.0, 10.0)
+	var enemy_coarse = director.spawn(&"swarmer", Vector3(-2.0, 0.0, 2.0))
+	enemy_coarse.apply_control(Vector3(0.0, 0.0, -1.0), 10.0, 0.3)
+	for i in range(5):
+		enemy_coarse.step_enemy(0.1, player, [])
+	var coarse_pos: Vector3 = enemy_coarse.position
+	var coarse_vel: Vector3 = enemy_coarse.knockback_vel
+
+	director.clear()
+	var enemy_fine = director.spawn(&"swarmer", Vector3(-2.0, 0.0, 2.0))
+	enemy_fine.apply_control(Vector3(0.0, 0.0, -1.0), 10.0, 0.3)
+	for i in range(50):
+		enemy_fine.step_enemy(0.01, player, [])
+	expect(coarse_pos.distance_to(enemy_fine.position) < 0.001 and coarse_vel.distance_to(enemy_fine.knockback_vel) < 0.001, "Knockback drag and mid-tick stagger recovery are frame-delta invariant")
+
+	# 12. Round C: Cover-safe knockback (no tunneling or overlapping Cover.RECTANGLES)
+	director.clear()
+	# Left cover rectangle is Rect2(-6, -6, 2, 3) -> x in [-6, -4], z in [-6, -3]
+	var kb_cover_enemy = director.spawn(&"swarmer", Vector3(-5.0, 0.0, -2.2))
+	kb_cover_enemy.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
+	var crossed_or_overlapped := false
+	for i in range(15):
+		kb_cover_enemy.step_enemy(0.04, player, [])
+		if kb_cover_enemy.overlaps_cover(-0.005) or kb_cover_enemy.position.z < -3.0:
+			crossed_or_overlapped = true
+	expect(not crossed_or_overlapped, "Shoved enemy stops/slides against cover boundary without crossing or overlapping cover")
+
+	# 13. Round C: Cover-safe AI navigation around cover box without getting stuck
+	director.clear()
+	player.reset_state()
+	player.position = Vector3(-5.0, 0.0, 0.0) # Directly Across Rect2(-6, -6, 2, 3) from (-5, 0, -7.2)
+	var nav_swarmer = director.spawn(&"swarmer", Vector3(-5.0, 0.0, -7.2))
+	var nav_overlapped := false
+	var reached_player := false
+	for i in range(90):
+		director.step(0.05, player)
+		if nav_swarmer.overlaps_cover(-0.005):
+			nav_overlapped = true
+		if player.health < 100.0:
+			reached_player = true
+			break
+	expect(not nav_overlapped and reached_player, "Enemy spawned behind cover steers around the cover box and reaches player without overlapping cover")
+
+	# 14. Round C: Bounded encounter schedule, live cap (<= 6), victory, defeat stop-spawning, and sandbox reset
+	director.clear()
+	player.reset_state()
+	expect(director.status_text() == "Sandbox", "Default director status_text() is Sandbox")
+	director.start_encounter()
+	expect(director.encounter_active and director.status_text().begins_with("Encounter Wave 1/"), "start_encounter() enters running state and updates status_text()")
+	expect(director.enemies.size() > 0 and director.enemies.size() <= int(Tuning.ENCOUNTER.max_enemies), "Wave 0 spawns initial enemies within max_enemies cap")
+
+	# Step across multiple 12s wave intervals without killing enemies to verify live cap <= 6
+	var cap_exceeded := false
+	for i in range(6):
+		director.step(12.0, player)
+		if director.enemies.size() > int(Tuning.ENCOUNTER.max_enemies):
+			cap_exceeded = true
+	expect(not cap_exceeded and director.enemies.size() == int(Tuning.ENCOUNTER.max_enemies), "Encounter wave spawns never exceed Tuning.ENCOUNTER.max_enemies (6)")
+
+	# Advance past full 75s duration, then kill all live enemies -> Victory
+	director.step(10.0, player)
+	expect(director.encounter_elapsed >= float(Tuning.ENCOUNTER.duration) and director.encounter_state == &"running", "Encounter remains running at 75s while live enemies remain")
+	for e in director.enemies:
+		e.hit(999.0, e.position - e.facing)
+	director.step(0.05, player)
+	expect(director.encounter_state == &"victory" and director.status_text().contains("Victory"), "Encounter transitions to Victory when 75s schedule finishes and all live enemies are gone")
+
+	# Defeat condition: at 0 player HP, stop spawning and report reset hint
+	player.reset_state()
+	director.start_encounter()
+	for e in director.enemies:
+		e.hit(999.0, e.position - e.facing)
+	director.step(0.05, player)
+	expect(director.enemies.is_empty(), "Cleared wave 0 enemies before testing defeat")
+	player.health = 0.0
+	director.step(15.0, player) # Crosses 12s wave boundary while player is at 0 HP
+	expect(director.encounter_state == &"defeat" and director.enemies.is_empty() and director.status_text().contains("R"), "At 0 player HP, encounter stops spawning new waves and reports reset hint")
+
+	# Reset returns to Sandbox
+	director.reset_state()
+	expect(director.status_text() == "Sandbox" and director.enemies.size() == 1 and director.enemies[0].kind == &"target", "reset_state() cancels encounter and returns status_text() to Sandbox")
+
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

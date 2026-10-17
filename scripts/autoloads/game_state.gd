@@ -61,10 +61,12 @@ func open_menu() -> bool:
 
 
 func pause() -> bool:
+	SceneManager.push_popup("PauseMenu")
 	return change_state(State.PAUSED)
 
 
 func resume() -> bool:
+	SceneManager.close_popup("PauseMenu")
 	return change_state(State.PLAYING)
 
 

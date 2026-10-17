@@ -59,16 +59,26 @@ func trace(panel: Control, points: Array[Vector2] = [], direct: bool = false) ->
 	button(panel, path[-1], false, direct)
 
 
-func key(code: Key, echo: bool = false) -> void:
+func key(code: Key, echo: bool = false, pressed: bool = true) -> void:
 	var event := InputEventKey.new()
 	event.keycode = code
 	event.physical_keycode = code
-	event.pressed = true
+	event.pressed = pressed
 	event.echo = echo
 	root.push_input(event, true)
 
 
+func has_button_child(node: Node) -> bool:
+	if node is Button:
+		return true
+	for child in node.get_children():
+		if has_button_child(child):
+			return true
+	return false
+
+
 func run() -> void:
+	root.size = Vector2i(960, 600)
 	var arena = load("res://scenes/prototype/arena.tscn").instantiate()
 	root.add_child(arena)
 	current_scene = arena
@@ -78,35 +88,78 @@ func run() -> void:
 	var gear: RefCounted = arena.equipment
 	var scenes := root.get_node("SceneManager")
 	var state := root.get_node("GameState")
+
+	# 1. Compact, offset layout at 960x600 with no Resume button or opaque full-screen dim
 	gear.spend(&"ring", gear.capacity(&"ring"))
 	var panel: Control = await open(scenes, gear, &"ring")
 	expect(not paused and gear.repairing == &"ring", "Setup acquires repair session before ready without pausing world")
-	expect(panel.progress.text.contains("0 / 4") and panel.heading.text.contains("Ring"), "UI identifies item, persistent stage and capacity")
+	expect(panel.progress.text.contains("0 / 4") and panel.heading.text.contains("Ring"), "UI identifies item, derived stage and capacity")
+	expect(not has_button_child(panel), "Repair panel has no Resume/Close button ceremony")
+	var view_rect := Rect2(Vector2.ZERO, Vector2(960, 600))
+	var panel_rect: Rect2 = panel.panel.get_global_rect()
+	expect(view_rect.encloses(panel_rect) and panel_rect.get_area() < view_rect.get_area() * 0.25,
+		"Repair panel is compact and fits cleanly inside 960x600")
+	expect(not panel_rect.has_point(Vector2(480, 300)),
+		"Repair panel is offset so player surroundings at viewport center remain visible")
+	var holder_dim_alpha := 0.0
+	for sibling in panel.get_parent().get_children():
+		if sibling is ColorRect:
+			holder_dim_alpha = sibling.color.a
+	expect(holder_dim_alpha <= 0.15, "Popup backdrop is translucent rather than a dark full-screen overlay")
+
+	# 2. Empty tool previews full missing path (0 solved) and traces first quarter section
+	var full_len: float = panel.path_length(panel.full_path)
+	var q0_len: float = panel.path_length(panel.route)
+	expect(panel.solved_path.is_empty() and is_equal_approx(panel.path_length(panel.missing_path), full_len),
+		"Empty tool has zero solved path and full missing path")
+
+	# 3. Ordered path validation on first quarter
 	button(panel, Vector2(300, 20), true)
 	button(panel, Vector2(300, 20), false)
-	expect(not panel.dragging and gear.stage(&"ring") == 0, "Starting outside contact one does not award repair")
+	expect(not panel.dragging and gear.stage(&"ring") == 0, "Starting outside contact 1 does not award repair")
 	trace(panel, [panel.route[0]])
-	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Short click fails without penalty or free capacity")
+	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Short click at contact 1 fails without free capacity")
 	trace(panel, [panel.route[0], panel.route[-1]])
-	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Sparse diagonal shortcut cannot skip route bends")
+	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Sparse diagonal shortcut cannot skip channel bends")
+	trace(panel, [panel.route[0], panel.route[1]])
+	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Releasing early at an intermediate contact fails")
 	button(panel, panel.route[0], true)
 	for point in panel.route.slice(1):
 		motion(panel, point)
-	expect(gear.remaining(&"ring") == 0 and panel.dragging, "Finishing motion alone cannot complete a section")
+	expect(gear.remaining(&"ring") == 0 and panel.dragging, "Finishing motion alone cannot complete a checkpoint")
 	button(panel, panel.route[-1], false)
-	expect(gear.stage(&"ring") == 1 and gear.remaining(&"ring") == gear.capacity(&"ring") / 4.0, "One deliberate valid release restores a quarter and advances one stage")
+	expect(gear.stage(&"ring") == 1 and is_equal_approx(gear.remaining(&"ring"), gear.capacity(&"ring") / 4.0),
+		"Deliberate valid release at final contact restores first quarter and advances stage to 1")
 	button(panel, panel.route[-1], false)
 	expect(gear.stage(&"ring") == 1, "Duplicate release cannot repair the next section")
+
+	# 4. Hold-E flow: pressing E does NOT toggle/close; releasing E closes and preserves checkpoint
 	button(panel, panel.route[0], true)
 	motion(panel, panel.route[1])
-	key(KEY_E)
+	key(KEY_E, false, true)
+	key(KEY_E, true, true)
 	await frames()
-	expect(not scenes.has_popup(&"Repair") and gear.repairing == &"", "E closes repair and releases its session")
-	expect(gear.stage(&"ring") == 1 and gear.remaining(&"ring") == 8, "Closing mid-gesture preserves only completed stage and capacity")
+	expect(scenes.has_popup(&"Repair") and gear.repairing == &"ring",
+		"Holding/pressing E does not toggle-close the repair panel")
+	key(KEY_E, false, false)
+	await frames()
+	expect(not scenes.has_popup(&"Repair") and gear.repairing == &"",
+		"Releasing E closes repair panel and releases its session")
+	expect(gear.stage(&"ring") == 1 and gear.remaining(&"ring") == 8,
+		"Releasing E mid-gesture discards only unfinished trace and preserves completed checkpoint")
+
+	# 5. Reopening resumes from current condition (25% solved, 75% missing, stage 1 route)
 	panel = await open(scenes, gear, &"ring")
-	expect(panel.route[1] == panel.ROUTES[1][1] and not panel.dragging, "Reopening resumes completed stage with a fresh unfinished gesture")
+	expect(panel.route[1] == panel.ROUTES[1][1] and not panel.dragging,
+		"Reopening at 25% condition starts at quarter 2 route with a fresh gesture")
+	expect(is_equal_approx(panel.path_length(panel.solved_path), full_len * 0.25)
+		and is_equal_approx(panel.path_length(panel.missing_path), full_len * 0.75),
+		"UI previews 25% solved path and 75% missing path")
 	trace(panel)
-	expect(gear.stage(&"ring") == 2 and gear.remaining(&"ring") == 16, "Resumed next section continues prior progress")
+	expect(gear.stage(&"ring") == 2 and gear.remaining(&"ring") == 16,
+		"Second checkpoint restores capacity to 50% (16/32)")
+
+	# 6. WASD movement, PauseMenu interruption, focus loss, and lost button mask
 	var player: CharacterBody3D = arena.player
 	var origin: Vector3 = player.position
 	Input.action_press("move_right")
@@ -115,16 +168,21 @@ func run() -> void:
 		player.step(1.0 / float(Engine.physics_ticks_per_second), Vector3(10, 0, 0))
 	Input.action_release("move_right")
 	expect(player.position.x > origin.x + 0.5 and not paused, "WASD stays responsive while repair is open")
+
 	button(panel, panel.route[0], true)
 	motion(panel, panel.route[1])
 	state.pause()
-	expect(not panel.dragging and paused and scenes.has_popup(&"PauseMenu"), "Opening Pause above Repair cancels only unfinished gesture")
+	expect(not panel.dragging and paused and scenes.has_popup(&"PauseMenu"),
+		"Opening Pause above Repair cancels only unfinished gesture")
 	trace(panel, [], true)
-	expect(gear.stage(&"ring") == 2 and gear.remaining(&"ring") == 16, "Even direct synthetic board events cannot progress a paused repair")
+	expect(gear.stage(&"ring") == 2 and gear.remaining(&"ring") == 16,
+		"Even direct synthetic board events cannot progress a paused repair")
 	state.resume()
 	await frames()
 	trace(panel)
-	expect(gear.stage(&"ring") == 3 and gear.remaining(&"ring") == 24, "Fresh trace works after pause resume")
+	expect(gear.stage(&"ring") == 3 and gear.remaining(&"ring") == 24,
+		"Fresh trace works after pause resume and reaches 75% (24/32)")
+
 	scenes.push_popup(&"PauseMenu")
 	await frames()
 	expect(not paused, "A popup alone does not pause GameState")
@@ -132,26 +190,63 @@ func run() -> void:
 	expect(gear.stage(&"ring") == 3, "Pause popup above Repair blocks progress even when tree is unpaused")
 	scenes.close_popup(&"PauseMenu")
 	await frames()
+
 	button(panel, panel.route[0], true)
 	motion(panel, panel.route[1])
 	panel._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
-	expect(not panel.dragging and gear.stage(&"ring") == 3, "Focus loss discards current trace without erasing completed work")
+	expect(not panel.dragging and gear.stage(&"ring") == 3,
+		"Focus loss discards current trace without erasing completed checkpoints")
 	button(panel, panel.route[1], false)
+
 	button(panel, panel.route[0], true)
 	motion(panel, panel.route[1], false, false)
-	expect(not panel.dragging and gear.stage(&"ring") == 3, "Lost button mask releases trace without stuck input or progress loss")
+	expect(not panel.dragging and gear.stage(&"ring") == 3,
+		"Lost mouse button mask releases trace without stuck input or progress loss")
 	button(panel, panel.route[1], false)
-	trace(panel)
-	expect(gear.remaining(&"ring") == gear.capacity(&"ring") and gear.stage(&"ring") == 0, "Fourth section reaches full capacity and resets persistent stage")
-	expect(panel.progress.text.begins_with("Ready") and not panel.progress.text.contains("0 / 4"), "Full equipment shows Ready rather than a misleading zero-stage failure")
-	trace(panel)
-	expect(gear.remaining(&"ring") == gear.capacity(&"ring") and not panel.dragging, "Ready panel cannot overfill gear or accept further repair strokes")
-	key(KEY_E, true)
-	expect(scenes.has_popup(&"Repair"), "Key echo does not close repair")
-	key(KEY_ESCAPE)
-	await frames()
-	expect(not scenes.has_popup() and not paused and state.is_playing(), "Escape closes Repair without opening PauseMenu")
 
+	# 7. Escape cancels unfinished trace and closes Repair without opening PauseMenu
+	button(panel, panel.route[0], true)
+	motion(panel, panel.route[1])
+	key(KEY_ESCAPE, false, true)
+	await frames()
+	expect(not scenes.has_popup() and not paused and state.is_playing() and gear.remaining(&"ring") == 24,
+		"Escape cancels unfinished trace and closes Repair without opening PauseMenu")
+
+	# 8. Finishing full automatically closes Repair panel
+	panel = await open(scenes, gear, &"ring")
+	trace(panel)
+	await frames()
+	expect(gear.remaining(&"ring") == gear.capacity(&"ring") and gear.stage(&"ring") == 0
+		and gear.repairing == &"" and not scenes.has_popup(&"Repair"),
+		"Completing the final checkpoint reaches full capacity, resets stage to 0, and closes Repair")
+
+	# 9. Light wear vs heavy wear vs mid-quarter partial segment
+	gear.reset_state()
+	gear.spend(&"ring", 2.0) # 30/32 remaining (93.75% condition, light wear in quarter 4)
+	panel = await open(scenes, gear, &"ring")
+	var light_missing_len: float = panel.path_length(panel.missing_path)
+	var light_route_len: float = panel.path_length(panel.route)
+	expect(gear.stage(&"ring") == 3 and light_missing_len < full_len * 0.15 and light_route_len < q0_len * 0.5,
+		"Nearly-full tool previews mostly solved path and a short missing trace section")
+	trace(panel)
+	await frames()
+	expect(gear.remaining(&"ring") == 32.0 and not scenes.has_popup(&"Repair") and gear.repairing == &"",
+		"Tracing short missing section on lightly worn tool restores to full and closes panel")
+
+	gear.reset_state()
+	gear.spend(&"ring", 28.0) # 4/32 remaining (12.5% condition, heavy wear in quarter 1)
+	panel = await open(scenes, gear, &"ring")
+	var heavy_missing_len: float = panel.path_length(panel.missing_path)
+	var partial_q0_len: float = panel.path_length(panel.route)
+	expect(gear.stage(&"ring") == 0 and heavy_missing_len > full_len * 0.80 and is_equal_approx(partial_q0_len, q0_len * 0.5),
+		"Heavily worn tool at 12.5% has 87.5% missing path and traces only the missing half of quarter 1")
+	trace(panel)
+	expect(gear.remaining(&"ring") == 8.0 and gear.stage(&"ring") == 1 and scenes.has_popup(&"Repair"),
+		"Completing partial first quarter restores to 25% boundary (8/32) and keeps panel open for quarter 2")
+	scenes.close_popup(&"Repair")
+	await frames()
+
+	# 10. All four gear types (ring, beam/Flash, cone, clock) repair across all checkpoints and close on full
 	for tool: StringName in [&"ring", &"beam", &"cone", &"clock"]:
 		gear.reset_state()
 		gear.spend(tool, gear.capacity(tool))
@@ -160,35 +255,90 @@ func run() -> void:
 			expect(panel.heading.text.contains("Flash"), "Beam equipment ID is labeled Flash in repair UI")
 		for stage in range(4):
 			trace(panel)
-			expect(is_equal_approx(gear.remaining(tool), gear.capacity(tool) * float(stage + 1) / 4.0), "Same shared puzzle repairs %s section %d" % [tool, stage + 1])
-		expect(panel.progress.text.begins_with("Ready"), "Full %s reports Ready" % tool)
-		scenes.close_popup(&"Repair")
+			expect(is_equal_approx(gear.remaining(tool), gear.capacity(tool) * float(stage + 1) / 4.0),
+				"Shared puzzle repairs %s checkpoint %d" % [tool, stage + 1])
 		await frames()
+		expect(gear.is_full(tool) and not scenes.has_popup(&"Repair") and gear.repairing == &"",
+			"Finishing full on %s automatically closes panel and unlocks tool" % tool)
 
+	# Clock cannot power itself while repairing clock, but can slow time while repairing another tool
 	gear.reset_state()
-	gear.spend(&"ring", 24)
-	gear.spend(&"clock", 18)
+	gear.spend(&"clock", 12.0) # 12.0 remaining
+	gear.spend(&"ring", 16.0)  # 16.0 remaining
+	panel = await open(scenes, gear, &"clock")
+	player._step_slow(0.05, false)
+	player._step_slow(0.5, true)
+	expect(is_equal_approx(player.world_scale, 1.0) and is_equal_approx(gear.remaining(&"clock"), 12.0),
+		"Repairing clock cannot power slow-time on itself")
+	player._step_slow(0.05, false)
+	scenes.close_popup(&"Repair")
+	await frames()
 	panel = await open(scenes, gear, &"ring")
-	trace(panel)
+	player._step_slow(0.05, false)
+	player._step_slow(0.5, true)
+	expect(player.world_scale < 1.0 and gear.remaining(&"clock") < 12.0,
+		"Clock can slow world time while repairing another tool")
+	player._step_slow(0.05, false)
+	scenes.close_popup(&"Repair")
+	await frames()
+
+	# 11. Switching setup / stale panel token safety + Equipment.restore_state invalidation
+	gear.reset_state()
+	gear.spend(&"ring", 28)  # 4 remaining (stage 0)
+	gear.spend(&"clock", 20) # 4 remaining (stage 0)
+	panel = await open(scenes, gear, &"ring")
+	trace(panel) # ring -> 8 (stage 1)
 	panel.setup({"equipment": gear, "tool": &"clock"})
-	expect(gear.repairing == &"clock" and gear.stage(&"ring") == 1 and gear.remaining(&"ring") == 16, "Switching setup to clock keeps ring progress and replaces session")
-	trace(panel)
+	expect(gear.repairing == &"clock" and gear.stage(&"ring") == 1 and gear.remaining(&"ring") == 8,
+		"Switching setup to clock keeps ring checkpoint and replaces session")
+	trace(panel) # clock -> 6 (stage 1)
 	panel.setup({"equipment": gear, "tool": &"ring"})
-	expect(gear.stage(&"clock") == 1 and gear.remaining(&"clock") == 12 and panel.route[1] == panel.ROUTES[1][1], "Switching back resumes each item's own progress")
+	expect(gear.stage(&"clock") == 1 and gear.remaining(&"clock") == 6 and panel.route[1] == panel.ROUTES[1][1],
+		"Switching back to ring resumes ring at quarter 2 route")
+
 	var old_panel: Control = panel
 	var newer: Control = await open(scenes, gear, &"clock")
 	trace(old_panel, [], true)
-	expect(gear.stage(&"ring") == 1, "Covered stale panel cannot finish an obsolete session")
+	expect(gear.stage(&"ring") == 1 and gear.remaining(&"ring") == 8,
+		"Covered stale panel cannot finish an obsolete session")
 	old_panel.queue_free()
 	await frames()
 	expect(gear.repairing == &"clock", "Old panel exit token cannot cancel the newer clock repair")
 	trace(newer)
-	expect(gear.stage(&"clock") == 2 and gear.remaining(&"clock") == 18, "Newer session remains playable after old panel destruction")
+	expect(gear.stage(&"clock") == 2 and gear.remaining(&"clock") == 12,
+		"Newer session remains playable after old panel destruction")
 	scenes.close_popup(&"Repair")
 	await frames()
 
+	# Restore while panel is mid-trace invalidates session and emits no completion effects
 	gear.reset_state()
-	gear.spend(&"ring", 24)
+	gear.spend(&"ring", 24) # 8 remaining (stage 1)
+	var snap_at_8: Dictionary = gear.capture_state()
+	panel = await open(scenes, gear, &"ring")
+	trace(panel) # 16 remaining (stage 2)
+	button(panel, panel.route[0], true)
+	for point in panel.route.slice(1):
+		motion(panel, point)
+	expect(panel.dragging, "Panel is mid-trace at final contact before restore_state")
+	gear.restore_state(snap_at_8)
+	expect(gear.repairing == &"" and gear.remaining(&"ring") == 8.0 and gear.stage(&"ring") == 1,
+		"restore_state immediately clears active repair session and restores capacity to 8")
+	button(panel, panel.route[-1], false, true)
+	expect(gear.remaining(&"ring") == 8.0 and gear.stage(&"ring") == 1 and not panel.dragging,
+		"Releasing trace on restored/stale panel does not complete a step or grant capacity")
+	var post_restore_panel: Control = await open(scenes, gear, &"ring")
+	panel.queue_free()
+	await frames()
+	expect(gear.repairing == &"ring", "Freeing pre-restore panel does not cancel post-restore repair session")
+	trace(post_restore_panel)
+	expect(gear.remaining(&"ring") == 16.0 and gear.stage(&"ring") == 2,
+		"Post-restore repair panel completes checkpoint normally")
+	scenes.close_popup(&"Repair")
+	await frames()
+
+	# 12. Enemy contact damage interruption and arena reset
+	gear.reset_state()
+	gear.spend(&"ring", 32)
 	panel = await open(scenes, gear, &"ring")
 	trace(panel)
 	button(panel, panel.route[0], true)
@@ -199,13 +349,16 @@ func run() -> void:
 	var health_before: float = player.health
 	arena._physics_process(0.1)
 	await frames()
-	expect(player.health < health_before and not scenes.has_popup(&"Repair"), "Actual arena enemy contact damage closes the repair popup")
-	expect(gear.stage(&"ring") == 1 and gear.remaining(&"ring") == 16 and gear.repairing == &"", "Damage interruption preserves completed repair without leaving a lock")
+	expect(player.health < health_before and not scenes.has_popup(&"Repair"),
+		"Actual arena enemy contact damage closes the repair popup")
+	expect(gear.stage(&"ring") == 1 and gear.remaining(&"ring") == 8 and gear.repairing == &"",
+		"Damage interruption preserves completed checkpoint without leaving a lock")
 	arena.director.clear()
 	panel = await open(scenes, gear, &"ring")
 	arena.reset_arena()
 	await frames()
-	expect(not scenes.has_popup() and gear.stage(&"ring") == 0 and gear.remaining(&"ring") == gear.capacity(&"ring"), "Explicit arena reset closes repair and fully resets equipment")
+	expect(not scenes.has_popup() and gear.stage(&"ring") == 0 and gear.remaining(&"ring") == gear.capacity(&"ring"),
+		"Explicit arena reset closes repair and fully resets equipment")
 	expect(Engine.time_scale == 1.0, "Repair never changes global engine time or introduces its own clock")
 	arena.queue_free()
 	await frames()

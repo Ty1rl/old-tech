@@ -1,6 +1,9 @@
 extends Node3D
 
 const Tuning = preload("res://scenes/prototype/tuning.gd")
+const EquipmentScript = preload("res://scenes/prototype/equipment.gd")
+const CoverScript = preload("res://scenes/prototype/cover.gd")
+
 var equipment: RefCounted
 var cover: RefCounted
 
@@ -29,6 +32,8 @@ var _pending_beam_aim: Vector3 = Vector3.ZERO
 var cone_active: bool = false
 var cone_origin: Vector3 = Vector3.ZERO
 var cone_forward: Vector2 = Vector2(0.0, -1.0)
+var cone_burst_cooldown: float = 0.0
+var _cone_burst_pending: bool = false
 
 # Input & feedback state
 var mouse_held: bool = false
@@ -42,6 +47,10 @@ var _draw_instance: MeshInstance3D
 
 
 func _ready() -> void:
+	if equipment == null:
+		equipment = EquipmentScript.new()
+	if cover == null:
+		cover = CoverScript.new()
 	_setup_visuals()
 
 
@@ -113,12 +122,18 @@ func _on_left_press(player: Node3D, aim: Vector3) -> void:
 			if ring_phase != "idle":
 				last_feedback = "Ring in flight"
 				return
+			if not _can_use_tool(&"ring", 1.0):
+				last_feedback = "Ring empty — press E for Repair"
+				return
 			ring_drawing = true
 			preview_points.clear()
 			preview_length = 0.0
 			preview_points.append(_clamp_ring_point(aim, player))
 			last_feedback = "Drawing ring path"
 		2:
+			if not _can_use_tool(&"beam", 1.0):
+				last_feedback = "Flash empty — press E for Repair"
+				return
 			if beam_cooldown > 0.0 or _pending_beam:
 				last_feedback = "Flash cooling (%.2fs)" % beam_cooldown
 				return
@@ -130,7 +145,13 @@ func _on_left_press(player: Node3D, aim: Vector3) -> void:
 			_pending_beam_aim = aim
 			last_feedback = "Flash pulse"
 		3:
+			if not _can_use_tool(&"cone"):
+				cone_active = false
+				_cone_burst_pending = false
+				last_feedback = "Cone empty — press E for Repair"
+				return
 			cone_active = true
+			_cone_burst_pending = true
 			_update_cone_aim(player.global_position, aim)
 			last_feedback = "Cone active"
 
@@ -148,6 +169,12 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 				preview_length = 0.0
 				last_feedback = "Stroke too short (<%.1fm)" % float(Tuning.RING.minimum_length)
 				return
+			if not _can_use_tool(&"ring", 1.0):
+				preview_points.clear()
+				preview_length = 0.0
+				last_feedback = "Ring empty — press E for Repair"
+				return
+			_spend_tool(&"ring", 1.0)
 			ring_points = preview_points.duplicate()
 			preview_points.clear()
 			preview_length = 0.0
@@ -162,6 +189,7 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 		3:
 			if cone_active:
 				cone_active = false
+				_cone_burst_pending = false
 				last_feedback = "Cone released"
 
 
@@ -170,9 +198,13 @@ func step(delta: float, player: Node3D, aim: Vector3, enemies: Array) -> void:
 
 	if _pending_beam:
 		_pending_beam = false
-		_fire_beam(_pending_beam_origin, _pending_beam_aim, enemies)
+		if _can_use_tool(&"beam", 1.0):
+			_spend_tool(&"beam", 1.0)
+			_fire_beam(_pending_beam_origin, _pending_beam_aim, enemies)
+		else:
+			beam_cooldown = 0.0
+			last_feedback = "Flash empty — press E for Repair"
 	beam_cooldown = maxf(0.0, beam_cooldown - delta)
-
 	beam_flash_timer = maxf(0.0, beam_flash_timer - delta)
 
 	if ring_drawing and player != null and not require_fresh_press:
@@ -184,6 +216,8 @@ func step(delta: float, player: Node3D, aim: Vector3, enemies: Array) -> void:
 	if selected_tool == 3 and cone_active and player != null and not require_fresh_press:
 		_update_cone_aim(player.global_position, aim)
 		_step_cone(delta, player, enemies)
+	else:
+		cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - delta)
 
 	_rebuild_visuals(player, aim)
 
@@ -193,7 +227,10 @@ func cancel_input() -> void:
 	preview_points.clear()
 	preview_length = 0.0
 	cone_active = false
-	_pending_beam = false
+	_cone_burst_pending = false
+	if _pending_beam:
+		_pending_beam = false
+		beam_cooldown = 0.0
 	if mouse_held:
 		require_fresh_press = true
 	_rebuild_visuals(null, last_aim)
@@ -211,6 +248,8 @@ func reset_state() -> void:
 	ring_hit_ids.clear()
 	beam_cooldown = 0.0
 	beam_flash_timer = 0.0
+	cone_burst_cooldown = 0.0
+	_cone_burst_pending = false
 	last_feedback = "Ready"
 	_rebuild_visuals(null, last_aim)
 
@@ -223,11 +262,35 @@ func status_text() -> String:
 		ring_info = "draw %.1f/%.1fm (rem %.1fm)" % [preview_length, float(Tuning.RING.length), rem_len]
 	elif ring_phase != "idle":
 		ring_info = ring_phase
-	var flash_info := "ready" if beam_cooldown <= 0.0 else "%.2fs" % beam_cooldown
-	var cone_info := "HOLD" if cone_active else "idle"
+	elif not _can_use_tool(&"ring", 1.0):
+		ring_info = "REPAIR(E)"
+	var flash_info := "ready"
+	if not _can_use_tool(&"beam", 1.0):
+		flash_info = "REPAIR(E)"
+	elif beam_cooldown > 0.0:
+		flash_info = "%.2fs" % beam_cooldown
+	var cone_info := "idle"
+	if not _can_use_tool(&"cone"):
+		cone_info = "REPAIR(E)"
+	elif cone_active:
+		cone_info = "HOLD"
+	elif cone_burst_cooldown > 0.0:
+		cone_info = "burst %.1fs" % cone_burst_cooldown
 	return "Tool [%s] | Ring: %s | Flash: %s | Cone: %s\n%s" % [
 		names.get(selected_tool, "1:Ring"), ring_info, flash_info, cone_info, last_feedback
 	]
+
+
+func _can_use_tool(tool: StringName, amount: float = 0.000001) -> bool:
+	if equipment == null:
+		return true
+	return bool(equipment.can_use(tool, amount))
+
+
+func _spend_tool(tool: StringName, amount: float) -> float:
+	if equipment == null:
+		return amount
+	return float(equipment.spend(tool, amount))
 
 
 func _clamp_ring_point(raw_aim: Vector3, player: Node3D) -> Vector3:
@@ -275,6 +338,7 @@ func _add_ring_sample(raw_aim: Vector3, player: Node3D) -> void:
 func _step_ring(delta: float, player: Node3D, enemies: Array) -> void:
 	var time_left := delta
 	var guard := 0
+	var r_ring := float(Tuning.RING.radius)
 	while time_left > 1e-6 and ring_phase != "idle" and guard < 256:
 		guard += 1
 		if ring_phase == "outbound":
@@ -286,14 +350,33 @@ func _step_ring(delta: float, player: Node3D, enemies: Array) -> void:
 			var dist := to_t.length()
 			var speed := float(Tuning.RING.outbound_speed)
 			var step_d := speed * time_left
-			if dist <= step_d + 1e-5:
-				ring_pos = target
+			var prev := ring_pos
+			var reaching_start := dist <= step_d + 1e-5
+			var intended_end: Vector3
+			var intended_dist: float
+			if reaching_start:
+				intended_end = target
+				intended_dist = dist
+			else:
+				var move := (to_t / dist) * step_d
+				intended_end = ring_pos + Vector3(move.x, 0.0, move.y)
+				intended_dist = step_d
+			if cover != null:
+				var clip: Dictionary = cover.clip_segment(prev, intended_end, r_ring)
+				if bool(clip["blocked"]):
+					var frac: float = float(clip["fraction"])
+					var clip_pos: Vector3 = clip["position"]
+					ring_pos = Vector3(clip_pos.x, 0.0, clip_pos.z)
+					time_left -= ((intended_dist * frac) / speed) if speed > 0.0 else time_left
+					ring_phase = "return"
+					last_feedback = "Ring blocked by cover"
+					continue
+			ring_pos = intended_end
+			if reaching_start:
 				time_left -= (dist / speed) if speed > 0.0 else time_left
 				ring_phase = "stroke"
 				ring_stroke_index = 0
 			else:
-				var move := (to_t / dist) * step_d
-				ring_pos += Vector3(move.x, 0.0, move.y)
 				time_left = 0.0
 		elif ring_phase == "stroke":
 			if ring_stroke_index >= ring_points.size() - 1:
@@ -305,19 +388,43 @@ func _step_ring(delta: float, player: Node3D, enemies: Array) -> void:
 			var speed := float(Tuning.RING.stroke_speed)
 			var step_d := speed * time_left
 			var prev := ring_pos
-			if dist <= step_d + 1e-5:
-				ring_pos = seg_target
+			var reaching_waypoint := dist <= step_d + 1e-5
+			var intended_end: Vector3
+			var intended_dist: float
+			if reaching_waypoint:
+				intended_end = seg_target
+				intended_dist = dist
+			else:
+				var move := (to_s / dist) * step_d
+				intended_end = ring_pos + Vector3(move.x, 0.0, move.y)
+				intended_dist = step_d
+			if cover != null:
+				var clip: Dictionary = cover.clip_segment(prev, intended_end, r_ring)
+				if bool(clip["blocked"]):
+					var frac: float = float(clip["fraction"])
+					var clip_pos: Vector3 = clip["position"]
+					var reached_end := Vector3(clip_pos.x, 0.0, clip_pos.z)
+					ring_pos = reached_end
+					time_left -= ((intended_dist * frac) / speed) if speed > 0.0 else time_left
+					if frac > 0.0 and prev.distance_to(reached_end) > 1e-6:
+						_sweep_ring_segment(prev, reached_end, enemies)
+					ring_phase = "return"
+					if not last_feedback.begins_with("Ring hit"):
+						last_feedback = "Ring stopped by cover"
+					continue
+			ring_pos = intended_end
+			if reaching_waypoint:
 				time_left -= (dist / speed) if speed > 0.0 else time_left
 				_sweep_ring_segment(prev, ring_pos, enemies)
 				ring_stroke_index += 1
 				if ring_stroke_index >= ring_points.size() - 1:
 					ring_phase = "return"
 			else:
-				var move := (to_s / dist) * step_d
-				ring_pos += Vector3(move.x, 0.0, move.y)
 				time_left = 0.0
 				_sweep_ring_segment(prev, ring_pos, enemies)
 		elif ring_phase == "return":
+			# Prototype simplification: returning ring homes directly back to the player
+			# through cover without dealing damage.
 			var home := Vector3(player.global_position.x, 0.0, player.global_position.z)
 			var to_h := Vector2(home.x - ring_pos.x, home.z - ring_pos.z)
 			var dist := to_h.length()
@@ -365,11 +472,18 @@ func _sweep_ring_segment(seg_start: Vector3, seg_end: Vector3, enemies: Array) -
 		else:
 			dir = Vector2(0.0, 1.0)
 		var contact_xz := c + dir * r_enemy
+		var contact_world := Vector3(contact_xz.x, 0.0, contact_xz.y)
+		var ring_world := Vector3(ring_center.x, 0.0, ring_center.y)
+		var enemy_world := Vector3(c.x, 0.0, c.y)
+		if cover != null:
+			var los: Dictionary = cover.clip_segment(ring_world, enemy_world, 0.0)
+			if bool(los["blocked"]):
+				continue
 		hits_along_segment.append({
 			"t": entry_t,
 			"enemy": enemy_node,
 			"id": id,
-			"contact": Vector3(contact_xz.x, 0.0, contact_xz.y)
+			"contact": contact_world
 		})
 
 	hits_along_segment.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return float(x["t"]) < float(y["t"]))
@@ -385,39 +499,63 @@ func _sweep_ring_segment(seg_start: Vector3, seg_end: Vector3, enemies: Array) -
 
 func _fire_beam(origin_world: Vector3, aim_world: Vector3, enemies: Array) -> void:
 	var start_xz := Vector2(origin_world.x, origin_world.z)
+	var start_3d := Vector3(start_xz.x, 0.0, start_xz.y)
 	var dir := _aim_dir_xz(origin_world, aim_world)
 	var max_range := float(Tuning.BEAM.range)
-	var end_xz := start_xz + dir * max_range
+	var raw_end_xz := start_xz + dir * max_range
+	var raw_end_3d := Vector3(raw_end_xz.x, 0.0, raw_end_xz.y)
 	var r_beam := float(Tuning.BEAM.radius)
+
+	var wall_blocked := false
+	var wall_pos := raw_end_3d
+	var effective_range := max_range
+	if cover != null:
+		var clip: Dictionary = cover.clip_segment(start_3d, raw_end_3d, 0.0)
+		wall_blocked = bool(clip["blocked"])
+		wall_pos = clip["position"]
+		effective_range = max_range * float(clip["fraction"])
+	var end_xz := Vector2(wall_pos.x, wall_pos.z)
 
 	var best_t := 2.0
 	var best_enemy: Node3D = null
 	var best_contact := Vector3.ZERO
 
-	for enemy in enemies:
-		if not _is_live_enemy(enemy):
-			continue
-		var enemy_node := enemy as Node3D
-		var c := Vector2(enemy_node.global_position.x, enemy_node.global_position.z)
-		var r_enemy: float = float(enemy_node.get("radius"))
-		var t := _swept_circle_entry_t(start_xz, end_xz, c, r_beam + r_enemy)
-		if t >= 0.0 and t < best_t:
-			best_t = t
-			best_enemy = enemy_node
-			var beam_pt := start_xz + dir * (max_range * t)
+	if effective_range > 1e-6:
+		for enemy in enemies:
+			if not _is_live_enemy(enemy):
+				continue
+			var enemy_node := enemy as Node3D
+			var c := Vector2(enemy_node.global_position.x, enemy_node.global_position.z)
+			var r_enemy: float = float(enemy_node.get("radius"))
+			var t := _swept_circle_entry_t(start_xz, end_xz, c, r_beam + r_enemy)
+			if t < 0.0 or t >= best_t:
+				continue
+			var beam_pt := start_xz + dir * (effective_range * t)
 			var from_enemy := beam_pt - c
 			var c_dir := from_enemy.normalized() if from_enemy.length_squared() > 1e-6 else -dir
 			var contact_xz := c + c_dir * r_enemy
-			best_contact = Vector3(contact_xz.x, 0.0, contact_xz.y)
+			var contact_3d := Vector3(contact_xz.x, 0.0, contact_xz.y)
+			var enemy_3d := Vector3(c.x, 0.0, c.y)
+			if cover != null:
+				var los_center: Dictionary = cover.clip_segment(start_3d, enemy_3d, 0.0)
+				var los_contact: Dictionary = cover.clip_segment(start_3d, contact_3d, 0.0)
+				if bool(los_center["blocked"]) or bool(los_contact["blocked"]):
+					continue
+			best_t = t
+			best_enemy = enemy_node
+			best_contact = contact_3d
 
-	beam_start = Vector3(start_xz.x, 0.0, start_xz.y)
+	beam_start = start_3d
 	beam_flash_timer = 0.14
 	if best_enemy != null:
 		beam_end = best_contact
 		var res: Dictionary = best_enemy.call("hit", float(Tuning.BEAM.damage), best_contact)
 		_record_hit_feedback("Flash", res)
+	elif wall_blocked:
+		beam_end = Vector3(wall_pos.x, 0.0, wall_pos.z)
+		last_feedback = "Flash blocked by cover"
 	else:
-		beam_end = Vector3(end_xz.x, 0.0, end_xz.y)
+		beam_end = raw_end_3d
 		last_feedback = "Flash missed"
 
 
@@ -429,10 +567,38 @@ func _update_cone_aim(origin_world: Vector3, aim_world: Vector3) -> void:
 func _step_cone(delta: float, player: Node3D, enemies: Array) -> void:
 	if delta <= 0.0:
 		return
+	if not _can_use_tool(&"cone"):
+		cone_active = false
+		_cone_burst_pending = false
+		cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - delta)
+		last_feedback = "Cone empty — press E for Repair"
+		return
+
+	var do_burst := false
+	var burst_cost := float(Tuning.CONTROL.burst_cost)
+	if _cone_burst_pending:
+		_cone_burst_pending = false
+		if cone_burst_cooldown <= 0.0 and _can_use_tool(&"cone", burst_cost):
+			_spend_tool(&"cone", burst_cost)
+			cone_burst_cooldown = float(Tuning.CONTROL.burst_interval)
+			do_burst = true
+
+	cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - delta)
+
+	var actual_dt := _spend_tool(&"cone", delta)
+	if actual_dt <= 0.0 and not do_burst:
+		cone_active = false
+		last_feedback = "Cone empty — press E for Repair"
+		return
+
 	var p_xz := Vector2(player.global_position.x, player.global_position.z)
+	var origin_3d := Vector3(p_xz.x, 0.0, p_xz.y)
 	var max_r := float(Tuning.CONE.range)
 	var half_ang := float(Tuning.CONE.half_angle)
-	var amount := float(Tuning.CONE.damage_per_second) * delta
+	var amount := float(Tuning.CONE.damage_per_second) * actual_dt
+	var burst_impulse := float(Tuning.CONTROL.impulse)
+	var burst_stagger := float(Tuning.CONTROL.stagger)
+	var sustained_impulse := float(Tuning.CONTROL.sustained_push) * actual_dt
 	var hit_any := false
 	var any_armored := false
 	var total_dealt := 0.0
@@ -454,16 +620,39 @@ func _step_cone(delta: float, player: Node3D, enemies: Array) -> void:
 		var dir_from_enemy := (p_xz - c).normalized() if dist > 1e-5 else -cone_forward
 		var contact_xz := c + dir_from_enemy * r_enemy
 		var contact_world := Vector3(contact_xz.x, 0.0, contact_xz.y)
-		var res: Dictionary = enemy_node.call("hit", amount, contact_world)
-		var dealt := float(res.get("dealt", 0.0))
-		if dealt > 0.0:
-			hit_any = true
-			total_dealt += dealt
-			if bool(res.get("armored", false)):
-				any_armored = true
+		var enemy_world := Vector3(c.x, 0.0, c.y)
+		if cover != null:
+			var los: Dictionary = cover.clip_segment(origin_3d, enemy_world, 0.0)
+			if bool(los["blocked"]):
+				continue
+
+		var push_2d := to_enemy.normalized() if dist > 1e-5 else cone_forward
+		var push_dir := Vector3(push_2d.x, 0.0, push_2d.y)
+		if do_burst:
+			enemy_node.call("apply_control", push_dir, burst_impulse, burst_stagger)
+		elif sustained_impulse > 0.0:
+			enemy_node.call("apply_control", push_dir, sustained_impulse, 0.0)
+
+		if amount > 0.0:
+			var res: Dictionary = enemy_node.call("hit", amount, contact_world)
+			var dealt := float(res.get("dealt", 0.0))
+			if dealt > 0.0:
+				hit_any = true
+				total_dealt += dealt
+				if bool(res.get("armored", false)):
+					any_armored = true
 
 	if hit_any:
-		last_feedback = "Cone %.1f dmg%s" % [total_dealt, " (ARMORED)" if any_armored else ""]
+		var burst_tag := " BURST" if do_burst else ""
+		var armor_tag := " (ARMORED)" if any_armored else ""
+		last_feedback = "Cone%s %.1f dmg%s" % [burst_tag, total_dealt, armor_tag]
+	elif do_burst:
+		last_feedback = "Cone burst"
+
+	if not _can_use_tool(&"cone"):
+		cone_active = false
+		if not hit_any:
+			last_feedback = "Cone empty — press E for Repair"
 
 
 func _record_hit_feedback(tool_label: String, res: Dictionary) -> void:
@@ -586,8 +775,23 @@ func _draw_cone_sector(origin: Vector3, forward_xz: Vector2, max_range: float, h
 		var a1 := base_ang - half_angle + (2.0 * half_angle) * float(i + 1) / float(steps)
 		var p1 := Vector3(origin.x + cos(a0) * max_range, origin.y, origin.z + sin(a0) * max_range)
 		var p2 := Vector3(origin.x + cos(a1) * max_range, origin.y, origin.z + sin(a1) * max_range)
-		_draw_mesh.surface_set_color(col)
-		_draw_mesh.surface_add_vertex(origin)
-		_draw_mesh.surface_add_vertex(p1)
-		_draw_mesh.surface_add_vertex(p2)
+		parent_cone_vertex(origin, p1, p2, col)
 	_draw_mesh.surface_end()
+
+
+func parent_cone_vertex(origin: Vector3, p1: Vector3, p2: Vector3, col: Color) -> void:
+	var end1 := p1
+	var end2 := p2
+	if cover != null:
+		var c1: Dictionary = cover.clip_segment(Vector3(origin.x, 0.0, origin.z), Vector3(p1.x, 0.0, p1.z), 0.0)
+		var c2: Dictionary = cover.clip_segment(Vector3(origin.x, 0.0, origin.z), Vector3(p2.x, 0.0, p2.z), 0.0)
+		if bool(c1["blocked"]):
+			var pos1: Vector3 = c1["position"]
+			end1 = Vector3(pos1.x, origin.y, pos1.z)
+		if bool(c2["blocked"]):
+			var pos2: Vector3 = c2["position"]
+			end2 = Vector3(pos2.x, origin.y, pos2.z)
+	_draw_mesh.surface_set_color(col)
+	_draw_mesh.surface_add_vertex(origin)
+	_draw_mesh.surface_add_vertex(end1)
+	_draw_mesh.surface_add_vertex(end2)

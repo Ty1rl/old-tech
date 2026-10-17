@@ -7,7 +7,8 @@ signal popup_closed(key: StringName)
 # &"scene_name": "res://path/to/scene_name.tscn",
 const SCENES: Dictionary[StringName, String] = {
 	&"Main": "uid://dc1k8c1u03wl2",
-	&"Game": "uid://b3ilviafr4x4r"
+	&"Game": "uid://b3ilviafr4x4r",
+	&"Prototype": "res://scenes/prototype/arena.tscn"
 }
 
 # Scenes shown on top of everything.

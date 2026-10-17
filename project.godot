@@ -56,7 +56,10 @@ move_right={
 
 [physics]
 
+common/physics_ticks_per_second=30
+common/max_physics_steps_per_frame=4
 3d/physics_engine="Jolt Physics"
+common/physics_interpolation=true
 
 [rendering]
 

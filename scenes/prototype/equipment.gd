@@ -37,7 +37,7 @@ func is_full(tool: StringName) -> bool:
 
 
 func can_use(tool: StringName, amount: float = EPS) -> bool:
-	return repairing != tool and amount > 0.0 and remaining(tool) + EPS >= amount
+	return repairing != tool and amount > 0.0 and remaining(tool) > 0.0 and remaining(tool) + EPS >= amount
 
 
 # Returns actual capacity spent. Discrete shots must first call can_use(tool, 1).

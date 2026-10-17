@@ -27,8 +27,8 @@ func _unhandled_input(_event: InputEvent) -> void:
 	pass
 
 
-func step(delta: float, aim: Vector3) -> void:
-	_step_slow(delta, Input.is_physical_key_pressed(KEY_SPACE))
+func step(delta: float, aim: Vector3, slow_held: Variant = null) -> void:
+	_step_slow(delta, Input.is_physical_key_pressed(KEY_SPACE) if slow_held == null else bool(slow_held))
 	_input_dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	speed = Tuning.PLAYER.speed
 	_update_velocity(delta)
@@ -101,10 +101,25 @@ func status_text() -> String:
 	if equipment != null and equipment.repairing == &"clock":
 		hint = "clock repair; slow disabled"
 	elif slow_charge <= 0.0:
-		hint = "empty; T to repair clock"
+		hint = "empty; 4 then hold E to repair clock"
 	elif _slow_release_required:
 		hint = "release Space to re-arm"
 	elif _slow_held:
-		hint = "slowing enemies"
+		hint = "slowing world"
 	var capacity: float = equipment.capacity(&"clock") if equipment != null else 0.0
 	return "Slow %.1f / %.1fs | %s" % [slow_charge, capacity, hint]
+
+
+func capture_state() -> Dictionary:
+	return {"position": position, "velocity": velocity, "health": health,
+		"facing": model.basis if is_instance_valid(model) else Basis.IDENTITY}
+
+
+func restore_state(data: Dictionary) -> void:
+	reset_input()
+	position = data.position
+	velocity = data.velocity
+	health = float(data.health)
+	if is_instance_valid(model):
+		model.basis = data.facing
+	reset_physics_interpolation()

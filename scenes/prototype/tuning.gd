@@ -5,8 +5,9 @@ const PLAYER = {"speed": 6.0, "health": 100.0}
 const SLOW = {"scale": 0.18, "drain": 1.0}
 const RING = {"range": 14.0, "length": 22.0, "minimum_length": 0.6,
 	"sample_spacing": 0.18, "outbound_speed": 24.0, "stroke_speed": 38.0,
-	"return_speed": 28.0, "radius": 0.4, "damage": 36.0}
-const BEAM = {"range": 18.0, "radius": 0.35, "damage": 70.0, "cooldown": 0.8}
+	"return_speed": 28.0, "radius": 0.4, "damage": 36.0, "arc_height": 3.2}
+const BEAM = {"range": 35.0, "radius": 0.35, "min_damage": 30.0, "max_damage": 100.0,
+	"charge_time": 0.9, "speed": 42.0, "cooldown": 0.25, "max_pulses": 8}
 const CONE = {"range": 5.0, "half_angle": 0.65, "damage_per_second": 16.0}
 const ENEMIES = {
 	"target": {"health": 100.0, "speed": 0.0, "radius": 0.7, "damage": 0.0},
@@ -26,6 +27,9 @@ const GEAR = {
 	"clock": {"capacity": 24.0, "unit": "seconds"},
 }
 const REPAIR_STEPS = 4
-const CONTROL = {"burst_interval": 1.5, "burst_cost": 1.5, "impulse": 13.0, "stagger": 0.65,
-	"sustained_push": 5.0, "drag": 5.0, "brute_resistance": 0.25}
+const CONTROL = {"pulse_interval": 1.2, "pulse_cost": 1.5, "pulse_impulse": 22.0,
+	"pulse_stagger": 0.85, "stagger": 0.85, "sustained_push": 5.0, "drag": 4.0,
+	"brute_resistance": 0.4, "brute_stagger_resistance": 0.8}
+# Costs use real elapsed inspection time and actual seconds rewound.
+const REWIND = {"browse_drain": 0.2, "jump_cost": 1.0, "scroll_step": 0.25}
 const ENCOUNTER = {"duration": 75.0, "interval": 12.0, "max_enemies": 6}

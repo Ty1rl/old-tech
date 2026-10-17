@@ -136,17 +136,23 @@ func run() -> void:
 	await physics_frame
 	await physics_frame
 	arena.set_physics_process(false)
+	var repair_key := InputEventKey.new()
+	repair_key.physical_keycode = KEY_E
+	repair_key.pressed = true
+	arena.weapons.select_tool(4)
 	arena.equipment.spend(&"clock", 24)
-	arena._toggle_repair(&"clock")
+	arena._unhandled_input(repair_key)
 	expect(not paused and root.get_node("SceneManager").has_popup(&"Repair"), "Repair popup opens without pausing")
 	expect(arena.equipment.repairing == &"clock", "Empty clock can open its own repair panel")
 	arena.equipment.complete_step(&"clock")
-	arena._toggle_repair(&"clock")
+	repair_key.pressed = false
+	arena._input(repair_key)
 	await process_frame
 	await process_frame
 	expect(arena.equipment.repairing == &"" and arena.equipment.stage(&"clock") == 1,
 		"Closing popup releases repair lock and preserves completed stage")
-	arena._toggle_repair(&"clock")
+	repair_key.pressed = true
+	arena._unhandled_input(repair_key)
 	expect(arena.equipment.stage(&"clock") == 1 and arena.equipment.remaining(&"clock") == 6,
 		"Reopened popup resumes previous progress with restored capacity intact")
 	arena.reset_arena()

@@ -108,7 +108,7 @@ func run() -> void:
 	var cone_cap: float = float(Tuning.GEAR.cone.capacity)
 	var clock_cap: float = float(Tuning.GEAR.clock.capacity)
 	var steps: int = int(Tuning.REPAIR_STEPS)
-	var burst_cost: float = float(Tuning.CONTROL.burst_cost)
+	var burst_cost: float = float(Tuning.CONTROL.pulse_cost)
 	var min_ring_len: float = float(Tuning.RING.minimum_length)
 
 	# 1. Shared equipment binding & invalid/cancelled stroke costs
@@ -180,13 +180,13 @@ func run() -> void:
 	weapons.select_tool(2)
 	weapons.handle_event(mouse_button(true), player, target.position)
 	weapons.handle_event(mouse_button(false), player, target.position)
-	weapon_tick(0.05, target.position)
-	expect(is_equal_approx(gear.remaining(&"beam"), beam_cap - 1.0) and is_equal_approx(target.health, float(Tuning.ENEMIES.target.health) - float(Tuning.BEAM.damage)),
+	weapon_tick(0.12, target.position)
+	expect(is_equal_approx(gear.remaining(&"beam"), beam_cap - 1.0) and is_equal_approx(target.health, float(Tuning.ENEMIES.target.health) - float(Tuning.BEAM.min_damage)),
 		"Valid beam shot spends 1 shot unit and damages real target")
 	# Click during cooldown does not spend
 	weapons.handle_event(mouse_button(true), player, target.position)
 	weapons.handle_event(mouse_button(false), player, target.position)
-	weapon_tick(0.05, target.position)
+	weapon_tick(0.12, target.position)
 	expect(is_equal_approx(gear.remaining(&"beam"), beam_cap - 1.0),
 		"Beam click during cooldown does not spend shot capacity")
 	weapon_tick(float(Tuning.BEAM.cooldown), target.position)
@@ -270,7 +270,7 @@ func run() -> void:
 	weapons.select_tool(2)
 	weapons.handle_event(mouse_button(true), player, target.position)
 	weapons.handle_event(mouse_button(false), player, target.position)
-	weapon_tick(0.05, target.position)
+	weapon_tick(0.12, target.position)
 	expect(is_equal_approx(gear.remaining(&"beam"), beam_cap / float(steps) - 1.0) and target.health < float(Tuning.ENEMIES.target.health),
 		"Repaired beam fires and damages target enemy")
 
@@ -309,7 +309,9 @@ func run() -> void:
 	board_button(panel, panel.route[0], true)
 	board_motion(panel, panel.route[1], true)
 	expect(panel.dragging, "Second gesture is in progress before closing popup")
-	root.push_input(key_event(KEY_E), true)
+	var release_e := key_event(KEY_E)
+	release_e.pressed = false
+	root.push_input(release_e, true)
 	await frames()
 	expect(not scenes.has_popup(&"Repair") and gear.repairing == &"" and gear.stage(&"ring") == 1 and is_equal_approx(gear.remaining(&"ring"), ring_cap / float(steps)),
 		"Closing popup mid-trace preserves completed steps and releases repair lock")
@@ -432,7 +434,7 @@ func run() -> void:
 	gear.spend(&"clock", 8.0)
 	panel = await open_repair(scenes, gear, &"ring")
 	trace_section(panel)
-	expect(gear.stage(&"ring") == 1 and scenes.has_popup(&"Repair"), "Dirty repair state prepared before R reset")
+	expect(gear.stage(&"ring") == 2 and scenes.has_popup(&"Repair"), "Dirty repair state prepared before R reset")
 	scenes.close_popup(&"Repair")
 	await frames()
 

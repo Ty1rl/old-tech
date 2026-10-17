@@ -130,7 +130,7 @@ func run() -> void:
 		capture_state["calls"] = int(capture_state["calls"]) + 1
 		return {"call": int(capture_state["calls"])}
 	)
-	expect(int(capture_state["calls"]) == 1 and history.snapshot_count == 1 and is_equal_approx(history.available_seconds, 0.05),
+	expect(int(capture_state["calls"]) == 1 and history.snapshot_count == 1 and is_equal_approx(history.available_seconds, 0.0),
 		"Reaching 0.05s triggers exactly one snapshot capture")
 
 	# Stalled frame (e.g. delta = 1.5s) captures at most once (no unbounded catch-up loop)
@@ -169,12 +169,12 @@ func run() -> void:
 		history.record(1.0, func() -> Dictionary:
 			return {"sec": sec}
 		)
-	expect(history.snapshot_count == 5 and is_equal_approx(history.available_seconds, 5.0),
+	expect(history.snapshot_count == 6 and is_equal_approx(history.available_seconds, 5.0),
 		"5-second time cap evicts snapshots older than 5.0s even when count < 100")
 	history.begin_inspection({"sec": 99})
 	var oldest_irregular: Dictionary = history.seek(10.0)
-	expect(int(oldest_irregular.get("sec", -1)) == 3,
-		"Oldest retained snapshot after 7x1.0s steps + present is sec=3 (5.0s ago)")
+	expect(int(oldest_irregular.get("sec", -1)) == 2,
+		"Oldest retained snapshot after 7x1.0s steps + present is sec=2 (5.0s ago)")
 	history.cancel_inspection()
 
 	# 4. 100-snapshot count cap, 5.0s window at 20 Hz, and begin_inspection eviction
@@ -184,8 +184,8 @@ func run() -> void:
 		history.record(0.05, func() -> Dictionary:
 			return {"tick": step_id, "time": float(step_id) * 0.05}
 		)
-	expect(history.snapshot_count == 100 and is_equal_approx(history.available_seconds, 5.0),
-		"100 samples at 0.05s fill max 100 snapshots and 5.0 available_seconds")
+	expect(history.snapshot_count == 100 and is_equal_approx(history.available_seconds, 4.95),
+		"100 samples at 0.05s fill max 100 snapshots and 4.95 available_seconds")
 
 	# Recording while inspecting must be ignored
 	history.begin_inspection({"tick": 1000, "present": true})
@@ -204,18 +204,18 @@ func run() -> void:
 	expect(bool(at_now.get("present", false)) and int(at_now.get("tick", -1)) == 1000 and is_equal_approx(history.selected_seconds_ago, 0.0),
 		"seek(0.0) always returns exact original present")
 	var one_step_back: Dictionary = history.seek(0.05)
-	expect(int(one_step_back.get("tick", -1)) == 99 and is_equal_approx(history.selected_seconds_ago, 0.05),
-		"seek(0.05) selects the most recent recorded snapshot (tick 99)")
+	expect(int(one_step_back.get("tick", -1)) == 98 and is_equal_approx(history.selected_seconds_ago, 0.05),
+		"seek(0.05) selects the most recent recorded snapshot (tick 98)")
 	var two_sec_back: Dictionary = history.seek(2.0)
-	expect(int(two_sec_back.get("tick", -1)) == 60 and is_equal_approx(history.selected_seconds_ago, 2.0),
-		"seek(2.0) selects snapshot 2.0s ago (tick 60)")
+	expect(int(two_sec_back.get("tick", -1)) == 59 and is_equal_approx(history.selected_seconds_ago, 2.0),
+		"seek(2.0) selects snapshot 2.0s ago (tick 59)")
 	var oldest_retained: Dictionary = history.seek(99.0)
-	expect(int(oldest_retained.get("tick", -1)) == 1 and is_equal_approx(history.selected_seconds_ago, 4.95),
-		"seek past available_seconds clamps to oldest retained snapshot (tick 1 at 4.95s ago)")
+	expect(int(oldest_retained.get("tick", -1)) == 1 and is_equal_approx(history.selected_seconds_ago, 4.9),
+		"seek past available_seconds clamps to oldest retained snapshot (tick 1 at 4.9s ago)")
 	# Scrub forward again after scrubbing to oldest
 	var forward_half_sec: Dictionary = history.seek(0.5)
-	expect(int(forward_half_sec.get("tick", -1)) == 90 and is_equal_approx(history.selected_seconds_ago, 0.5),
-		"Scrubbing back to oldest and forward to 0.5s ago preserves future snapshots (tick 90)")
+	expect(int(forward_half_sec.get("tick", -1)) == 89 and is_equal_approx(history.selected_seconds_ago, 0.5),
+		"Scrubbing back to oldest and forward to 0.5s ago preserves future snapshots (tick 89)")
 	var back_to_now: Dictionary = history.seek(0.0)
 	expect(int(back_to_now.get("tick", -1)) == 1000 and is_equal_approx(history.selected_seconds_ago, 0.0),
 		"Scrubbing back to 0.0 returns exact original present")
@@ -227,42 +227,42 @@ func run() -> void:
 		"cancel_inspection exits inspection and resets selected_seconds_ago to 0")
 	expect(int(cancelled.get("tick", -1)) == 1000 and bool(cancelled.get("present", false)),
 		"cancel_inspection returns exact original present even when seek was at 3.0s ago")
-	expect(history.snapshot_count == 100 and is_equal_approx(history.available_seconds, 5.0),
-		"cancel_inspection retains full original 100-snapshot / 5.0s timeline")
+	expect(history.snapshot_count == 100 and is_equal_approx(history.available_seconds, 4.95),
+		"cancel_inspection retains full original 100-snapshot / 4.95s timeline")
 
 	# 7. Commit at NOW (0.0s ago) vs Commit in the past + branching timeline
 	history.begin_inspection({"tick": 1000, "present": true})
 	history.seek(1.5)
 	history.seek(0.0)
 	var committed_now: Dictionary = history.commit_inspection()
-	expect(int(committed_now.get("tick", -1)) == 1000 and history.snapshot_count == 100 and is_equal_approx(history.available_seconds, 5.0),
+	expect(int(committed_now.get("tick", -1)) == 1000 and history.snapshot_count == 100 and is_equal_approx(history.available_seconds, 4.95),
 		"commit_inspection at 0.0s ago (NOW) resumes from present without truncating history")
 
-	# Now jump back 2.0s (to tick 60) and commit, then record a new branch
+	# Now jump back 2.0s (to tick 59) and commit, then record a new branch
 	history.begin_inspection({"tick": 1000, "present": true})
 	var target_past: Dictionary = history.seek(2.0)
-	expect(int(target_past.get("tick", -1)) == 60, "Pre-commit seek(2.0) selects tick 60")
+	expect(int(target_past.get("tick", -1)) == 59, "Pre-commit seek(2.0) selects tick 59")
 	var committed_past: Dictionary = history.commit_inspection()
-	expect(not history.inspecting and int(committed_past.get("tick", -1)) == 60,
-		"commit_inspection returns selected past snapshot (tick 60)")
-	expect(history.snapshot_count == 61 and is_equal_approx(history.available_seconds, 3.05),
-		"commit_inspection truncates future snapshots (> tick 60) and rebases recorder time")
+	expect(not history.inspecting and int(committed_past.get("tick", -1)) == 59,
+		"commit_inspection returns selected past snapshot (tick 59)")
+	expect(history.snapshot_count == 60 and is_equal_approx(history.available_seconds, 2.95),
+		"commit_inspection truncates future snapshots (> tick 59) and rebases recorder time")
 
-	# Record 4 new branched ticks (0.20s) after tick 60
+	# Record 4 new branched ticks (0.20s) after tick 59
 	for b in range(1, 5):
 		var branch_step: int = 2000 + b
 		history.record(0.05, func() -> Dictionary:
 			return {"tick": branch_step, "branched": true}
 		)
-	expect(history.snapshot_count == 65 and is_equal_approx(history.available_seconds, 3.25),
+	expect(history.snapshot_count == 64 and is_equal_approx(history.available_seconds, 3.15),
 		"Recording after commit appends to rebased timeline")
 
 	history.begin_inspection({"tick": 3000, "present": true})
 	expect(int(history.seek(0.0).get("tick", -1)) == 3000, "New inspection seek(0.0) is new present (3000)")
-	expect(int(history.seek(0.05).get("tick", -1)) == 2004, "0.05s ago is latest branched tick (2004)")
-	expect(int(history.seek(0.20).get("tick", -1)) == 2001, "0.20s ago is first branched tick (2001), replacing old future")
-	expect(int(history.seek(0.25).get("tick", -1)) == 60, "0.25s ago is branch point (tick 60)")
-	expect(int(history.seek(0.30).get("tick", -1)) == 59, "0.30s ago is pre-branch history (tick 59)")
+	expect(int(history.seek(0.05).get("tick", -1)) == 2003, "0.05s ago is previous branched tick (2003)")
+	expect(int(history.seek(0.20).get("tick", -1)) == 59, "0.20s ago is branch point (tick 59), replacing old future")
+	expect(int(history.seek(0.25).get("tick", -1)) == 58, "0.25s ago is pre-branch tick 58")
+	expect(int(history.seek(0.30).get("tick", -1)) == 57, "0.30s ago is pre-branch history (tick 57)")
 	history.cancel_inspection()
 
 	# 8. Mutation isolation (caller mutating input or returned dictionaries/arrays)
@@ -285,6 +285,7 @@ func run() -> void:
 		"nested": {"ammo": 5},
 		"items": [Vector3(7, 8, 9)],
 	}
+	history.record(0.01, func() -> Dictionary: return source_dict)
 	history.begin_inspection(present_dict)
 	# Mutate present_dict after begin_inspection()
 	present_dict["hp"] = -999.0
@@ -364,8 +365,8 @@ func run() -> void:
 	var single_realistic_bytes: int = var_to_bytes(_make_realistic_snapshot(100)).size()
 	expect(single_realistic_bytes > 0 and single_realistic_bytes <= History.MAX_PAYLOAD_BYTES,
 		"Realistic 32-enemy + ring + projectiles snapshot (%d B) fits well within 64 KiB cap" % single_realistic_bytes)
-	expect(history.snapshot_count == 100 and is_equal_approx(history.available_seconds, 5.0),
-		"100 realistic combat snapshots retained across full 5.0s window")
+	expect(history.snapshot_count == 100 and is_equal_approx(history.available_seconds, 4.95),
+		"100 realistic combat snapshots retained across 4.95s sampled window")
 	expect(history.encoded_bytes > 0 and history.encoded_bytes <= History.MAX_SNAPSHOTS * History.MAX_PAYLOAD_BYTES,
 		"Total encoded_bytes (%d B) for 100 realistic snapshots stays within 6.25 MiB cap" % history.encoded_bytes)
 
@@ -376,9 +377,9 @@ func run() -> void:
 	var mid_enemies: Array = sample_mid["director"]["enemies"]
 	var mid_ring_pts: Array = sample_mid["weapons"]["ring_points"]
 	var mid_pulses: Array = sample_mid["weapons"]["beam_pulses"]
-	expect(int(sample_mid["tick"]) == 50 and mid_enemies.size() == 32 and mid_ring_pts.size() == 120 and mid_pulses.size() == 8,
+	expect(int(sample_mid["tick"]) == 49 and mid_enemies.size() == 32 and mid_ring_pts.size() == 120 and mid_pulses.size() == 8,
 		"Realistic snapshot round-trips all 32 enemies, 120 ring points, and 8 active flash pulses")
-	expect(int(mid_enemies[31]["rewind_id"]) == 32 and is_equal_approx(float(mid_enemies[0]["health"]), 180.0 - float(50 % 20) * 2.5),
+	expect(int(mid_enemies[31]["rewind_id"]) == 32 and is_equal_approx(float(mid_enemies[0]["health"]), 180.0 - float(49 % 20) * 2.5),
 		"Realistic enemy rewind_id and health round-trip accurately")
 	var realistic_bytes: int = history.encoded_bytes
 	var realistic_count: int = history.snapshot_count

@@ -75,6 +75,11 @@ func run() -> void:
 	expect(arena.status_hud.key_hint.get_global_rect().end.y <= root.get_visible_rect().end.y
 		and arena.status_hud.key_hint.global_position.y >= 0,
 		"Readout hotkey hint stays inside the viewport")
+	arena.player.position.x += 5
+	arena.player.reset_physics_interpolation()
+	arena.status_hud._process(0.0)
+	expect(absf(arena.status_hud.center.x - root.get_visible_rect().size.x * 0.5) < 0.01,
+		"Gauges stay centered on the rendered player when camera and player jump together")
 	arena.reset_arena()
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

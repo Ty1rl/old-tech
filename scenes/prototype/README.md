@@ -1,91 +1,104 @@
 # Combat prototype
 
-Godot 4.7.2 Standard / Compatibility. Open the root project, open
-`scenes/prototype/arena.tscn`, then F6. From the Ubuntu host:
+Godot 4.7.2 Standard / Compatibility. From the Ubuntu host:
 
 ```sh
 ~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo res://scenes/prototype/arena.tscn
 ```
 
-WASD moves; mouse aims. Keys 1/2/3 select ring/flash/cone. Left mouse uses it.
-Hold Space for time slow. E repairs the selected tool; T repairs the clock.
-R resets the sandbox. F1–F4 spawn a target, swarmer, brute or skirmisher at
-the cursor; F5 adds a mixed group; F6 starts/restarts a bounded encounter.
-Backspace clears enemies and cancels the encounter. Escape pauses.
+Or open the root project, open `scenes/prototype/arena.tscn`, then F6.
+The partner's original menu/game scenes and popup managers remain intact.
 
-Four translucent arcs surround an open center around the player: ring (cyan),
-flash (yellow), cone (orange), clock (violet). Each arc shows remaining condition;
-the selected tool has a thin outer highlight and a nearby readiness label.
-The short inner straight bar is health. F7 cycles the upper debugging readout
-through full, dim, and hidden; it starts dim and saves the choice across launches.
-The player gauges remain visible in all three modes. Their radius, spacing and
-opacity are grouped in `status_hud.gd` for early playtest adjustments.
+## Controls
 
-## Try the resource loop
+- WASD moves; mouse aims. 1/2/3/4 equip ring/flash/cone/clock.
+- Ring: hold left mouse to draw a floor path, release to launch.
+- Flash: hold left mouse to charge, release to fire. Quick taps are weaker.
+- Cone: hold left mouse for continuous heat and repeating shove/stun pulses.
+- Hold E to repair the equipped item; release E to resume. Full gear ignores E.
+- Space with ring/flash/cone: slow the world; movement and aiming remain normal.
+- Space with clock: freeze and inspect history. Wheel up goes backward, down
+  returns toward now. Release Space to jump to the selected moment. At NOW,
+  release simply resumes. Escape cancels to the original present.
+- R resets. F1–F4 spawn target/swarmer/brute/skirmisher at cursor. F5 adds a
+  mixed group; F6 starts/restarts a bounded encounter. Backspace clears it.
+- Escape normally pauses. F7 cycles upper numbers through full/dim/hidden;
+  the preference persists. Player gauges remain visible in every mode.
 
-Start with the stationary blue target, then F5 or F6 for pressure.
+## Equipment and repairs
 
-- Ring: hold and draw a floor path, release to launch. Only the stroke damages;
-  outbound/return are harmless. Route around cover. The returning ring can
-  home through cover in this prototype. One launch costs one service unit.
-- Flash: a strong single-target pulse, first enemy or solid cover stops it.
-  Damage 70, cooldown 0.8 seconds; one service unit per shot, including misses.
-- Cone: a short multi-target attack. Initial bursts shove and briefly stagger;
-  holding gives lighter sustained pushing and 16 damage per second. Strong
-  bursts have a 1.5-second cooldown and cost 1.5 additional firing-seconds.
-  Brutes resist shove/stagger; solid cover blocks the effect.
+Cyan/yellow/orange/violet arcs show remaining ring/flash/cone/clock condition.
+The center stays open around the player. Selected equipment has a thin outer
+highlight and readiness text; a short straight inner bar shows health.
 
-Equipment starts with 32 ring launches, 48 flash shots, 45 cone firing-seconds
-and 24 slow-seconds. These are generous first tuning values, not a promise
-about how often repairs will feel necessary. Wear occurs only during use.
-The clock does not recharge passively. All tools can kill all enemy types;
-the brute's front shield reduces damage to 25%, while sides/rear take full.
-Actual attack contact decides armor, including the ring's path behind a brute.
+The ring arcs harmlessly over cover to the start of the stroke. Only its
+floor-level cutting path deals damage or stops against cover. The return
+homes harmlessly to the moving player, including through cover. Preview
+colors distinguish reachable and blocked portions of the cutting path.
 
-## Repairs
+Flash has a 35-unit range, 30–100 damage over 0.9 seconds of charge, and a short
+cooldown. Visible pulses hit the first enemy or cover. Cone damages multiple
+enemies and shoves/staggers at 1.2-world-second intervals while held. Brutes
+travel less but still visibly stagger. All tools can kill every archetype;
+front armor reduces actual contact damage to 25%, not a weapon matchup bonus.
 
-Press E or T. Hold inside contact 1, follow the channel through the numbered
-contacts, then release inside the final circle. Each completed section restores
-one quarter of that item's capacity immediately. Close and return whenever you
-want: completed steps and restored capacity remain. Only an unfinished gesture
-is discarded. Full gear shows Ready.
+Starting condition: 32 ring launches, 48 flash shots, 45 cone firing-seconds,
+24 clock slow-seconds. Cone pulses add wear. Clock has no passive recharge.
+These are generous initial values to tune through play, not final balance.
 
-Movement and enemies continue during repairs. A hit interrupts the panel.
-The clock can help repair another tool, but cannot slow time during its own
-repair. An empty clock remains repairable at normal speed. After repairs,
-pause or exhaustion, release Space before activating slow again.
+Wear progressively erases the repair path. Trace the missing portion from
+contact 1 through the marked end, then release the mouse. Each section restores
+the next quarter boundary. Slight damage needs a shorter trace; completed
+capacity survives interruption. Full repair closes automatically. Only an
+unfinished gesture is lost on E release, damage, pause or focus loss.
+Movement/enemies continue during repairs. The clock can slow another item's
+repair, but cannot power its own. No separate T repair path exists.
 
-Time slow affects enemies, their attacks and the encounter schedule. Player
-movement, weapon travel, damage, cooldowns, wear and repairs use real time.
-F6 begins a 75-world-second sequence with at most six live enemies. Clear the
-remaining enemies after the schedule to win. At 0 HP it stops spawning; R
-returns to the sandbox or F6 retries. Sandbox has no forced death screen.
+## Rewind
 
-## Checks and tuning
+Equipping 4 does not activate time manipulation. A fresh Space press begins
+inspection; changing tools while already holding Space requires release first.
+Inspection blocks movement, attacks, repair and debug mutations. Its nearby
+readout shows NOW or selected age, proposed jump wear, and a short timeline.
 
-All gameplay values are in `tuning.gd`; the arena owns the simulation clock.
-The partner's original main-menu/game scenes and popup managers remain.
-Headless checks cover components, real weapon/enemy combinations, resource
-integration, interrupted repairs, cover, control, timing and encounter lifecycle.
-Rendered checks also exercised a real GUI repair trace and retained progress.
-They do not establish game feel: playtest shove strength, repair frequency,
-repair readability under pressure and enemy density.
+Inspection costs 0.2 clock units per real second. A committed jump additionally
+costs 1 clock unit per second rewound. Preview never refunds clock condition;
+committed clock is capped at the lesser of its restored and live values before
+the jump cost. Other equipment, health, enemy roster/behavior, encounter state,
+and launched attacks restore to the selected snapshot. The clock stays equipped;
+held attacks/drawing/charge must start afresh after leaving inspection.
 
-The shared lab runner bounds each check to 60 seconds and saves full logs:
+Cancellation preserves the original present and charges inspection wear only.
+An unaffordable wheel selection is rejected; exhausting condition while browsing
+cancels to the present rather than forcing a jump. Focus loss cancels before
+pausing. A committed jump discards the abandoned future; scrolling does not.
+Death freezes normal simulation and preserves recent history for a do-over.
+
+History samples explicit gameplay values at 20 Hz, retaining up to five seconds
+and 100 encoded snapshots. Each snapshot is limited to 64 KiB, with at most 32
+live enemies, bounded attack paths and eight flash pulses. During inspection,
+cancel backup shares existing payloads and may retain one extra evicted payload.
+This bounds encoded storage to 101 payloads; decoded state/engine overhead is
+additional. No scenes, textures, materials or live Node references are copied.
+Reset and debug spawns/clears erase history; HUD preferences do not rewind.
+
+## Timing and verification
+
+`tuning.gd` holds gameplay values; arena owns the tick and Engine.time_scale
+stays 1. Player input, movement, flash charge, cooldowns, wear and repair use
+real time. Enemy behavior, attack flight, cone damage and shove cadence use
+world time. During inspection only its real-time clock wear advances.
+
+F6 is a 75-world-second encounter capped at six live enemies. Clear survivors
+after the schedule to win. Art, bosses, sound and authored levels are later work.
+Tests establish behavior and state restoration, not enjoyable balance.
 
 ```sh
-python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite integration
+python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 ```
 
-Suites: equipment, foundation, player, repairs, weapons, enemies,
-resource_integration and integration. Use `--suite import` after script/scene
-changes. On another machine, run Godot directly with an external timeout:
-
-```sh
-timeout 60s godot --headless --editor --path . --quit
-timeout 60s godot --headless --path . --script res://scenes/prototype/checks/integration.gd
-```
-
-Godot can stay alive after a script error; inspect the error instead of waiting
-or rerunning unchanged. The timeout runner is in shared lab tooling, not a game
-runtime dependency. There are no final assets or boss encounter in this pass.
+Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
+resource_integration, integration. Use import after script/scene changes.
+The shared lab runner bounds execution and saves full logs in seat state.
+On another machine: `timeout 60s godot --headless --path . --script
+res://scenes/prototype/checks/rewind.gd` (one shell line).

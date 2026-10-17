@@ -132,7 +132,7 @@ func run() -> void:
 	player.reset_state()
 	player.position = Vector3.ZERO
 	var shoved_swarmer = director.spawn(&"swarmer", Vector3(0.0, 0.0, -1.0))
-	shoved_swarmer.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
+	shoved_swarmer.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONTROL.pulse_impulse), float(Tuning.CONTROL.stagger))
 	expect(shoved_swarmer.is_staggered() and is_equal_approx(shoved_swarmer.stagger_timer, float(Tuning.CONTROL.stagger)), "apply_control sets stagger_timer on swarmer")
 	director.step(0.2, player)
 	expect(shoved_swarmer.position.z < -2.2, "Strong shove visibly displaces swarmer away from player")
@@ -144,8 +144,8 @@ func run() -> void:
 	director.step(0.2, player)
 	expect(shoved_swarmer.is_staggered() and is_equal_approx(player.health, 100.0), "Staggered swarmer does not deal contact damage while stagger_timer > 0")
 
-	# Advance past remaining stagger (0.25s left) so swarmer recovers and resumes AI + contact attack
-	director.step(0.4, player)
+	# Advance past remaining stagger so swarmer recovers and resumes AI + contact attack
+	director.step(0.5, player)
 	expect(not shoved_swarmer.is_staggered() and is_equal_approx(player.health, 95.0), "Recovered swarmer resumes normal AI and contact attack after stagger expires")
 
 	# 10. Round D: Distinct Brute displacement vs stun resistance + Stationary Target push/stun
@@ -226,7 +226,7 @@ func run() -> void:
 	director.clear()
 	# Left cover rectangle is Rect2(-6, -6, 2, 3) -> x in [-6, -4], z in [-6, -3]
 	var kb_cover_enemy = director.spawn(&"swarmer", Vector3(-5.0, 0.0, -2.2))
-	kb_cover_enemy.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
+	kb_cover_enemy.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONTROL.pulse_impulse), float(Tuning.CONTROL.stagger))
 	var crossed_or_overlapped := false
 	for i in range(15):
 		kb_cover_enemy.step_enemy(0.04, player, [])

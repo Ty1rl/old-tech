@@ -43,7 +43,7 @@ func record(delta: float, capture: Callable) -> void:
 		return
 	if is_nan(delta) or is_inf(delta) or delta <= 0.0:
 		return
-	var dt: float = minf(delta, MAX_SECONDS)
+	var dt: float = delta
 	_current_time += dt
 	_sample_accumulator += dt
 	if _sample_accumulator + 0.000001 < SAMPLE_INTERVAL:
@@ -56,8 +56,7 @@ func record(delta: float, capture: Callable) -> void:
 		if is_equal_approx(_sample_accumulator, SAMPLE_INTERVAL):
 			_sample_accumulator = 0.0
 
-	var sample_start: float = _last_sample_time
-	var sample_end: float = _current_time - _sample_accumulator
+	var sample_end: float = _current_time
 	_last_sample_time = sample_end
 
 	if not capture.is_valid():
@@ -68,9 +67,7 @@ func record(delta: float, capture: Callable) -> void:
 	var raw_state: Variant = capture.call()
 	var payload: PackedByteArray = _encode_validated(raw_state)
 	if not payload.is_empty():
-		var stamp: float = sample_start
-		if not _entries.is_empty() and stamp <= float(_entries[-1]["time"]) + 0.000001:
-			stamp = float(_entries[-1]["time"]) + SAMPLE_INTERVAL
+		var stamp: float = _current_time
 		_entries.append({
 			"time": stamp,
 			"end_time": sample_end,
@@ -99,9 +96,6 @@ func begin_inspection(present: Dictionary) -> void:
 	_pre_inspection_accumulator = _sample_accumulator
 
 	var present_time: float = _current_time
-	if not _entries.is_empty() and present_time <= float(_entries[-1]["time"]) + 0.000001:
-		present_time = float(_entries[-1]["time"]) + SAMPLE_INTERVAL
-		_current_time = present_time
 
 	_inspection_time = present_time
 	_entries.append({

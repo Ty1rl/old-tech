@@ -77,6 +77,7 @@ func run() -> void:
 					weapon_tick(2.0, enemy.position)
 				elif tool == 2:
 					arena.weapons.handle_event(mouse(true), arena.player, enemy.position)
+					arena.weapons.handle_event(mouse(false), arena.player, enemy.position)
 					weapon_tick(1.0, enemy.position)
 					arena.weapons.handle_event(mouse(false), arena.player, enemy.position)
 				else:
@@ -100,9 +101,10 @@ func run() -> void:
 	brute = fresh_enemy(&"brute")
 	arena.weapons.select_tool(2)
 	arena.weapons.handle_event(mouse(true), arena.player, brute.position)
-	weapon_tick(0.01, brute.position)
+	arena.weapons.handle_event(mouse(false), arena.player, brute.position)
+	weapon_tick(0.2, brute.position)
 	expect(brute.last_hit_result.armored and is_equal_approx(brute.last_hit_result.dealt,
-		Tuning.BEAM.damage * Tuning.ARMOR.front_multiplier), "Real frontal flash reports reduced actual damage")
+		Tuning.BEAM.min_damage * Tuning.ARMOR.front_multiplier), "Real frontal flash reports reduced actual damage")
 
 	var cone_damage: Array[float] = []
 	for rate in [30, 120]:

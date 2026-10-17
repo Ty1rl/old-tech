@@ -7,6 +7,7 @@ const Weapons = preload("res://scenes/prototype/weapons.gd")
 const Enemies = preload("res://scenes/prototype/enemies.gd")
 const Equipment = preload("res://scenes/prototype/equipment.gd")
 const Cover = preload("res://scenes/prototype/cover.gd")
+const History = preload("res://scenes/prototype/history.gd")
 const StatusHud = preload("res://scenes/prototype/status_hud.gd")
 
 var equipment: RefCounted = Equipment.new()
@@ -20,6 +21,13 @@ var slow_bar: ProgressBar
 var status_hud: Control
 var aim: Vector3 = Vector3.ZERO
 var aim_valid: bool = false
+var history: RefCounted = History.new()
+var _space_held := false
+var _space_release_required := false
+var _repair_held := false
+var _inspection_clock := 0.0
+var _preview: Dictionary = {}
+var time_feedback := ""
 
 
 func _ready() -> void:
@@ -129,52 +137,112 @@ func floor_aim(screen_position: Vector2) -> Vector3:
 
 
 func _physics_process(delta: float) -> void:
+	if history.inspecting:
+		_step_inspection(delta)
+		_update_hud()
+		return
+	if player.health <= 0.0:
+		player.world_scale = 1.0
+		_update_hud()
+		return # Keep the final live history available for a do-over.
 	aim = floor_aim(get_viewport().get_mouse_position())
-	player.step(delta, aim)
+	player.step(delta, aim, _space_held and not _space_release_required and weapons.selected_tool != 4)
 	player.position.x = clampf(player.position.x, -19.0, 19.0)
 	player.position.z = clampf(player.position.z, -19.0, 19.0)
-	# Engine.time_scale stays 1. Player/tools use real delta; enemies use world delta.
+	var world_delta: float = delta * player.world_scale
 	var health_before: float = player.health
-	director.step(delta * player.world_scale, player)
+	director.step(world_delta, player)
 	if player.health < health_before and SceneManager.has_popup(&"Repair"):
-		SceneManager.close_popup(&"Repair")
-	weapons.step(delta, player, aim, director.enemies)
+		_close_repair()
+	weapons.step(delta, player, aim, director.enemies, world_delta)
+	history.record(delta, capture_state)
 	_update_hud()
 
 
+# Handle mode exits before popup controls or weapon input can consume them.
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if code == KEY_E and not event.pressed:
+			_repair_held = false
+			_close_repair()
+		if code == KEY_SPACE and not event.echo:
+			_space_held = event.pressed
+			if not event.pressed:
+				if history.inspecting:
+					_finish_inspection(true)
+				_space_release_required = false
+				player._step_slow(0.0, false)
+			elif not _space_release_required and weapons.selected_tool == 4 and not SceneManager.has_popup():
+				_begin_inspection()
+			get_viewport().set_input_as_handled()
+			return
+		if code == KEY_F7 and event.pressed and not event.echo:
+			status_hud.cycle_readout()
+			_update_hud()
+			get_viewport().set_input_as_handled()
+			return
+	if history.inspecting:
+		if event is InputEventMouseButton and event.pressed:
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				_seek_inspection(history.selected_seconds_ago + Tuning.REWIND.scroll_step)
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				_seek_inspection(history.selected_seconds_ago - Tuning.REWIND.scroll_step)
+		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ESCAPE:
+			_finish_inspection(false)
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if history.inspecting:
+		return
+	if SceneManager.has_popup():
+		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_R:
+			reset_arena()
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		match event.physical_keycode:
+		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if code >= KEY_1 and code <= KEY_4:
+			var selected: int = weapons.selected_tool
+			weapons.select_tool(code - KEY_1 + 1)
+			if selected != weapons.selected_tool:
+				player.reset_input()
+				_space_release_required = _space_held
+			return
+		match code:
 			KEY_F7:
 				status_hud.cycle_readout()
 				_update_hud()
 				return
 			KEY_E:
-				var tools := [&"ring", &"beam", &"cone"]
-				_toggle_repair(tools[weapons.selected_tool - 1])
-				return
-			KEY_T:
-				_toggle_repair(&"clock")
+				if not _repair_held and player.health > 0.0:
+					_repair_held = true
+					var tool: StringName = Weapons.TOOL_IDS[weapons.selected_tool - 1]
+					if not equipment.is_full(tool):
+						SceneManager.push_popup(&"Repair", {"equipment": equipment, "tool": tool})
 				return
 			KEY_R:
 				reset_arena()
 				return
 			KEY_BACKSPACE:
 				director.clear()
+				history.clear()
 				return
 			KEY_F1, KEY_F2, KEY_F3, KEY_F4:
 				var kinds := [&"target", &"swarmer", &"brute", &"skirmisher"]
-				director.spawn(kinds[event.physical_keycode - KEY_F1], _spawn_position())
+				director.spawn(kinds[code - KEY_F1], _spawn_position())
+				history.clear()
 				return
 			KEY_F5:
 				director.spawn_group()
+				history.clear()
 				return
 			KEY_F6:
 				reset_arena()
 				director.start_encounter()
 				return
 	aim = floor_aim(get_viewport().get_mouse_position())
-	if aim_valid and not SceneManager.has_popup():
+	if aim_valid and player.health > 0.0:
 		weapons.handle_event(event, player, aim)
 
 
@@ -183,54 +251,153 @@ func _spawn_position() -> Vector3:
 
 
 func reset_arena() -> void:
-	SceneManager.close_popup(&"Repair")
+	if history.inspecting:
+		_finish_inspection(false)
+	_close_repair()
+	history.clear()
+	_space_release_required = _space_held
+	_repair_held = false
 	equipment.reset_state()
 	weapons.reset_state()
 	player.reset_state()
 	director.reset_state()
+	time_feedback = ""
 	_update_hud()
 
 
-func _toggle_repair(tool: StringName) -> void:
-	if SceneManager.has_popup(&"Repair"):
-		SceneManager.close_popup(&"Repair")
+func _close_repair() -> void:
+	if equipment.repairing != &"":
+		equipment.end_repair()
+	SceneManager.close_popup(&"Repair")
+
+
+func capture_state() -> Dictionary:
+	return {"player": player.capture_state(), "equipment": equipment.capture_state(),
+		"weapons": weapons.capture_state(), "director": director.capture_state()}
+
+
+func _restore_world(data: Dictionary, live_clock: float) -> void:
+	_close_repair()
+	var gear: Dictionary = data.equipment.duplicate(true)
+	gear.remaining["clock"] = live_clock
+	equipment.restore_state(gear)
+	player.restore_state(data.player)
+	director.restore_state(data.director)
+	weapons.restore_state(data.weapons)
+	weapons.select_tool(4) # Equipping the clock remains the player's current intent.
+	weapons._rebuild_visuals(player, aim)
+
+
+func _begin_inspection() -> void:
+	if history.inspecting or weapons.selected_tool != 4 or SceneManager.has_popup() or not equipment.can_use(&"clock"):
 		return
-	if not SceneManager.has_popup():
-		SceneManager.push_popup(&"Repair", {"equipment": equipment, "tool": tool})
+	weapons.cancel_input()
+	player.reset_input()
+	_preview = capture_state()
+	history.begin_inspection(_preview)
+	if not history.inspecting:
+		return
+	_inspection_clock = equipment.remaining(&"clock")
+	time_feedback = ""
+	_update_hud()
+
+
+func inspection_cost() -> float:
+	return history.selected_seconds_ago * Tuning.REWIND.jump_cost
+
+
+func _available_clock(data: Dictionary) -> float:
+	return minf(_inspection_clock, float(data.equipment.remaining.clock))
+
+
+func _seek_inspection(seconds_ago: float) -> void:
+	if not history.inspecting:
+		return
+	var previous: float = history.selected_seconds_ago
+	var candidate: Dictionary = history.seek(seconds_ago)
+	if inspection_cost() > _available_clock(candidate) + 0.000001:
+		history.seek(previous)
+		time_feedback = "Not enough clock condition for that jump"
+		return
+	_preview = candidate
+	time_feedback = ""
+	_restore_world(_preview, _inspection_clock)
+	_update_hud()
+
+
+func _step_inspection(delta: float) -> void:
+	_inspection_clock = maxf(0.0, _inspection_clock - maxf(delta, 0.0) * Tuning.REWIND.browse_drain)
+	equipment.spend(&"clock", maxf(0.0, equipment.remaining(&"clock") - _inspection_clock))
+	if _inspection_clock <= 0.000001 or inspection_cost() > _available_clock(_preview) + 0.000001:
+		_finish_inspection(false)
+		time_feedback = "Clock spent · returned to present"
+
+
+func _finish_inspection(commit: bool) -> void:
+	if not history.inspecting:
+		return
+	var age: float = history.selected_seconds_ago
+	var cost := inspection_cost()
+	var can_commit: bool = commit and cost <= _available_clock(_preview) + 0.000001
+	var data: Dictionary = history.commit_inspection() if can_commit else history.cancel_inspection()
+	var clock: float = _inspection_clock
+	if can_commit and age > 0.0:
+		clock = maxf(0.0, minf(clock, float(data.equipment.remaining.clock)) - cost)
+	_restore_world(data, clock)
+	_space_release_required = _space_held
+	_preview = {}
+	time_feedback = "Rewound %.2fs" % age if can_commit and age > 0.0 else "Present"
+	_update_hud()
 
 
 func _on_popup_opened(_key: StringName, _popup: Node) -> void:
+	if history.inspecting:
+		_finish_inspection(false)
 	weapons.cancel_input()
 	player.reset_input()
+	_space_release_required = _space_held
 
 
 func _on_popup_closed(_key: StringName) -> void:
 	weapons.cancel_input()
 	player.reset_input()
+	_space_release_required = _space_held
 
 
 func _on_state_changed(_old: int, _new: int) -> void:
+	if history.inspecting:
+		_finish_inspection(false)
 	weapons.cancel_input()
 	player.reset_input()
+	_space_release_required = Input.is_physical_key_pressed(KEY_SPACE)
+	_space_held = false
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(weapons):
+		if history.inspecting:
+			_finish_inspection(false)
+		_close_repair()
 		weapons.cancel_input()
 		player.reset_input()
+		_space_held = false
+		_space_release_required = true
+		_repair_held = false
 		if GameState.is_playing():
 			GameState.pause()
 
 
 func _update_hud() -> void:
 	status_hud.update_status(player, weapons, equipment)
+	var clock_after: float = _available_clock(_preview) - inspection_cost() if history.inspecting else equipment.remaining(&"clock")
+	status_hud.update_timeline(history, inspection_cost(), time_feedback, clock_after)
 	var alpha: float = StatusHud.READOUT_ALPHA[status_hud.readout_mode]
 	hud.modulate.a = alpha
 	hud.visible = alpha > 0.0
 	slow_bar.modulate.a = alpha
 	slow_bar.visible = alpha > 0.0
-	hud.text = "WASD move | 1/2/3 tools | LMB draw / click / hold | Space slow | Esc pause\n"
-	hud.text += "E repair tool | T repair clock | R reset | F1–F4 spawn | F5 mixed | F6 encounter | Backspace clear\n"
+	hud.text = "WASD move | 1/2/3/4 equip | LMB draw / charge / hold | Space slow / clock inspect | Esc pause\n"
+	hud.text += "Hold E repair selected | Wheel scrub clock | R reset | F1–F4 spawn | F5 mixed | F6 encounter | Backspace clear\n"
 	hud.text += "HP %.0f | Enemies %d | World %.2fx\n" % [player.health, director.enemies.size(), player.world_scale]
 	hud.text += player.status_text() + "\n" + weapons.status_text()
 	hud.text += "\n" + equipment.status_text() + " | " + director.status_text()

@@ -197,7 +197,7 @@ func run() -> void:
 	arena.equipment.complete_step(&"ring")
 	arena.equipment.end_repair()
 	player.reset_state()
-	expect(arena.equipment.remaining(&"ring") == 16 and arena.equipment.stage(&"ring") == 1, "Player reset preserves other gear and repair progress")
+	expect(arena.equipment.remaining(&"ring") == 16 and arena.equipment.stage(&"ring") == 2, "Player reset preserves other gear and repair progress")
 	expect(player.position == Vector3(0, 0.55, 0) and player.velocity == Vector3.ZERO and player.health == Tuning.PLAYER.health, "Reset restores player position, velocity and health")
 	expect(player.slow_charge == remaining_before and player.world_scale == 1.0 and not player._slow_held, "Player reset preserves charge and clears held slow")
 	await ticks(player, 2, Vector3.RIGHT * 20)

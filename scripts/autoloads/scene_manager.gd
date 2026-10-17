@@ -3,7 +3,9 @@ extends Node
 signal scene_changed(key: StringName)
 
 # &"scene_name": "res://path/to/scene_name.tscn",
-const SCENES: Dictionary[StringName, String] = {}
+const SCENES: Dictionary[StringName, String] = {
+	&"Game": "uid://b3ilviafr4x4r"
+}
 
 const FADE_LAYER: int = 128
 

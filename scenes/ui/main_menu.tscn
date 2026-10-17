@@ -1,5 +1,7 @@
 [gd_scene format=3 uid="uid://cb25v8pyc2pe1"]
 
+[ext_resource type="Script" uid="uid://dmei3rw5iansg" path="res://scenes/ui/main_menu.gd" id="1_sl1te"]
+
 [node name="MainMenu" type="Control" unique_id=1271498089]
 layout_mode = 3
 anchors_preset = 15
@@ -7,6 +9,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("1_sl1te")
 
 [node name="CenterVBox" type="VBoxContainer" parent="." unique_id=1584724884]
 layout_mode = 1
@@ -53,3 +56,7 @@ text = "Settings"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Exit"
+
+[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/PlayButton" to="." method="_on_play_button_pressed"]
+[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/SettingsButton" to="." method="_on_settings_button_pressed"]
+[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/ExitButton" to="." method="_on_exit_button_pressed"]

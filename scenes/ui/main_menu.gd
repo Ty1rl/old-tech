@@ -3,6 +3,7 @@ extends Control
 
 func _on_play_button_pressed() -> void:
 	SceneManager.go_to("Game")
+	GameState.start_game()
 
 
 func _on_settings_button_pressed() -> void:

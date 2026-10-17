@@ -148,29 +148,47 @@ func run() -> void:
 	director.step(0.4, player)
 	expect(not shoved_swarmer.is_staggered() and is_equal_approx(player.health, 95.0), "Recovered swarmer resumes normal AI and contact attack after stagger expires")
 
-	# 10. Round C: Brute knockback & stagger resistance + Target anchored feedback
+	# 10. Round D: Distinct Brute displacement vs stun resistance + Stationary Target push/stun
 	director.clear()
+	player.reset_state()
+	player.position = Vector3.ZERO
 	var ctrl_swarmer = director.spawn(&"swarmer", Vector3(-3.0, 0.0, -4.0))
 	var ctrl_brute = director.spawn(&"brute", Vector3(0.0, 0.0, -4.0))
 	var ctrl_target = director.spawn(&"target", Vector3(3.0, 0.0, -4.0))
 	var shove_dir := Vector3(0.0, 0.0, -1.0)
-	ctrl_swarmer.apply_control(shove_dir, float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
-	ctrl_brute.apply_control(shove_dir, float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
-	ctrl_target.apply_control(shove_dir, float(Tuning.CONTROL.impulse), float(Tuning.CONTROL.stagger))
+	var test_impulse := 22.0
+	var test_stagger := 0.85
+	ctrl_swarmer.apply_control(shove_dir, test_impulse, test_stagger)
+	ctrl_brute.apply_control(shove_dir, test_impulse, test_stagger)
+	ctrl_target.apply_control(shove_dir, test_impulse, test_stagger)
 
-	var resist := float(Tuning.CONTROL.brute_resistance)
-	expect(is_equal_approx(ctrl_brute.stagger_timer, float(Tuning.CONTROL.stagger) * resist), "Brute stagger duration scales by Tuning.CONTROL.brute_resistance (0.25)")
-	expect(is_equal_approx(ctrl_brute.knockback_vel.length(), ctrl_swarmer.knockback_vel.length() * resist), "Brute knockback impulse scales by Tuning.CONTROL.brute_resistance (0.25)")
-	expect(not ctrl_target.is_staggered() and is_equal_approx(ctrl_target.knockback_vel.length(), 0.0) and ctrl_target.feedback_label.text == "ANCHORED", "Target remains unstaggered with zero knockback velocity and shows ANCHORED feedback")
+	var impulse_resist := float(Tuning.CONTROL.get("brute_resistance", 0.4))
+	var stagger_resist := float(Tuning.CONTROL.get("brute_stagger_resistance", 0.8))
+	expect(is_equal_approx(ctrl_brute.stagger_timer, test_stagger * stagger_resist) and ctrl_brute.stagger_timer > test_stagger * impulse_resist,
+		"Brute retains meaningful stun (0.8x stagger) distinct from displacement resistance")
+	expect(is_equal_approx(ctrl_brute.knockback_vel.length(), ctrl_swarmer.knockback_vel.length() * impulse_resist),
+		"Brute knockback velocity scales by brute_resistance")
+	expect(ctrl_target.is_staggered() and is_equal_approx(ctrl_target.stagger_timer, test_stagger) and is_equal_approx(ctrl_target.knockback_vel.length(), test_impulse),
+		"Stationary target has no anchored immunity: it can be shoved and stunned")
 
 	director.step(0.15, player)
 	var swarmer_disp := absf(ctrl_swarmer.position.z - (-4.0))
 	var brute_disp := absf(ctrl_brute.position.z - (-4.0))
-	var target_disp: float = ctrl_target.position.distance_to(Vector3(3.0, 0.0, -4.0))
-	expect(is_equal_approx(brute_disp, swarmer_disp * resist), "Brute displacement over world_delta scales by brute_resistance")
-	expect(target_disp < 0.0001, "Stationary target stays anchored in place after step()")
+	var target_disp := absf(ctrl_target.position.z - (-4.0))
+	expect(is_equal_approx(brute_disp, swarmer_disp * impulse_resist) and brute_disp < swarmer_disp,
+		"Brute travels less than swarmer over world_delta")
+	expect(is_equal_approx(target_disp, swarmer_disp) and target_disp > 1.0,
+		"Shoved stationary target displaces over world_delta just like unarmored enemies")
 
-	# 11. Round C: Frame-delta and time-slow consistency for knockback + stagger recovery
+	# After knockback and stagger settle, target stays at its new shoved position (no approach AI)
+	for i in range(25):
+		director.step(0.1, player)
+	var settled_target_z: float = ctrl_target.position.z
+	director.step(0.5, player)
+	expect(not ctrl_target.is_staggered() and is_equal_approx(ctrl_target.position.z, settled_target_z) and settled_target_z < -5.5,
+		"Stationary target stays at its shoved position after recovery with no approach AI")
+
+	# 11. Round C/D: Frame-delta and time-slow consistency for knockback + stagger recovery
 	director.clear()
 	player.reset_state()
 	player.position = Vector3(0.0, 0.0, 10.0)
@@ -187,6 +205,22 @@ func run() -> void:
 	for i in range(50):
 		enemy_fine.step_enemy(0.01, player, [])
 	expect(coarse_pos.distance_to(enemy_fine.position) < 0.001 and coarse_vel.distance_to(enemy_fine.knockback_vel) < 0.001, "Knockback drag and mid-tick stagger recovery are frame-delta invariant")
+
+	# Slow-time scaling on control integration (5 steps of 0.1 * SLOW.scale == 1 step of 0.5 * SLOW.scale)
+	director.clear()
+	var slow_a = director.spawn(&"brute", Vector3(2.0, 0.0, -3.0))
+	slow_a.apply_control(Vector3(0.0, 0.0, -1.0), 22.0, 0.85)
+	for i in range(5):
+		director.step(0.1 * float(Tuning.SLOW.scale), player)
+	var slow_a_pos: Vector3 = slow_a.position
+	var slow_a_stagger: float = slow_a.stagger_timer
+
+	director.clear()
+	var slow_b = director.spawn(&"brute", Vector3(2.0, 0.0, -3.0))
+	slow_b.apply_control(Vector3(0.0, 0.0, -1.0), 22.0, 0.85)
+	director.step(0.5 * float(Tuning.SLOW.scale), player)
+	expect(slow_a_pos.distance_to(slow_b.position) < 0.001 and is_equal_approx(slow_a_stagger, slow_b.stagger_timer),
+		"World-time control integration scales consistently under time slow")
 
 	# 12. Round C: Cover-safe knockback (no tunneling or overlapping Cover.RECTANGLES)
 	director.clear()
@@ -254,6 +288,133 @@ func run() -> void:
 	# Reset returns to Sandbox
 	director.reset_state()
 	expect(director.status_text() == "Sandbox" and director.enemies.size() == 1 and director.enemies[0].kind == &"target", "reset_state() cancels encounter and returns status_text() to Sandbox")
+
+	# 15. Round D: Stable rewind_id / combat_id(), snapshot kill/revive, remove later spawns, and deterministic next ID
+	director.reset_state()
+	expect(director.enemies.size() == 1 and director.enemies[0].combat_id() == 1,
+		"reset_state() resets _spawn_counter and assigns rewind_id=1 to initial target")
+	director.clear()
+	player.reset_state()
+	player.position = Vector3.ZERO
+	var e1 = director.spawn(&"swarmer", Vector3(-3.0, 0.0, -3.5))
+	var e2 = director.spawn(&"brute", Vector3(0.0, 0.0, -6.0))
+	var e3 = director.spawn(&"skirmisher", Vector3(3.5, 0.0, -5.0))
+	expect(e1.combat_id() == 2 and e2.combat_id() == 3 and e3.combat_id() == 4 and e1.rewind_id == 2,
+		"director.spawn assigns sequential positive rewind_id returned by combat_id() without reusing cleared IDs")
+
+	# Put e1, e2, e3 into rich mid-combat states (contact timer, knockback/stagger, damaged HP, skirmisher phase/timer/sign)
+	e1.contact_cooldown = 0.65
+	e1.apply_control(Vector3(-1.0, 0.0, -1.0), 14.0, 0.45)
+	e2.facing = Vector3(1.0, 0.0, 0.0)
+	e2.hit(50.0, Vector3(-1.0, 0.0, -6.0)) # Rear hit -> 130 HP
+	e3.skirmish_phase = &"commit"
+	e3.skirmish_timer = 1.75
+	e3.skirmish_strafe_sign = -1.0
+	director.step(0.1, player)
+
+	var e1_snap_pos: Vector3 = e1.position
+	var e1_snap_cd: float = e1.contact_cooldown
+	var e1_snap_kb: Vector3 = e1.knockback_vel
+	var e1_snap_stagger: float = e1.stagger_timer
+	var e2_snap_hp: float = e2.health
+	var e2_snap_facing: Vector3 = e2.facing
+	var e3_snap_phase: StringName = e3.skirmish_phase
+	var e3_snap_timer: float = e3.skirmish_timer
+	var e3_snap_sign: float = e3.skirmish_strafe_sign
+
+	var snap_mid: Dictionary = director.capture_state()
+
+	# Advance timeline: kill e1 (pruned), damage e2 further, and spawn later enemies e4 and e5
+	e1.hit(999.0, e1.position - e1.facing)
+	e2.hit(40.0, e2.position - e2.facing)
+	director.step(0.2, player)
+	var e4 = director.spawn(&"swarmer", Vector3(-6.0, 0.0, -8.0))
+	var e5 = director.spawn(&"target", Vector3(6.0, 0.0, -8.0))
+	expect(director.enemies.size() == 4 and e4.combat_id() == 5 and e5.combat_id() == 6,
+		"Timeline advanced: e1 dead/pruned and e4 (ID 5), e5 (ID 6) spawned")
+
+	# Restore snapshot: e1 must revive with ID 2, e2/e3 reconcile in place, e4/e5 removed, next spawn gets ID 5
+	var e2_node_before_restore: Node3D = e2
+	director.restore_state(snap_mid)
+	expect(director.enemies.size() == 3, "restore_state restores exact 3-enemy roster")
+	expect(director.enemies[0].combat_id() == 2 and director.enemies[1].combat_id() == 3 and director.enemies[2].combat_id() == 4,
+		"Restored roster preserves stable combat_id() order [2, 3, 4]")
+	var rev_e1 = director.enemies[0]
+	var rev_e2 = director.enemies[1]
+	var rev_e3 = director.enemies[2]
+	expect(rev_e2 == e2_node_before_restore, "Still-live enemy (ID 3) reconciles in place without node recreation")
+	expect(rev_e1.position.distance_to(e1_snap_pos) < 0.001 and is_equal_approx(rev_e1.contact_cooldown, e1_snap_cd) and rev_e1.knockback_vel.distance_to(e1_snap_kb) < 0.001 and is_equal_approx(rev_e1.stagger_timer, e1_snap_stagger),
+		"Revived enemy (ID 2) restores position, contact_cooldown, knockback_vel, and stagger_timer")
+	expect(is_equal_approx(rev_e2.health, e2_snap_hp) and rev_e2.facing.distance_to(e2_snap_facing) < 0.001,
+		"Reconciled brute (ID 3) restores health and facing")
+	expect(rev_e3.skirmish_phase == e3_snap_phase and is_equal_approx(rev_e3.skirmish_timer, e3_snap_timer) and is_equal_approx(rev_e3.skirmish_strafe_sign, e3_snap_sign),
+		"Reconciled skirmisher (ID 4) restores skirmish_phase, skirmish_timer, and skirmish_strafe_sign")
+
+	var next_after_restore = director.spawn(&"swarmer", Vector3(0.0, 0.0, -9.0))
+	expect(next_after_restore != null and next_after_restore.combat_id() == 5,
+		"Restoring spawn_counter makes the next spawned enemy deterministically receive ID 5")
+
+	# 16. Round D: Encounter state / elapsed / wave index round-trip without replaying waves
+	director.clear()
+	player.reset_state()
+	director.start_encounter()
+	director.step(15.0, player) # Crosses wave 1 at 12.0s; wave_index is now 2, elapsed is 15.0s
+	expect(director.encounter_wave_index == 2 and is_equal_approx(director.encounter_elapsed, 15.0),
+		"Encounter at 15.0s has spawned waves 0 and 1 (wave_index == 2)")
+	# Kill one enemy at 15.0s so live count is 5, then capture snapshot
+	director.enemies[0].hit(999.0, director.enemies[0].position - director.enemies[0].facing)
+	director.step(0.05, player)
+	var count_at_15s: int = director.enemies.size()
+	var snap_enc: Dictionary = director.capture_state()
+
+	# Advance to 26.0s (crosses wave 2 at 24.0s) and kill everything
+	director.step(11.0, player)
+	expect(director.encounter_wave_index == 3, "Stepping to 26.05s triggers wave 2 (wave_index == 3)")
+	for e in director.enemies:
+		e.hit(999.0, e.position - e.facing)
+	director.step(0.05, player)
+	expect(director.enemies.is_empty(), "All enemies cleared at 26.1s before restoring 15.05s snapshot")
+
+	# Restore 15.05s encounter snapshot
+	director.restore_state(snap_enc)
+	expect(director.encounter_active and director.encounter_state == &"running" and director.encounter_wave_index == 2 and is_equal_approx(director.encounter_elapsed, 15.05),
+		"restore_state restores encounter_active, encounter_state, encounter_wave_index, and encounter_elapsed")
+	expect(director.enemies.size() == count_at_15s,
+		"restore_state revives the exact 15.05s live roster without replaying wave 0 or wave 1")
+
+	# Step 8.0s (to 23.05s < 24.0s): no new wave yet
+	director.step(8.0, player)
+	expect(director.encounter_wave_index == 2, "Stepping to 23.05s does not prematurely trigger wave 2")
+	# Step 1.5s (to 24.55s >= 24.0s): wave 2 triggers on schedule
+	director.step(1.5, player)
+	expect(director.encounter_wave_index == 3, "Wave 2 triggers on schedule at 24.0s after restore")
+
+	# 17. Round D: 32-enemy live cap on director.spawn and compact value-only snapshot serialization
+	director.clear()
+	var counter_before_cap: int = director._spawn_counter
+	var all_spawned_ok := true
+	for i in range(32):
+		var col := float(i % 8) * 2.2 - 7.7
+		var row := float(i / 8) * 2.2 - 12.0
+		var spawned = director.spawn(&"swarmer", Vector3(col, 0.0, row))
+		if spawned == null or spawned.combat_id() != counter_before_cap + i + 1:
+			all_spawned_ok = false
+	expect(all_spawned_ok and director.enemies.size() == 32,
+		"director.spawn allows up to 32 live enemies with sequential IDs")
+
+	var overflow_spawn = director.spawn(&"swarmer", Vector3(0.0, 0.0, -10.0))
+	expect(overflow_spawn == null and director.enemies.size() == 32 and director._spawn_counter == counter_before_cap + 32,
+		"33rd live spawn returns null, caps live enemies at 32, and does not advance _spawn_counter")
+
+	var full_snap: Dictionary = director.capture_state()
+	var encoded: PackedByteArray = var_to_bytes(full_snap)
+	expect(encoded.size() > 0 and encoded.size() < 16384,
+		"32-enemy snapshot serializes cleanly via var_to_bytes in under 16 KiB (no object references)")
+	var decoded: Dictionary = bytes_to_var(encoded)
+	director.clear()
+	director.restore_state(decoded)
+	expect(director.enemies.size() == 32 and director.enemies[31].combat_id() == counter_before_cap + 32,
+		"32-enemy snapshot round-trips through var_to_bytes / bytes_to_var")
 
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

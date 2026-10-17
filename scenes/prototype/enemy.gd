@@ -4,10 +4,11 @@ extends Node3D
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
-const MAX_KNOCKBACK_SPEED := 24.0
+const MAX_KNOCKBACK_SPEED := 32.0
 
 var cover: RefCounted
 
+var rewind_id: int = 1
 var kind: StringName = &"target"
 var radius: float = 0.7
 var max_health: float = 100.0
@@ -51,9 +52,17 @@ var hp_bar_material: StandardMaterial3D
 var feedback_label: Label3D
 
 
+func combat_id() -> int:
+	return rewind_id
+
+
 func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> void:
 	if cover == null:
 		cover = CoverScript.new()
+	if orbit_seed > 0:
+		rewind_id = orbit_seed
+	elif rewind_id <= 0:
+		rewind_id = 1
 	kind = p_kind if Tuning.ENEMIES.has(String(p_kind)) else &"target"
 	var cfg: Dictionary = Tuning.ENEMIES[String(kind)]
 	max_health = float(cfg.get("health", 100.0))
@@ -67,6 +76,9 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	skirmish_phase = &"orbit"
 	skirmish_timer = 0.0
 	skirmish_strafe_sign = -1.0 if (orbit_seed % 2 == 1) else 1.0
+	flash_timer = 0.0
+	feedback_timer = 0.0
+	last_hit_result = {"dealt": 0.0, "armored": false, "killed": false}
 	position = _resolve_cover_overlap(_clamp_to_arena(Vector3(spawn_pos.x, 0.0, spawn_pos.z)))
 	var to_origin := Vector3(-position.x, 0.0, -position.z)
 	if to_origin.length_squared() > 0.001:
@@ -90,22 +102,10 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 		return
 	dir_xz = dir_xz.normalized()
 
-	if kind == &"target":
-		# Stationary test targets stay anchored in place but show brief control feedback
-		knockback_vel = Vector3.ZERO
-		stagger_timer = 0.0
-		flash_timer = maxf(flash_timer, 0.12)
-		feedback_timer = maxf(feedback_timer, 0.45)
-		if is_instance_valid(body_material):
-			body_material.albedo_color = Color("99d6ff")
-		if is_instance_valid(feedback_label) and (impulse >= 1.0 or stagger_seconds > 0.0):
-			feedback_label.text = "ANCHORED"
-			feedback_label.modulate = Color("99d6ff")
-		return
-
-	var resist := float(Tuning.CONTROL.brute_resistance) if kind == &"brute" else 1.0
-	var eff_impulse := maxf(0.0, impulse) * resist
-	var eff_stagger := maxf(0.0, stagger_seconds) * resist
+	var impulse_resist := float(Tuning.CONTROL.get("brute_resistance", 0.4)) if kind == &"brute" else 1.0
+	var stagger_resist := float(Tuning.CONTROL.get("brute_stagger_resistance", 0.8)) if kind == &"brute" else 1.0
+	var eff_impulse := maxf(0.0, impulse) * impulse_resist
+	var eff_stagger := maxf(0.0, stagger_seconds) * stagger_resist
 
 	if eff_impulse > 0.0:
 		knockback_vel += dir_xz * eff_impulse
@@ -113,7 +113,8 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 			knockback_vel = knockback_vel.normalized() * MAX_KNOCKBACK_SPEED
 
 	if eff_stagger > 0.0:
-		var max_bound := float(Tuning.CONTROL.stagger) * 1.5 * resist
+		var base_max := maxf(float(Tuning.CONTROL.get("stagger", 0.85)) * 1.5, stagger_seconds)
+		var max_bound := base_max * stagger_resist
 		stagger_timer = clampf(maxf(stagger_timer, eff_stagger), 0.0, max_bound)
 
 	if eff_stagger > 0.0 or eff_impulse >= 2.0:
@@ -121,9 +122,99 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 		feedback_timer = maxf(feedback_timer, 0.45)
 		if is_instance_valid(body_material):
 			body_material.albedo_color = Color("8de8ff")
-		if is_instance_valid(feedback_label) and eff_stagger > 0.0:
-			feedback_label.text = "STAGGER"
+		if is_instance_valid(feedback_label):
+			feedback_label.text = "STAGGER" if eff_stagger > 0.0 else "SHOVE"
 			feedback_label.modulate = Color("8de8ff")
+
+
+func capture_state() -> Dictionary:
+	var state := {
+		"rewind_id": int(rewind_id),
+		"kind": String(kind),
+		"position": position,
+		"facing": facing,
+		"health": float(health),
+		"contact_cooldown": float(contact_cooldown),
+		"knockback_vel": knockback_vel,
+		"stagger_timer": float(stagger_timer),
+		"skirmish_phase": String(skirmish_phase),
+		"skirmish_timer": float(skirmish_timer),
+		"skirmish_strafe_sign": float(skirmish_strafe_sign),
+		"flash_timer": float(flash_timer),
+		"feedback_timer": float(feedback_timer),
+	}
+	if flash_timer > 0.0 or feedback_timer > 0.0:
+		state["feedback_text"] = feedback_label.text if is_instance_valid(feedback_label) else ""
+		state["feedback_color"] = feedback_label.modulate if is_instance_valid(feedback_label) else Color.WHITE
+		state["last_hit_armored"] = bool(last_hit_result.get("armored", false))
+	return state
+
+
+func restore_state(data: Dictionary) -> void:
+	if cover == null:
+		cover = CoverScript.new()
+	var target_kind := StringName(String(data.get("kind", kind)))
+	if not Tuning.ENEMIES.has(String(target_kind)):
+		target_kind = &"target"
+	var kind_changed := (kind != target_kind) or not is_instance_valid(visual_root)
+	kind = target_kind
+	var cfg: Dictionary = Tuning.ENEMIES[String(kind)]
+	max_health = float(cfg.get("health", 100.0))
+	move_speed = float(cfg.get("speed", 0.0))
+	radius = float(cfg.get("radius", 0.7))
+	contact_damage = float(cfg.get("damage", 0.0))
+	if kind_changed:
+		_build_visuals()
+
+	rewind_id = maxi(1, int(data.get("rewind_id", data.get("id", rewind_id))))
+	var raw_pos: Vector3 = data.get("position", position)
+	position = _resolve_cover_overlap(_clamp_to_arena(Vector3(raw_pos.x, 0.0, raw_pos.z)))
+	facing = data.get("facing", facing)
+	health = clampf(float(data.get("health", max_health)), 0.0, max_health)
+	contact_cooldown = maxf(0.0, float(data.get("contact_cooldown", data.get("contact_timer", 0.0))))
+	var raw_kb: Vector3 = data.get("knockback_vel", Vector3.ZERO)
+	knockback_vel = Vector3(raw_kb.x, 0.0, raw_kb.z)
+	stagger_timer = maxf(0.0, float(data.get("stagger_timer", 0.0)))
+	var phase_str := String(data.get("skirmish_phase", "orbit"))
+	skirmish_phase = &"commit" if phase_str == "commit" else &"orbit"
+	skirmish_timer = maxf(0.0, float(data.get("skirmish_timer", 0.0)))
+	skirmish_strafe_sign = -1.0 if float(data.get("skirmish_strafe_sign", 1.0)) < 0.0 else 1.0
+	flash_timer = maxf(0.0, float(data.get("flash_timer", 0.0)))
+	feedback_timer = maxf(0.0, float(data.get("feedback_timer", 0.0)))
+	last_hit_result = {
+		"dealt": float(data.get("last_hit_dealt", 0.0)),
+		"armored": bool(data.get("last_hit_armored", false)),
+		"killed": bool(data.get("last_hit_killed", false)),
+	}
+	var default_fb_text := "STAGGER" if stagger_timer > 0.0 else ""
+	var default_fb_col := Color("8de8ff") if stagger_timer > 0.0 else Color.WHITE
+	_sync_derived_visuals(
+		String(data.get("feedback_text", default_fb_text)),
+		data.get("feedback_color", default_fb_col)
+	)
+
+
+func _sync_derived_visuals(fb_text: String, fb_color: Color) -> void:
+	_update_visual_facing()
+	_update_health_visuals()
+	if is_instance_valid(body_material):
+		if flash_timer > 0.0:
+			if stagger_timer > 0.0 or fb_text == "STAGGER" or fb_text == "SHOVE":
+				body_material.albedo_color = Color("8de8ff")
+			elif bool(last_hit_result.get("armored", false)):
+				body_material.albedo_color = Color("a8d0f0")
+			else:
+				body_material.albedo_color = Color.WHITE
+		elif stagger_timer > 0.0:
+			body_material.albedo_color = Color("7aa8c9")
+		else:
+			body_material.albedo_color = base_body_color
+	if is_instance_valid(feedback_label):
+		if feedback_timer > 0.0:
+			feedback_label.text = fb_text
+			feedback_label.modulate = fb_color
+		else:
+			feedback_label.text = ""
 
 
 func _make_mat(color: Color, unshaded: bool = false) -> StandardMaterial3D:
@@ -319,7 +410,7 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 		cover = CoverScript.new()
 
 	# 1. Exact exponential knockback integration & cover-safe displacement on world_delta
-	if kind != &"target" and knockback_vel.length_squared() > 0.00001:
+	if knockback_vel.length_squared() > 0.00001:
 		var drag := maxf(0.001, float(Tuning.CONTROL.drag))
 		var decay := exp(-drag * world_delta)
 		var kb_disp := knockback_vel * ((1.0 - decay) / drag)

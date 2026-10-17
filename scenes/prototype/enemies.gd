@@ -4,6 +4,7 @@ extends Node3D
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EnemyNode = preload("res://scenes/prototype/enemy.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
+const MAX_LIVE_ENEMIES := 32
 
 var enemies: Array[Node3D] = []
 var cover: RefCounted
@@ -89,12 +90,20 @@ func step(world_delta: float, player: Node3D) -> void:
 
 
 func _spawn_encounter_wave(wave_idx: int) -> void:
-	var max_live := int(Tuning.ENCOUNTER.max_enemies)
+	var max_live: int = mini(int(Tuning.ENCOUNTER.max_enemies), MAX_LIVE_ENEMIES)
 	var template: Array = WAVE_TEMPLATES[wave_idx % WAVE_TEMPLATES.size()]
 	for entry in template:
 		if enemies.size() >= max_live:
 			break
 		spawn(entry["kind"], entry["pos"])
+
+
+func _retire_enemy_node(enemy: Node3D) -> void:
+	if not is_instance_valid(enemy):
+		return
+	if enemy.get_parent() == self:
+		remove_child(enemy)
+	enemy.queue_free()
 
 
 func _prune_dead_enemies() -> void:
@@ -103,18 +112,22 @@ func _prune_dead_enemies() -> void:
 		if not is_instance_valid(enemy):
 			continue
 		if enemy.health <= 0.0:
-			enemy.queue_free()
+			_retire_enemy_node(enemy)
 			continue
 		live.append(enemy)
 	enemies = live
 
 
 func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
+	_prune_dead_enemies()
+	if enemies.size() >= MAX_LIVE_ENEMIES:
+		return null
 	if cover == null:
 		cover = CoverScript.new()
 	var enemy := EnemyNode.new()
 	enemy.cover = cover
 	_spawn_counter += 1
+	enemy.rewind_id = _spawn_counter
 	var limit := float(Tuning.ARENA_HALF_SIZE) - 1.0
 	var clamped_pos := Vector3(
 		clampf(spawn_position.x, -limit, limit),
@@ -144,8 +157,7 @@ func _cancel_encounter() -> void:
 func clear() -> void:
 	_cancel_encounter()
 	for enemy in enemies:
-		if is_instance_valid(enemy):
-			enemy.queue_free()
+		_retire_enemy_node(enemy)
 	enemies.clear()
 
 
@@ -164,6 +176,89 @@ func start_encounter() -> void:
 	encounter_wave_index = 0
 	_spawn_encounter_wave(0)
 	encounter_wave_index = 1
+
+
+func capture_state() -> Dictionary:
+	var roster_data: Array = []
+	for enemy in enemies:
+		if is_instance_valid(enemy) and enemy.health > 0.0:
+			roster_data.append(enemy.capture_state())
+			if roster_data.size() >= MAX_LIVE_ENEMIES:
+				break
+	return {
+		"spawn_counter": int(_spawn_counter),
+		"encounter_active": bool(encounter_active),
+		"encounter_state": String(encounter_state),
+		"encounter_elapsed": float(encounter_elapsed),
+		"encounter_wave_index": int(encounter_wave_index),
+		"enemies": roster_data,
+	}
+
+
+func restore_state(data: Dictionary) -> void:
+	if cover == null:
+		cover = CoverScript.new()
+
+	var state_str := String(data.get("encounter_state", "sandbox"))
+	if state_str in ["sandbox", "running", "victory", "defeat"]:
+		encounter_state = StringName(state_str)
+	else:
+		encounter_state = &"sandbox"
+	encounter_active = bool(data.get("encounter_active", encounter_state == &"running"))
+	encounter_elapsed = maxf(0.0, float(data.get("encounter_elapsed", 0.0)))
+	encounter_wave_index = maxi(0, int(data.get("encounter_wave_index", 0)))
+
+	var existing_by_id: Dictionary = {}
+	for enemy in enemies:
+		if is_instance_valid(enemy):
+			var eid: int = int(enemy.combat_id())
+			if eid > 0 and not existing_by_id.has(eid):
+				existing_by_id[eid] = enemy
+			else:
+				_retire_enemy_node(enemy)
+
+	var raw_roster: Array = data.get("enemies", data.get("roster", []))
+	var restored_enemies: Array[Node3D] = []
+	var used_ids: Dictionary = {}
+	var max_restored_id: int = 0
+
+	for entry_var in raw_roster:
+		if restored_enemies.size() >= MAX_LIVE_ENEMIES:
+			break
+		if not (entry_var is Dictionary):
+			continue
+		var entry: Dictionary = entry_var
+		if float(entry.get("health", 100.0)) <= 0.0:
+			continue
+		var eid: int = maxi(1, int(entry.get("rewind_id", entry.get("id", 0))))
+		if used_ids.has(eid):
+			continue
+		used_ids[eid] = true
+		max_restored_id = maxi(max_restored_id, eid)
+
+		var enemy: Node3D = null
+		if existing_by_id.has(eid):
+			enemy = existing_by_id[eid]
+			existing_by_id.erase(eid)
+		else:
+			enemy = EnemyNode.new()
+			enemy.cover = cover
+			enemy.rewind_id = eid
+			add_child(enemy)
+			var entry_kind := StringName(String(entry.get("kind", "target")))
+			var entry_pos: Vector3 = entry.get("position", Vector3.ZERO)
+			enemy.configure(entry_kind, entry_pos, eid)
+
+		enemy.restore_state(entry)
+		restored_enemies.append(enemy)
+
+	for leftover_id in existing_by_id.keys():
+		var leftover: Node3D = existing_by_id[leftover_id]
+		_retire_enemy_node(leftover)
+
+	enemies = restored_enemies
+	var saved_counter: int = maxi(0, int(data.get("spawn_counter", _spawn_counter)))
+	_spawn_counter = maxi(saved_counter, max_restored_id)
 
 
 func status_text() -> String:

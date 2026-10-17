@@ -1,56 +1,83 @@
 # Combat prototype
 
-Round C development: shared equipment/cover interfaces are ready; repair puzzles,
-wear consumption, crowd control and the encounter sequence are being assigned.
-The repair panel is currently a placeholder. The published playable Round B
-remains on `origin/prototype/combat-playground` at `1419d7a`.
-
-Godot 4.7.2 Standard / Compatibility. Open the root project and run
-`scenes/prototype/arena.tscn` with F6, or from the Ubuntu host:
+Godot 4.7.2 Standard / Compatibility. Open the root project, open
+`scenes/prototype/arena.tscn`, then F6. From the Ubuntu host:
 
 ```sh
 ~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo res://scenes/prototype/arena.tscn
 ```
 
-WASD move; mouse aims; 1/2/3 select ring/flash/cone; left mouse uses the tool.
-Hold Space for time slow. R resets everything. F1–F4 spawn a target, swarmer,
-brute or skirmisher at the cursor; F5 spawns a mixed encounter; Backspace clears.
-Escape opens the existing pause popup; its Exit returns to the main menu.
+WASD moves; mouse aims. Keys 1/2/3 select ring/flash/cone. Left mouse uses it.
+Hold Space for time slow. E repairs the selected tool; T repairs the clock.
+R resets the sandbox. F1–F4 spawn a target, swarmer, brute or skirmisher at
+the cursor; F5 adds a mixed group; F6 starts/restarts a bounded encounter.
+Backspace clears enemies and cancels the encounter. Escape pauses.
 
-Tool 1: hold left mouse, draw a path on the floor, release. The ring travels
-out, cuts along that path, and returns to your current position. Only the
-drawn section damages enemies. Blue is preview; orange is the active route;
-green is the completed portion. The stroke has range and length limits.
+## Try the resource loop
 
-Tool 2: click for a precise flash that hits the first enemy. Tool 3: hold for
-a broad, short-range cone. All three tools can kill every enemy. The orange
-brute's pale shield reduces frontal damage; the rear takes full damage.
-Blue targets are stationary, red swarmers approach, and green skirmishers
-alternate sidestepping and approaching. Damage feedback reports actual HP lost.
+Start with the stationary blue target, then F5 or F6 for pressure.
 
-Time slow affects enemy movement and contact attacks. You, your weapons and
-the slow meter continue at normal speed. Release Space to recharge; after
-exhaustion or pausing, release it before activating again. Switch tools while
-the ring travels; switching while holding the mouse requires a fresh press.
+- Ring: hold and draw a floor path, release to launch. Only the stroke damages;
+  outbound/return are harmless. Route around cover. The returning ring can
+  home through cover in this prototype. One launch costs one service unit.
+- Flash: a strong single-target pulse, first enemy or solid cover stops it.
+  Damage 70, cooldown 0.8 seconds; one service unit per shot, including misses.
+- Cone: a short multi-target attack. Initial bursts shove and briefly stagger;
+  holding gives lighter sustained pushing and 16 damage per second. Strong
+  bursts have a 1.5-second cooldown and cost 1.5 additional firing-seconds.
+  Brutes resist shove/stagger; solid cover blocks the effect.
 
-Start with the target, then F5 for a modest mixed group. There is no automatic
-enemy spawning or death screen; at zero health you can still experiment, or R
-restores health. There are no repair puzzles, audio or finished art in this pass.
+Equipment starts with 32 ring launches, 48 flash shots, 45 cone firing-seconds
+and 24 slow-seconds. These are generous first tuning values, not a promise
+about how often repairs will feel necessary. Wear occurs only during use.
+The clock does not recharge passively. All tools can kill all enemy types;
+the brute's front shield reduces damage to 25%, while sides/rear take full.
+Actual attack contact decides armor, including the ring's path behind a brute.
 
-All gameplay tuning belongs in `tuning.gd`. The arena is the only simulation
-clock: player and weapons receive real delta, enemies receive scaled delta.
-The existing main-menu/game scenes and manager APIs remain available.
+## Repairs
 
-Verification: 168 headless checks across foundation, player, weapons, enemies
-and integration. The integration suite uses the real enemy and weapon scripts,
-checks every weapon/enemy pairing, rear armor contacts, frame-independent cone
-damage, slow time, pause/resume and reset. From the root checkout on the host:
+Press E or T. Hold inside contact 1, follow the channel through the numbered
+contacts, then release inside the final circle. Each completed section restores
+one quarter of that item's capacity immediately. Close and return whenever you
+want: completed steps and restored capacity remain. Only an unfinished gesture
+is discarded. Full gear shows Ready.
+
+Movement and enemies continue during repairs. A hit interrupts the panel.
+The clock can help repair another tool, but cannot slow time during its own
+repair. An empty clock remains repairable at normal speed. After repairs,
+pause or exhaustion, release Space before activating slow again.
+
+Time slow affects enemies, their attacks and the encounter schedule. Player
+movement, weapon travel, damage, cooldowns, wear and repairs use real time.
+F6 begins a 75-world-second sequence with at most six live enemies. Clear the
+remaining enemies after the schedule to win. At 0 HP it stops spawning; R
+returns to the sandbox or F6 retries. Sandbox has no forced death screen.
+
+## Checks and tuning
+
+All gameplay values are in `tuning.gd`; the arena owns the simulation clock.
+The partner's original main-menu/game scenes and popup managers remain.
+379 headless checks cover components, real weapon/enemy combinations, resource
+integration, interrupted repairs, cover, control, timing and encounter lifecycle.
+Rendered checks also exercised a real GUI repair trace and retained progress.
+They do not establish game feel: playtest shove strength, repair frequency,
+repair readability under pressure and enemy density.
+
+The shared lab runner bounds each check to 60 seconds and saves full logs:
 
 ```sh
-~/.local/bin/godot --headless --editor --path . --quit
-~/.local/bin/godot --headless --path . --script res://scenes/prototype/checks/integration.gd
+python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite integration
 ```
 
-The other suites are `foundation.gd`, `player.gd`, `weapons.gd` and `enemies.gd`
-in the same checks directory. Headless checks verify behavior; human playtesting
-still needs to judge aiming, stroke limits, enemy pressure and slow duration.
+Suites: equipment, foundation, player, repairs, weapons, enemies,
+resource_integration and integration. Use `--suite import` after script/scene
+changes. On another machine, run Godot directly with an external timeout:
+
+```sh
+timeout 60s godot --headless --editor --path . --quit
+timeout 60s godot --headless --path . --script res://scenes/prototype/checks/integration.gd
+```
+
+Godot can stay alive after a script error; inspect the error instead of waiting
+or rerunning unchanged. The timeout runner is in shared lab tooling, not a game
+runtime dependency. There are no final assets or boss encounter in this pass.

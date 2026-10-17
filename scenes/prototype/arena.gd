@@ -110,7 +110,7 @@ func _build_hud() -> void:
 	slow_bar = ProgressBar.new()
 	slow_bar.position = Vector2(16, 130)
 	slow_bar.size = Vector2(240, 16)
-	slow_bar.max_value = Tuning.SLOW.capacity
+	slow_bar.max_value = equipment.capacity(&"clock")
 	slow_bar.show_percentage = false
 	slow_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(slow_bar)

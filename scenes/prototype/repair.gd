@@ -51,6 +51,12 @@ func _ready() -> void:
 	add_child(center)
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(620, 440)
+	var backdrop := StyleBoxFlat.new()
+	backdrop.bg_color = Color("1b232b")
+	backdrop.border_color = Color("475361")
+	backdrop.set_border_width_all(1)
+	backdrop.set_corner_radius_all(4)
+	panel.add_theme_stylebox_override("panel", backdrop)
 	center.add_child(panel)
 	var margin := MarginContainer.new()
 	for side in ["left", "top", "right", "bottom"]:
@@ -88,7 +94,7 @@ func _ready() -> void:
 	close.pressed.connect(_request_close)
 	column.add_child(close)
 	var footer := Label.new()
-	footer.text = "WASD still moves. Enemies keep moving. No repair resource needed."
+	footer.text = "WASD still moves. Enemies keep moving."
 	footer.add_theme_font_size_override("font_size", 14)
 	column.add_child(footer)
 	SceneManager.popup_opened.connect(_on_popup_opened)

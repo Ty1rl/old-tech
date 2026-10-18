@@ -6,6 +6,7 @@ const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EPS := 0.000001
 
 var repairing: StringName = &""
+var training_protection: Array[StringName] = []
 var _remaining: Dictionary = {}
 var _repair_session: int = 0
 
@@ -19,6 +20,25 @@ func reset_state() -> void:
 	repairing = &""
 	for tool in Tuning.GEAR:
 		_remaining[String(tool)] = capacity(StringName(tool))
+
+
+func set_training_protection(tools: Array) -> void:
+	training_protection.clear()
+	for item in tools:
+		var tool := StringName(item)
+		if Tuning.GEAR.has(String(tool)) and not (tool in training_protection):
+			training_protection.append(tool)
+
+
+func is_training_protected(tool: StringName) -> bool:
+	return tool in training_protection
+
+
+func restore_tool(tool: StringName, fraction: float = 1.0) -> void:
+	var key := String(tool)
+	if not Tuning.GEAR.has(key):
+		return
+	_remaining[key] = maxf(remaining(tool), capacity(tool) * clampf(fraction, 0.0, 1.0))
 
 
 func capacity(tool: StringName) -> float:
@@ -44,11 +64,13 @@ func can_use(tool: StringName, amount: float = EPS) -> bool:
 
 # Returns actual capacity spent. Discrete shots must first call can_use(tool, 1).
 # Continuous tools use the returned fraction for damage/time on their final tick.
+# Tools listed in training_protection accept positive spend without reducing remaining.
 func spend(tool: StringName, amount: float) -> float:
 	if repairing == tool or amount <= 0.0:
 		return 0.0
 	var spent := minf(remaining(tool), amount)
-	_remaining[String(tool)] = maxf(0.0, remaining(tool) - spent)
+	if not (tool in training_protection):
+		_remaining[String(tool)] = maxf(0.0, remaining(tool) - spent)
 	return spent
 
 

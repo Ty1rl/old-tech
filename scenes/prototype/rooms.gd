@@ -75,14 +75,14 @@ static func get_room(room_id: StringName) -> Dictionary:
 # acquire gates the beat behind a visible physical tool; empty lesson is combat only.
 static func _make_wave(lesson: StringName, formation: StringName, enemies: Array[StringName], count: int, recovery: float, options: Dictionary = {}) -> Dictionary:
 	var wave := {"lesson": lesson, "formation": formation, "enemies": enemies.duplicate(),
-		"count": count, "recovery": recovery, "burst": 3, "interval": 8.0, "max_live": 5}
+		"count": count, "recovery": recovery, "burst": 3, "interval": 4.5, "refill_delay": 0.75, "max_live": 5}
 	wave.merge(options, true)
 	return wave
 
 
 static func definitions() -> Array[Dictionary]:
 	# Room 1: Public Galleries (1 — LOOP ROUTES from 11.png)
-	# Yellow aiming and charge, then orange heat and a forced yellow repair between combat beats.
+	# Yellow aiming and charge, then orange heat and a deliberate wear-free -> empty repair lesson.
 	var gallery_cover: Array[Rect2] = [
 		Rect2(-8.5, -6.5, 6.0, 3.0),
 		Rect2(3.0, 0.5, 6.0, 3.0),
@@ -97,11 +97,11 @@ static func definitions() -> Array[Dictionary]:
 	]
 	var gallery_lessons: Array[StringName] = [&"shot", &"charge", &"heat", &"repair"]
 	var gallery_waves: Array[Dictionary] = [
-		_make_wave(&"shot", &"curve", [&"yellow"], 8, 4.0, {"acquire": 2, "burst": 2, "max_live": 4}),
-		_make_wave(&"charge", &"line", [&"yellow"], 10, 5.0),
-		_make_wave(&"heat", &"cluster", [&"orange", &"yellow"], 9, 5.0, {"acquire": 3}),
-		_make_wave(&"repair", &"line", [], 0, 3.0),
-		_make_wave(&"", &"mixed", [&"orange", &"yellow", &"ranged"], 12, 5.0, {"interval": 7.0}),
+		_make_wave(&"shot", &"curve", [&"yellow"], 8, 2.2, {"acquire": 2, "burst": 2, "max_live": 4, "interval": 4.2}),
+		_make_wave(&"charge", &"line", [&"yellow"], 10, 2.4, {"interval": 4.2}),
+		_make_wave(&"heat", &"cluster", [&"orange", &"yellow"], 9, 2.4, {"acquire": 3, "interval": 4.4}),
+		_make_wave(&"repair", &"line", [], 0, 0.35),
+		_make_wave(&"", &"mixed", [&"orange", &"yellow", &"ranged"], 12, 2.5, {"interval": 4.5}),
 	]
 
 	# Room 2: Connected Collections (blue and purple, mixed enemies, Loop Curator)
@@ -120,12 +120,12 @@ static func definitions() -> Array[Dictionary]:
 	]
 	var collections_lessons: Array[StringName] = [&"cut", &"opening", &"slow", &"rewind", &"loop"]
 	var collections_waves: Array[Dictionary] = [
-		_make_wave(&"cut", &"curve", [&"blue", &"yellow", &"orange"], 9, 5.0, {"acquire": 1}),
-		_make_wave(&"opening", &"mixed", [&"side_guard", &"front_guard", &"yellow"], 9, 5.0),
-		_make_wave(&"slow", &"curve", [&"blue", &"orange", &"ranged"], 8, 5.0, {"acquire": 4}),
-		_make_wave(&"rewind", &"line", [&"yellow", &"blue", &"side_guard"], 7, 5.0),
-		_make_wave(&"loop", &"curve", [&"loop", &"blue", &"yellow"], 6, 6.0, {"burst": 2, "max_live": 4}),
-		_make_wave(&"", &"cluster", [&"loop_boss"], 1, 6.0, {"boss": true, "burst": 1}),
+		_make_wave(&"cut", &"curve", [&"blue", &"yellow", &"orange"], 9, 2.5, {"acquire": 1, "interval": 4.5}),
+		_make_wave(&"opening", &"mixed", [&"side_guard", &"front_guard", &"yellow"], 9, 2.5, {"interval": 4.5}),
+		_make_wave(&"slow", &"curve", [&"blue", &"orange", &"ranged"], 8, 2.5, {"acquire": 4, "interval": 4.5}),
+		_make_wave(&"rewind", &"line", [&"yellow", &"blue", &"side_guard"], 7, 2.5, {"interval": 4.5}),
+		_make_wave(&"loop", &"curve", [&"loop", &"blue", &"yellow"], 6, 3.2, {"burst": 2, "max_live": 4, "interval": 4.5}),
+		_make_wave(&"", &"cluster", [&"loop_boss"], 1, 3.0, {"boss": true, "burst": 1}),
 	]
 
 	# Room 3: Restoration Rooms (2 — STAGGERED GALLERIES from 11.png)
@@ -146,10 +146,10 @@ static func definitions() -> Array[Dictionary]:
 	]
 	var restoration_lessons: Array[StringName] = [&"pair", &"zigzag"]
 	var restoration_waves: Array[Dictionary] = [
-		_make_wave(&"pair", &"line", [&"pair", &"yellow", &"front_guard"], 8, 5.0, {"burst": 2}),
-		_make_wave(&"zigzag", &"curve", [&"zigzag", &"blue", &"orange"], 8, 5.0, {"burst": 2}),
-		_make_wave(&"", &"mixed", [&"pair", &"ranged", &"side_guard", &"zigzag"], 12, 6.0, {"interval": 7.0, "max_live": 6}),
-		_make_wave(&"", &"line", [&"sequence_boss"], 1, 6.0, {"boss": true, "burst": 1}),
+		_make_wave(&"pair", &"line", [&"pair", &"yellow", &"front_guard"], 8, 2.6, {"burst": 2, "interval": 4.5}),
+		_make_wave(&"zigzag", &"curve", [&"zigzag", &"blue", &"orange"], 8, 2.6, {"burst": 2, "interval": 4.5}),
+		_make_wave(&"", &"mixed", [&"pair", &"ranged", &"side_guard", &"zigzag"], 12, 3.5, {"interval": 4.8, "max_live": 6}),
+		_make_wave(&"", &"line", [&"sequence_boss"], 1, 3.0, {"boss": true, "burst": 1}),
 	]
 
 	# Room 4: Burial Exhibition (3 — BOSS COURT from 11.png)
@@ -172,7 +172,7 @@ static func definitions() -> Array[Dictionary]:
 	]
 	var burial_lessons: Array[StringName] = []
 	var burial_waves: Array[Dictionary] = [
-		_make_wave(&"", &"mixed", [&"pair", &"zigzag", &"loop", &"ranged", &"orange", &"front_guard"], 18, 8.0, {"interval": 7.0, "max_live": 6}),
+		_make_wave(&"", &"mixed", [&"pair", &"zigzag", &"loop", &"ranged", &"orange", &"front_guard"], 18, 4.0, {"interval": 4.8, "max_live": 6}),
 		_make_wave(&"", &"cluster", [&"final_boss"], 1, 0.0, {"boss": true, "burst": 1}),
 	]
 

@@ -119,6 +119,7 @@ func enter_room(index: int) -> void:
 	title.text = "%d / 4 · %s" % [room_index + 1, room.title]
 	run_hint.text = "WASD move · mouse aim · collect the lit equipment exhibit."
 	_dead_age = 0; _result_shown = false
+	_sync_training_protection()
 	_update_run_hud()
 
 # Starts a checkpoint with all prerequisites and the selected lesson already learned.
@@ -128,6 +129,7 @@ func debug_start(index: int, requested_wave: int = 0, boss_phase: int = -1) -> v
 	GameState.start_game()
 	tutorial.dismiss()
 	acquired.clear()
+	tutorial.learned.clear()
 	var definitions := Rooms.definitions()
 	var target_room := clampi(index, 0, definitions.size() - 1)
 	var target_wave := clampi(requested_wave, 0, definitions[target_room].waves.size() - 1)
@@ -148,11 +150,31 @@ func retry_room() -> void:
 	SceneManager.clear_popups()
 	GameState.start_game()
 	tutorial.dismiss()
+	lesson = &""
 	enter_room(room_index)
 
 func reset_arena() -> void:
 	if _campaign_ready: retry_room()
 	else: super.reset_arena()
+
+func _is_yellow_protected() -> bool:
+	if bool(tutorial.learned.get(&"repair", false)):
+		return false
+	if lesson == &"repair":
+		return false
+	if room_index > 0:
+		return false
+	if wave_index >= 0 and wave_index < waves.size() and StringName(waves[wave_index].get("lesson", &"")) == &"repair":
+		return false
+	return true
+
+func _sync_training_protection() -> void:
+	if equipment == null or tutorial == null:
+		return
+	var protect := _is_yellow_protected()
+	equipment.set_training_protection([&"beam"] if protect else [])
+	if protect:
+		equipment.restore_tool(&"beam", 1.0)
 
 func _on_teaching_block(blocked: bool) -> void:
 	if not blocked: return
@@ -216,7 +238,7 @@ func _physics_process(delta: float) -> void:
 	if inspecting_before or history.inspecting: return
 	if player.health <= 0: return # Never clear a wave or win on the frame of lethal damage.
 	if not (mode == &"practice" and lesson == &"rewind" and not _rewound):
-		player.health = recovery.step(delta, player.health, float(Tuning.PLAYER.health))
+		player.health = recovery.step(delta * player.world_scale, player.health, float(Tuning.PLAYER.health))
 	if mode == &"pickup":
 		var point: Vector3 = museum.pickup_position
 		if Vector2(player.position.x - point.x, player.position.z - point.z).length() <= 1.7:
@@ -227,6 +249,10 @@ func _physics_process(delta: float) -> void:
 			_spawn_wave()
 	elif mode == &"practice":
 		if tutorial.is_learned(lesson):
+			if lesson == &"repair":
+				tutorial.learned[&"repair"] = true
+				_sync_training_protection()
+				equipment.restore_tool(&"beam", 1.0)
 			_start_pressure()
 			return
 		_practice_age += delta
@@ -237,7 +263,15 @@ func _physics_process(delta: float) -> void:
 			_injury_given = true
 		if not tutorial.active_id.is_empty(): tutorial.world_points.assign(_targets())
 		if _lesson_succeeded():
+			var finished_lesson := lesson
 			tutorial.complete_lesson(lesson)
+			lesson = &""
+			_sync_training_protection()
+			if finished_lesson == &"repair":
+				equipment.restore_tool(&"beam", 1.0)
+				equipment.restore_tool(&"cone", 1.0)
+				if SceneManager.has_popup(&"Repair"):
+					_close_repair()
 			history.clear()
 			_start_pressure()
 		elif _needs_combat_target() and _alive_specimens() == 0: _spawn_practice()
@@ -245,9 +279,12 @@ func _physics_process(delta: float) -> void:
 		_step_pressure(delta * player.world_scale)
 		if _pending == 0 and director.enemies.is_empty() and director.projectiles.is_empty():
 			mode = &"recovery"
-			timer = float(waves[wave_index].get("recovery", 5.0))
+			timer = float(waves[wave_index].get("recovery", 2.5))
 			history.clear()
-			run_hint.text = "Exhibits quiet · hold E to service your tools before the next group."
+			if int(waves[wave_index].get("count", 0)) == 0:
+				run_hint.text = "Tools restored · next exhibit group approaching."
+			else:
+				run_hint.text = "Exhibits quiet · press E to toggle tool repair before the next group."
 	elif mode == &"recovery":
 		timer -= delta * player.world_scale
 		if timer <= 0 and equipment.repairing == &"": _begin_wave()
@@ -271,10 +308,11 @@ func _begin_wave() -> void:
 			mode = &"exit"
 			museum.set_boss_ceremony_phase(&"inactive")
 			museum.set_exit_open(true)
-			run_hint.text = "GALLERY CLEAR · repair at leisure, then walk through the green doorway."
+			run_hint.text = "GALLERY CLEAR · press E to toggle repair at leisure, then walk through the green doorway."
 		return
 	var wave: Dictionary = waves[wave_index]
 	lesson = StringName(wave.get("lesson", &""))
+	_sync_training_protection()
 	var tool := int(wave.get("acquire", 0))
 	if tool > 0 and not tool in acquired:
 		mode = &"pickup"
@@ -294,7 +332,12 @@ func _begin_wave() -> void:
 func _spawn_wave() -> void:
 	title.text = ""
 	_pending = 0; _spawned = 0; _spawn_timer = 0
+	_sync_training_protection()
 	if lesson.is_empty() or tutorial.is_learned(lesson):
+		if lesson == &"repair":
+			tutorial.learned[&"repair"] = true
+			_sync_training_protection()
+			equipment.restore_tool(&"beam", 1.0)
 		specimens.clear(); _specimen_ids.clear()
 		_start_pressure()
 		return
@@ -308,7 +351,10 @@ func _spawn_wave() -> void:
 		&"cut": 1, &"opening": 1, &"slow": 1, &"rewind": 4, &"loop": 1, &"pair": 2, &"zigzag": 1}.get(lesson, 2))
 	_spawn_practice()
 	tutorial.show_known_lesson(lesson, _targets())
-	run_hint.text = "Practice exhibit · complete the marked action safely."
+	if lesson == &"repair":
+		run_hint.text = "Practice exhibit · press E to toggle repair, trace matching contacts, then press E to close."
+	else:
+		run_hint.text = "Practice exhibit · complete the marked action safely."
 	history.clear()
 
 func _spawn_practice() -> void:
@@ -316,6 +362,7 @@ func _spawn_practice() -> void:
 	_kills.clear(); _charged_kills.clear(); _cut = false; _heated = false; _opened = false; _pierced = false
 	if not _needs_combat_target():
 		if lesson == &"repair":
+			_sync_training_protection()
 			equipment.spend(&"beam", equipment.capacity(&"beam"))
 			weapons.select_tool(2)
 		return
@@ -345,6 +392,7 @@ func _start_pressure() -> void:
 	director.clear()
 	specimens.clear(); _specimen_ids.clear()
 	mode = &"pressure"
+	_sync_training_protection()
 	_pending = int(waves[wave_index].count)
 	_spawned = 0; _spawn_timer = 0
 	history.clear()
@@ -352,6 +400,8 @@ func _start_pressure() -> void:
 
 func _step_pressure(world_delta: float) -> void:
 	var wave: Dictionary = waves[wave_index]
+	if _pending > 0 and director.enemies.size() <= (0 if int(wave.burst) <= 1 else 1):
+		_spawn_timer = minf(_spawn_timer, float(wave.get("refill_delay", 0.75)))
 	_spawn_timer = maxf(0, _spawn_timer - maxf(0, world_delta))
 	if _pending > 0 and _spawn_timer <= 0:
 		var space := maxi(0, int(wave.max_live) - director.enemies.size())
@@ -465,6 +515,7 @@ func _restore_world(data: Dictionary, live_clock: float) -> void:
 		_pending = int(schedule.get("pending", _pending))
 		_spawned = int(schedule.get("spawned", _spawned))
 		_spawn_timer = float(schedule.get("timer", _spawn_timer))
+	_sync_training_protection()
 	if mode == &"practice":
 		specimens.clear()
 		for enemy in director.enemies:

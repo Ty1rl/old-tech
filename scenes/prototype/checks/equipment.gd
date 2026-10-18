@@ -126,6 +126,13 @@ func run() -> void:
 	gear.reset_state()
 	expect(is_equal_approx(gear.remaining(&"ring"), rc) and gear.stage(&"ring") == 0 and gear.repairing == &"",
 		"Reset clears repair sessions and restores all equipment")
+	gear.set_training_protection([&"beam"])
+	expect(gear.is_training_protected(&"beam") and is_equal_approx(gear.spend(&"beam", 4.0), 4.0) and is_equal_approx(gear.remaining(&"beam"), bc),
+		"Protected tool accepts positive spend without reducing remaining capacity")
+	gear.set_training_protection([])
+	expect(not gear.is_training_protected(&"beam") and is_equal_approx(gear.spend(&"beam", 4.0), 4.0) and is_equal_approx(gear.remaining(&"beam"), bc - 4.0),
+		"Clearing training_protection restores normal capacity spend")
+	gear.reset_state()
 
 	var cover := Cover.new()
 	var hit := cover.clip_segment(Vector3(-8, 0, -4), Vector3(-2, 0, -4))
@@ -152,6 +159,13 @@ func run() -> void:
 	arena.equipment.complete_step(&"clock")
 	repair_key.pressed = false
 	arena._input(repair_key)
+	if root.get_node("SceneManager").has_popup(&"Repair"):
+		repair_key.pressed = true
+		arena._input(repair_key)
+		if root.get_node("SceneManager").has_popup(&"Repair"):
+			arena._unhandled_input(repair_key)
+		repair_key.pressed = false
+		arena._input(repair_key)
 	await process_frame
 	await process_frame
 	expect(arena.equipment.repairing == &"" and arena.equipment.stage(&"clock") == 1,

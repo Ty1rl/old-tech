@@ -50,12 +50,16 @@ const ARMOR = {"front_multiplier": 0.25, "front_half_angle": 1.05}
 const CONTACT_COOLDOWN = 1.0 # World seconds: time slow delays enemy attacks too.
 const ARENA_HALF_SIZE = 20.0
 
-# Generous first-pass service intervals, measured in actual use, not wall time.
+# Service intervals measured in actual use, not wall time.
+# Use-to-repair budget: each full tool supports roughly 1.5–2.5 combat waves of
+# normal mixed play before needing a 4-step service pass (6 launches/step for
+# ring, 16 shots/step for beam, 6s/step for cone, 4.5s/step for clock), keeping
+# scarcity meaningful without forcing constant mid-wave clock or weapon repairs.
 const GEAR = {
-	"ring": {"capacity": 18.0, "unit": "launches"},
-	"beam": {"capacity": 48.0, "unit": "shots"},
-	"cone": {"capacity": 18.0, "unit": "seconds"},
-	"clock": {"capacity": 12.0, "unit": "seconds"},
+	"ring": {"capacity": 24.0, "unit": "launches"},
+	"beam": {"capacity": 64.0, "unit": "shots"},
+	"cone": {"capacity": 24.0, "unit": "seconds"},
+	"clock": {"capacity": 18.0, "unit": "seconds"},
 }
 const REPAIR_STEPS = 4
 const CONTROL = {"pulse_interval": 1.2, "pulse_cost": 1.5, "pulse_impulse": 22.0,

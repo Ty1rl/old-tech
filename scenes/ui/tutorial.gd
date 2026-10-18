@@ -15,8 +15,8 @@ const LESSONS := {
 	"cut": ["Cut the blue connection", "1 · Hold the mouse, draw across the blue link, then release. The cutter follows your line. A bare blue link dismantles its host; armored hosts may need a yellow finisher.", "cut"],
 	"heat": ["Strip the orange armor", "3 · Aim at the orange covering and hold the mouse until it breaks. Heat also pushes nearby enemies back, helping you make an escape.", "heat"],
 	"shot": ["Aim for yellow", "2 · Aim at the yellow core and click. An exposed core needs only a quick shot.", "shot"],
-	"slow": ["Make yourself time", "Your purple device lends time to every weapon. Keep 1 selected and hold Space to slow the world. Draw across the blue link and release the mouse while time is slow. Release Space to return to full speed.", "slow"],
-	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and hold E to open it. Trace the marked circuit to restore one section. Release E to return; completed repairs stay fixed.", "repair"],
+	"slow": ["Make yourself time", "Your purple device lends time to every weapon and repair. Keep 1 selected and hold Space manually to slow the world. Draw across the blue link and release the mouse while time is slow. Release Space to return to full speed.", "slow"],
+	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and press E to toggle repair open. Follow the matching-shape contacts to spin or trace the marked circuit and restore one section. Press E again to close (or Tab / 1–4 to switch tools); completed repairs stay fixed.", "repair"],
 	"charge": ["A charged shot goes through", "2 · Hold the mouse until the lens is bright, then release. A full charge pierces enemies in its path. Solid cover stops it.", "charge"],
 	"opening": ["Open it, then shoot", "Cut the blue link OR heat the orange armor. The opening stays. Switch to 2 and shoot the exposed yellow core.", "opening"],
 	"pair": ["A, then B", "2 · Shoot A to open B. Shoot B before its shutter closes. Quick aimed shots work. If you wait, try the pair again.", "pair"],
@@ -42,6 +42,8 @@ var body_label: Label
 var state_label: Label
 var practice_button: Button
 var accent := BLUE
+var _layout_size := Vector2(-1, -1)
+var _layout_dirty := true
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -64,7 +66,7 @@ func _ready() -> void:
 	heading = UI.label(column, "", 25)
 	body_label = UI.label(column, "", 18)
 	practice_button = UI.button(column, "Try it safely", request_practice)
-	resized.connect(_layout)
+	resized.connect(func(): _layout(true))
 	GameState.settings_changed.connect(_on_settings_changed)
 	hide()
 
@@ -98,7 +100,7 @@ func show_lesson(id: StringName, title: String, text: String, targets: Array[Vec
 	_set_blocking(true)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	show()
-	_layout()
+	_layout(true)
 	practice_button.grab_focus.call_deferred()
 
 func request_practice() -> void:
@@ -111,7 +113,7 @@ func request_practice() -> void:
 	practice_button.release_focus()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	resume_requested.emit(active_id)
-	_layout()
+	_layout(true)
 
 func complete_lesson(id: StringName) -> void:
 	# Only the campaign calls this after observing actual success.
@@ -161,18 +163,21 @@ func _on_settings_changed(values: Dictionary) -> void:
 		learned = prior
 		resume_requested.emit(id)
 
-func _layout() -> void:
+func _layout(force: bool = true) -> void:
 	if not is_instance_valid(card):
 		return
-	var factor := UI.scale_for(self)
-	theme.default_font_size = roundi(19 * factor)
-	var width := minf(550 * factor, maxf(220, size.x - 32))
-	card.custom_minimum_size.x = width
-	card.size.x = width
-	heading.add_theme_font_size_override("font_size", roundi((21 if size.y < 480 else 25) * factor))
-	body_label.add_theme_font_size_override("font_size", roundi((15 if size.y < 480 else 18) * factor))
-	state_label.add_theme_font_size_override("font_size", roundi(13 * factor))
-	card.reset_size()
+	if force or _layout_dirty or _layout_size != size:
+		_layout_size = size
+		_layout_dirty = false
+		var factor := UI.scale_for(self)
+		theme.default_font_size = roundi(19 * factor)
+		var width := minf(550 * factor, maxf(220, size.x - 32))
+		card.custom_minimum_size.x = width
+		card.size.x = width
+		heading.add_theme_font_size_override("font_size", roundi((21 if size.y < 480 else 25) * factor))
+		body_label.add_theme_font_size_override("font_size", roundi((15 if size.y < 480 else 18) * factor))
+		state_label.add_theme_font_size_override("font_size", roundi(13 * factor))
+		card.reset_size()
 	card.position.x = (size.x - card.size.x) * 0.5
 	var target_y := size.y * 0.4
 	if not projected.is_empty():
@@ -207,7 +212,7 @@ func _process(delta: float) -> void:
 			var outside := behind or not rect.has_point(screen)
 			projected.append(screen.clamp(rect.position, rect.end))
 			offscreen.append(outside)
-	_layout()
+	_layout(false)
 	queue_redraw()
 
 func _gui_input(event: InputEvent) -> void:

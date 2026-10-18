@@ -1,0 +1,104 @@
+ROUND K — JAM-7: TUTORIAL, MENUS AND SETTINGS
+
+Base: 6b35d16. No arena, player, weapon, enemy, status HUD, history or campaign
+logic changes. Jam-1 owns the campaign orchestration and real success detection.
+
+Tutorial hookup
+  Add scenes/ui/tutorial.gd as a Control under a CanvasLayer (suggest layer 60,
+  below SceneManager's popups at 100). Call setup(actual_camera).
+  Public contract:
+    signal resume_requested(id: StringName)
+    blocking: bool
+    show_lesson(id, title, body, world_points:Array[Vector3],
+                gesture:Array[Vector2]=[])
+    complete_lesson(id)
+    is_learned(id)->bool
+    reset_run()
+  Convenience: show_known_lesson(id, actual_world_points)->bool supplies the
+  provided player-facing text and ghost. IDs: cut, heat, shot, slow, repair,
+  charge, opening, pair, loop, zigzag, rewind, final.
+  Extra signals: blocking_changed(bool), lesson_completed(id).
+
+  On first encounter, call show_known_lesson only if no active lesson is pending.
+  While blocking is true, Jam-1's normal simulation/input guards must freeze world
+  AND actions. Cancel held attacks, repair input and player motion on the edge.
+  Do not pause the SceneTree for this explanation: this UI needs mouse and time.
+  Mouse input over the explanation and its practice button is handled by the UI.
+  The controller does not edit or independently tick the arena.
+
+  'Try it safely' emits resume_requested once and changes blocking to false.
+  Resume world/actions for a safe specimen. KEEP CROWD PRESSURE GATED while
+  is_learned(id) is false. Neither this button nor closing another menu is success.
+  Observe actual play, then complete_lesson(id): e.g. cable_cut, destroyed orange
+  armor, a real exposed core hit, completed repair work, confirmed rewind before
+  an injury/poor position, or the real pattern/final phase success. The controller
+  ignores completion before practice, and ignores a different lesson's id.
+  Do not connect resume_requested directly to GameState.resume(): closing the
+  tutorial must not override a separately opened pause/settings screen.
+
+  Use actual part queries, not hand-positioned proxy geometry. World vectors are
+  value snapshots; update tutorial.world_points.assign(actual_positions) as moving
+  targets change. For pair use ordered A/B cores; for loop/zigzag use the support
+  midpoints in gesture order. Known lessons route the ghost through those actual
+  projected positions. Custom show_lesson gestures use normalized (0..1) points
+  inside padded projected target bounds and remain exactly the supplied shape.
+  Projection refreshes every UI frame for camera changes, resize and offscreen
+  indicators. Behind-camera targets get an edge arrow; no ghost joins offscreen
+  targets. Invalid/freed cameras remove projection until setup() supplies a new one.
+
+  learned is per run; reset_run only when starting a fresh run. Completed lessons
+  do not freeze again for each spawn. Disabling teaching in Settings releases an
+  active lesson and makes is_learned return true. Re-enabling keeps learned lessons.
+
+Menus / campaign hookup
+  SceneManager's original registry, fade and popup stack are retained. Originals
+  scenes/main.tscn, scenes/game.tscn and Prototype are runnable.
+  Play calls SceneManager.start_play(). It resolves Campaign at runtime only if
+  res://scenes/prototype/campaign.tscn exists; otherwise it launches Prototype.
+  No missing campaign resource is preloaded. start_play(true) always opens sandbox.
+  New run is indicated by SceneManager.params.new_run = true.
+
+  Pause opens the existing PauseMenu. Settings stacks over it; Back/Escape removes
+  only Settings and keeps the paused world. Original focus is restored. Reopening
+  an already open popup is refused. GameState.resume refuses while Settings is up.
+  Fades disable the outgoing scene before re-enabling play in the incoming scene.
+  Existing arena popup/state signals cancel held inputs; test covers stale release.
+
+  Connect SceneManager.restart_room_requested to Jam-1's checkpoint restart handler.
+  The request stays paused until the handler restores the room, clears popups and
+  calls GameState.start_game(). No connected handler: reloads current sandbox scene.
+  SceneManager.show_run_result(true/false) shows win/retry UI and holds gameplay.
+  Retry requests restart; Play again requests a fresh run; Settings and Return Main
+  work from either result. Quit calls the engine quit method.
+
+Settings contract
+  GameState.settings_changed(values: Dictionary) emits live updates.
+  GameState.preferences() returns sound:bool, volume:float 0..1,
+  fullscreen:bool, tutorial:bool, hud:int (0 full, 1 dim, 2 hidden).
+  GameState.set_setting(key, value)->bool applies and persists a setting.
+  The adapter reuses user://combat-audio.cfg audio/muted and combat-hud.cfg
+  hud/readout, so existing M/F7 controls remain authoritative and flow back.
+  Only the new independent values (volume/fullscreen/tutorial) are stored in
+  user://museum-settings.cfg. Audio uses the existing Master bus; no new bus,
+  player, sound asset or parallel audio manager was added.
+  GameState.apply_preferences(actual_feedback, actual_status_hud) lets a campaign
+  pass nested components explicitly. The baseline adapter finds the root scene's
+  existing feedback/status_hud properties automatically. Fullscreen is an actual
+  DisplayServer mode change; headless tests skip the physical display operation.
+  GameState.settings_save_failed(path) is available for a campaign save-failure cue.
+
+Verification / preview
+  python3 ../../../check.py --seat jam-7 --suite import
+  python3 ../../../check.py --seat jam-7 --suite tutorial_ui
+  python3 ../../../check.py --seat jam-7 --suite foundation
+  python3 ../../../check.py --seat jam-7 --suite integration
+  python3 ../../../check.py --seat jam-7 --suite feedback
+  python3 ../../../render.py --seat jam-7 \
+    --script res://scenes/tutorial_preview/capture.gd --name round-k-ui-final
+  All commands from this checkout; helpers remain bounded/private.
+  For a MANUAL review only, open scenes/tutorial_preview/preview.tscn. It uses the
+  real baseline arena, one stationary harmless blue specimen and real cut success.
+  This is an isolated feature preview, not a competing campaign or full-run test.
+  The loop capture uses four real baseline cable specimens because the future
+  loop enemy belongs to Jam-5. Campaign pattern/health/rewind wiring is unverified
+  here and must be assembled/tested by Jam-1.

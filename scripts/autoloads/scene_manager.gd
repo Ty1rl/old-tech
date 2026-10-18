@@ -3,17 +3,21 @@ extends Node
 signal scene_changed(key: StringName)
 signal popup_opened(key: StringName, popup: Node)
 signal popup_closed(key: StringName)
+signal restart_room_requested
 
 # &"scene_name": "res://path/to/scene_name.tscn",
 const SCENES: Dictionary[StringName, String] = {
 	&"Main": "uid://dc1k8c1u03wl2",
 	&"Game": "uid://b3ilviafr4x4r",
-	&"Prototype": "res://scenes/prototype/arena.tscn"
+	&"Prototype": "res://scenes/prototype/arena.tscn",
+	&"Campaign": "res://scenes/prototype/campaign.tscn"
 }
 
 # Scenes shown on top of everything.
 const POPUPS: Dictionary[StringName, String] = {
 	&"PauseMenu": "uid://c1f3c6w6w2oy0",
+	&"Settings": "res://scenes/ui/settings.tscn",
+	&"RunResult": "res://scenes/ui/run_result.tscn",
 	&"Repair": "res://scenes/prototype/repair.tscn"
 }
 
@@ -62,6 +66,8 @@ func go_to(key: StringName, new_params: Dictionary = {}, fade: bool = true) -> b
 	if not SCENES.has(key):
 		push_error("SceneManager: unknown scene key '%s'" % key)
 		return false
+	if not ResourceLoader.exists(SCENES[key]):
+		return false
 	_change(key, SCENES[key], new_params, fade)
 	return true
 
@@ -79,7 +85,7 @@ func reload_current_scene(fade: bool = true) -> bool:
 ## Popups stack and each blocks input to those below it.
 ## Returns the instance or null if it couldn't be shown.
 func push_popup(key: StringName, popup_params: Dictionary = {}) -> Node:
-	if _transitioning:
+	if _transitioning or has_popup(key):
 		return null
 	if not POPUPS.has(key):
 		push_error("SceneManager: unknown popup key '%s'" % key)
@@ -95,7 +101,14 @@ func push_popup(key: StringName, popup_params: Dictionary = {}) -> Node:
 		popup.call(&"setup", popup_params)
 	
 	# The holder owns the backdrop and the popup, so freeing it removes both.
+	var previous_focus := get_viewport().gui_get_focus_owner()
+	if not _popups.is_empty():
+		_popups.back().process_mode = Node.PROCESS_MODE_DISABLED
+		_popups.back().get_child(1).process_mode = Node.PROCESS_MODE_DISABLED
 	var holder := Control.new()
+	holder.process_mode = Node.PROCESS_MODE_ALWAYS
+	if previous_focus:
+		holder.set_meta("previous_focus", weakref(previous_focus))
 	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.set_meta(KEY_META, key)
@@ -165,6 +178,10 @@ func get_param(param_name: StringName, default: Variant = null) -> Variant:
 
 func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) -> void:
 	_transitioning = true
+	var old_scene := get_tree().current_scene
+	var old_process := old_scene.process_mode if old_scene else Node.PROCESS_MODE_INHERIT
+	if old_scene:
+		old_scene.process_mode = Node.PROCESS_MODE_DISABLED
 	
 	if fade:
 		await _fade_to(1.0)
@@ -173,6 +190,8 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 	params = new_params
 	var err: Error = get_tree().change_scene_to_file(path)
 	if err != OK:
+		if is_instance_valid(old_scene):
+			old_scene.process_mode = old_process
 		push_error("SceneManager: failed to load scene '%s'" % path)
 	else:
 		# The swap happens at the end of the frame.
@@ -195,4 +214,40 @@ func _fade_to(alpha: float) -> void:
 
 func _on_popup_removed(holder: Control, key: StringName) -> void:
 	_popups.erase(holder)
+	if not _popups.is_empty():
+		_popups.back().process_mode = Node.PROCESS_MODE_ALWAYS
+		_popups.back().get_child(1).process_mode = Node.PROCESS_MODE_ALWAYS
+	if holder.has_meta("previous_focus"):
+		var focus: Control = holder.get_meta("previous_focus").get_ref()
+		if is_instance_valid(focus) and focus.is_inside_tree():
+			focus.grab_focus.call_deferred()
 	popup_closed.emit(key)
+
+
+func play_key(sandbox: bool = false) -> StringName:
+	return &"Campaign" if not sandbox and ResourceLoader.exists(SCENES[&"Campaign"]) else &"Prototype"
+
+func start_play(sandbox: bool = false) -> bool:
+	if _transitioning:
+		return false
+	var accepted := go_to(play_key(sandbox), {"new_run": true})
+	if accepted:
+		GameState.start_game()
+	return accepted
+
+func return_main() -> void:
+	if go_to(&"Main"):
+		GameState.open_menu()
+
+func request_restart_room() -> void:
+	# Campaign owns checkpoints. The isolated sandbox has no room controller.
+	if restart_room_requested.get_connections().size() > 0:
+		restart_room_requested.emit()
+	else:
+		if reload_current_scene():
+			GameState.start_game()
+
+func show_run_result(won: bool) -> void:
+	GameState.end_game()
+	clear_popups()
+	push_popup(&"RunResult", {"won": won})

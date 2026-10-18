@@ -226,6 +226,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if code == KEY_TAB:
+			weapons.select_tool(posmod(weapons.selected_tool - 1 + (-1 if event.shift_pressed else 1), 4) + 1)
+			player.reset_input()
+			_space_release_required = _space_held
+			_update_hud()
+			return
 		if code >= KEY_1 and code <= KEY_4:
 			var selected: int = weapons.selected_tool
 			weapons.select_tool(code - KEY_1 + 1)
@@ -254,7 +260,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				history.clear()
 				return
 			KEY_F1, KEY_F2, KEY_F3, KEY_F4:
-				var kinds := [&"target", &"swarmer", &"brute", &"skirmisher"]
+				var kinds := [&"target", &"blue", &"yellow", &"orange"]
 				director.spawn(kinds[code - KEY_F1], _spawn_position())
 				history.clear()
 				return
@@ -262,11 +268,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				director.spawn_group()
 				history.clear()
 				return
+			KEY_F8:
+				director.spawn(&"side_guard", _spawn_position())
+				history.clear()
+				return
 			KEY_F9:
 				reset_arena()
 				director.clear()
 				player.camera.size = 22
-				director.spawn(&"warden", Vector3(0, 0, -7))
+				director.spawn(&"front_guard", Vector3(0, 0, -7))
 				_update_hud()
 				return
 			KEY_F6:
@@ -451,8 +461,8 @@ func _update_hud() -> void:
 	hud.visible = alpha > 0.0
 	slow_bar.modulate.a = alpha
 	slow_bar.visible = alpha > 0.0
-	hud.text = "WASD move | 1/2/3/4 equip | LMB draw / charge / hold | Space slow / clock inspect | Esc pause\n"
-	hud.text += "Hold E repair selected | Wheel scrub clock | R reset | F1–F4 spawn | F5 mixed | F6 encounter | F9 guard demo | M sound | Backspace clear\n"
+	hud.text = "WASD move | 1/2/3/4 or Tab equip | LMB draw / charge / hold | Space slow / clock inspect | Esc pause\n"
+	hud.text += "Hold E repair selected | Wheel scrub clock | R reset | F1 target / F2 blue / F3 yellow / F4 orange | F5 pack | F6 encounter | F8 side / F9 front guard | M sound | Backspace clear\n"
 	hud.text += "HP %.0f | Enemies %d | World %.2fx\n" % [player.health, director.enemies.size(), player.world_scale]
 	hud.text += player.status_text() + "\n" + weapons.status_text()
 	hud.text += "\n" + equipment.status_text() + " | " + director.status_text()

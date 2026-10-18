@@ -1,7 +1,7 @@
 extends RefCounted
 
 # Distances are world units; durations are real seconds unless stated otherwise.
-const PLAYER = {"speed": 6.0, "health": 100.0}
+const PLAYER = {"speed": 6.0, "health": 100.0, "visual_scale": 1.3}
 const SLOW = {"scale": 0.18, "drain": 1.0}
 const RING = {"range": 14.0, "length": 22.0, "minimum_length": 0.6,
 	"sample_spacing": 0.18, "outbound_speed": 24.0, "stroke_speed": 38.0,
@@ -15,7 +15,18 @@ const ENEMIES = {
 	"brute": {"health": 180.0, "speed": 1.2, "radius": 1.0, "damage": 12.0},
 	"skirmisher": {"health": 65.0, "speed": 3.2, "radius": 0.55, "damage": 7.0},
 	"warden": {"health": 240.0, "speed": 1.3, "radius": 1.1, "damage": 12.0},
+	"blue": {"health": 360.0, "speed": 2.1, "radius": 0.65, "damage": 7.0, "mechanism": "cut", "layout": "bridge"},
+	"yellow": {"health": 300.0, "speed": 1.9, "radius": 0.65, "damage": 7.0, "mechanism": "shot", "layout": "front"},
+	"orange": {"health": 400.0, "speed": 1.8, "radius": 0.7, "damage": 7.0, "mechanism": "heat", "layout": "front"},
+	"side_guard": {"health": 500.0, "speed": 1.6, "radius": 0.8, "damage": 10.0, "mechanism": "open", "layout": "side"},
+	"front_guard": {"health": 500.0, "speed": 1.6, "radius": 0.8, "damage": 10.0, "mechanism": "open", "layout": "front"},
 }
+const MATCHUPS = {"body_damage": 0.12, "heat_seconds": 0.9, "heat_decay": 0.15,
+	"cut_radius": 0.16, "core_radius": 0.32, "attack_windup": 0.5, "attack_recovery": 1.7,
+	"push_light": 1.25, "push_heavy": 0.15, "stagger_scale": 2.4}
+# Slots follow a shrinking arc around the player; 0 strength restores direct chase.
+const PACK = {"size": 5, "neighbor_range": 14.0, "spacing": 1.8,
+	"strength": 0.85, "advance": 1.1, "separation": 0.3, "break_distance": 3.0}
 # A fully charged 100-damage flash plus this bonus finishes a 240-health guard.
 const PARTS = {"cable_bonus": 65.0, "core_bonus": 140.0, "core_min_charge": 0.6,
 	"heat_threshold": 1.1, "heat_decay": 0.25, "open_seconds": 4.0,
@@ -38,4 +49,4 @@ const CONTROL = {"pulse_interval": 1.2, "pulse_cost": 1.5, "pulse_impulse": 22.0
 	"brute_resistance": 0.4, "brute_stagger_resistance": 0.8}
 # Costs use real elapsed inspection time and actual seconds rewound.
 const REWIND = {"browse_drain": 0.2, "jump_cost": 1.0, "scroll_step": 0.25}
-const ENCOUNTER = {"duration": 75.0, "interval": 12.0, "max_enemies": 6}
+const ENCOUNTER = {"duration": 75.0, "interval": 12.0, "max_enemies": 8}

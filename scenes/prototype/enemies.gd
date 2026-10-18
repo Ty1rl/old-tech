@@ -16,31 +16,33 @@ var encounter_state: StringName = &"sandbox" # &"sandbox", &"running", &"victory
 var encounter_elapsed: float = 0.0
 var encounter_wave_index: int = 0
 
-# Small introductions leave room to try each tool before the groups overlap.
+# A blue pack first; later mixed arrivals and a quiet reinforcement interval.
 const WAVE_TEMPLATES: Array[Array] = [
 	[
-		{"kind": &"swarmer", "pos": Vector3(-7.5, 0.0, -9.5)},
-		{"kind": &"swarmer", "pos": Vector3(7.5, 0.0, -9.5)},
+		{"kind": &"blue", "pos": Vector3(-2.8, 0, -9.0)},
+		{"kind": &"blue", "pos": Vector3(0, 0, -9.6)},
+		{"kind": &"blue", "pos": Vector3(2.8, 0, -9.0)},
 	],
 	[
-		{"kind": &"skirmisher", "pos": Vector3(0.0, 0.0, -11.5)},
+		{"kind": &"yellow", "pos": Vector3(-4.5, 0, -11.5)},
+		{"kind": &"orange", "pos": Vector3(4.5, 0, -11.5)},
 	],
 	[
-		{"kind": &"warden", "pos": Vector3(0.0, 0.0, -12.0)},
+		{"kind": &"side_guard", "pos": Vector3(-2, 0, -11)},
+		{"kind": &"front_guard", "pos": Vector3(2, 0, -11)},
+	],
+	[],
+	[
+		{"kind": &"blue", "pos": Vector3(-2.8, 0, 10)},
+		{"kind": &"blue", "pos": Vector3(0, 0, 10.6)},
+		{"kind": &"blue", "pos": Vector3(2.8, 0, 10)},
 	],
 	[
-		{"kind": &"swarmer", "pos": Vector3(-8.0, 0.0, -8.5)},
-		{"kind": &"swarmer", "pos": Vector3(8.0, 0.0, -8.5)},
+		{"kind": &"yellow", "pos": Vector3(-4, 0, -11.5)},
+		{"kind": &"orange", "pos": Vector3(4, 0, -11.5)},
 	],
 	[
-		{"kind": &"skirmisher", "pos": Vector3(-6.5, 0.0, -10.5)},
-	],
-	[
-		{"kind": &"warden", "pos": Vector3(2.5, 0.0, -12.0)},
-	],
-	[
-		{"kind": &"swarmer", "pos": Vector3(-7.0, 0.0, -10.0)},
-		{"kind": &"swarmer", "pos": Vector3(7.0, 0.0, -10.0)},
+		{"kind": &"front_guard", "pos": Vector3(0, 0, -11)},
 	],
 ]
 
@@ -134,10 +136,12 @@ func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
 
 
 func spawn_group() -> void:
-	spawn(&"swarmer", Vector3(-6.0, 0.0, -7.5))
-	spawn(&"swarmer", Vector3(6.0, 0.0, -7.5))
-	spawn(&"warden", Vector3(0.0, 0.0, -10.5))
-	spawn(&"skirmisher", Vector3(-7.5, 0.0, 4.0))
+	spawn(&"blue", Vector3(-3.0, 0, -7.0))
+	spawn(&"blue", Vector3(-1.1, 0, -7.8))
+	spawn(&"side_guard", Vector3(1.1, 0, -7.8))
+	spawn(&"front_guard", Vector3(3.0, 0, -7.0))
+	spawn(&"yellow", Vector3(-4, 0, -10.5))
+	spawn(&"orange", Vector3(4, 0, -10.5))
 
 
 func _cancel_encounter() -> void:

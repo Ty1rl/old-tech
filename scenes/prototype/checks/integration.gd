@@ -148,7 +148,7 @@ func run() -> void:
 		"Reset key clears active attacks and restores world time")
 	expect(arena.director.enemies.size() == 1 and arena.director.enemies[0].kind == &"target", "Reset key restores target encounter")
 	arena._unhandled_input(key(KEY_F5))
-	expect(arena.director.enemies.size() == 5, "Mixed debug key adds four real enemies")
+	expect(arena.director.enemies.size() == 7, "Mixed debug key adds six current part variants alongside the target")
 	arena._unhandled_input(key(KEY_BACKSPACE))
 	expect(arena.director.enemies.is_empty(), "Clear key empties encounter")
 

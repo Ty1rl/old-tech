@@ -123,10 +123,10 @@ func run() -> void:
 	# 8. spawn_group() and reset_state() restore clean state
 	director.clear()
 	director.spawn_group()
-	expect(director.enemies.size() == 4, "spawn_group() creates modest 4-enemy mixed encounter")
+	expect(director.enemies.size() == 6, "spawn_group() creates six colored-part enemies")
 	var mixed_kinds: Array = director.enemies.map(func(e): return e.kind)
-	expect(mixed_kinds.count(&"swarmer") == 2 and mixed_kinds.count(&"skirmisher") == 1 and mixed_kinds.count(&"warden") == 1,
-		"Mixed group pairs two swarmers with a skirmisher and a mechanized guard")
+	expect(mixed_kinds.count(&"blue") == 2 and mixed_kinds.count(&"side_guard") == 1 and mixed_kinds.count(&"front_guard") == 1 and mixed_kinds.count(&"yellow") == 1 and mixed_kinds.count(&"orange") == 1,
+		"Mixed group offers blue kills, yellow and orange kills, plus both opening layouts")
 	director.reset_state()
 	expect(director.enemies.size() == 1 and director.enemies[0].kind == &"target", "reset_state() clears mixed group and restores single target")
 
@@ -262,14 +262,14 @@ func run() -> void:
 	expect(director.enemies.size() > 0 and director.enemies.size() <= int(Tuning.ENCOUNTER.max_enemies), "Wave 0 spawns initial enemies within max_enemies cap")
 
 	var first_wave: Array = director.enemies.map(func(e): return e.kind)
-	expect(first_wave == [&"swarmer", &"swarmer"], "Encounter opens with two swarmers instead of every archetype at once")
+	expect(first_wave == [&"blue", &"blue", &"blue"], "Encounter opens with a blue pack before other part variants")
 	var opening: Dictionary = director.capture_state()
 	director.step(12.0, player)
 	var second_wave: Array = director.enemies.map(func(e): return e.kind)
-	expect(second_wave.count(&"skirmisher") == 1 and not second_wave.has(&"warden"), "Skirmisher arrives before the first guard")
+	expect(second_wave.count(&"yellow") == 1 and second_wave.count(&"orange") == 1 and not second_wave.has(&"front_guard"), "Yellow and orange enemies arrive before the guards")
 	director.step(12.0, player)
 	var third_wave: Array = director.enemies.map(func(e): return e.kind)
-	expect(third_wave.count(&"warden") == 1 and third_wave.size() <= 6, "First guard joins after two tool introductions, within live cap")
+	expect(third_wave.count(&"side_guard") == 1 and third_wave.count(&"front_guard") == 1 and third_wave.size() <= int(Tuning.ENCOUNTER.max_enemies), "Both opening layouts arrive after the colored introductions, within live cap")
 	director.restore_state(opening)
 	player.reset_state()
 

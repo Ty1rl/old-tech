@@ -83,7 +83,7 @@ func run() -> void:
 	var meshes: Array[MeshInstance3D] = []
 	var materials: Dictionary = {}
 	collect_meshes(visual, meshes, materials)
-	expect(meshes.size() >= 12 and meshes.size() <= 24 and materials.size() <= 6,
+	expect(meshes.size() >= 12 and meshes.size() <= 32 and materials.size() <= 6,
 		"Geometry and material counts stay restrained (%d meshes, %d materials)" % [meshes.size(), materials.size()])
 
 	player.reset_state()

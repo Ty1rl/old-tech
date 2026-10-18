@@ -36,6 +36,7 @@ func _ensure_visual() -> void:
 		visual = PlayerVisual.new()
 		model.add_child(visual)
 		visual.build()
+		visual.scale = Vector3.ONE * float(Tuning.PLAYER.visual_scale)
 		visual.set_tool_index(visual_tool)
 
 

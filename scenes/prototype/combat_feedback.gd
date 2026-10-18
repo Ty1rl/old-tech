@@ -101,6 +101,9 @@ func cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:
 	if _inspecting and kind != &"repair_step":
 		return
 	if float(_cooldowns.get(kind, 0.0)) > 0.0:
+		# A multi-cut must show each broken part even when its sound is coalesced.
+		if not _inspecting and kind in [&"cable_cut", &"vent", &"core_break"]:
+			_add_effect(kind, point, clampf(strength, 0.15, 1.5))
 		dropped_cues += 1
 		return
 	_cooldowns[kind] = CUE_COOLDOWN

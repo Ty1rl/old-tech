@@ -12,6 +12,7 @@ The partner's original menu/game scenes and popup managers remain intact.
 ## Controls
 
 - WASD moves; mouse aims. 1/2/3/4 equip ring/flash/cone/clock.
+  Tab cycles forward; Shift+Tab cycles backward.
 - Ring: hold left mouse to draw a floor path, release to launch.
 - Flash: hold left mouse to charge, release to fire. Quick taps are weaker.
 - Cone: hold left mouse for continuous heat and repeating shove/stun pulses.
@@ -20,40 +21,49 @@ The partner's original menu/game scenes and popup managers remain intact.
 - Space with clock: freeze and inspect history. Wheel down goes backward, up
   returns toward now. Release Space to jump to the selected moment. At NOW,
   release simply resumes. Escape cancels to the original present.
-- R resets. F1–F4 spawn target/swarmer/brute/skirmisher at cursor. F5 adds a
-  mixed group; F6 starts/restarts a bounded encounter. Backspace clears it.
+- R resets. F1 spawns a stationary target; F2 blue, F3 yellow, F4 orange.
+  F8 spawns a side-attachment guard. F5 adds a mixed pack; F6 starts/restarts
+  the bounded encounter. Backspace clears enemies.
 - Escape normally pauses. F7 cycles upper numbers through full/dim/hidden;
   the preference persists. Player gauges remain visible in every mode.
-- F9 starts the mechanized guard showcase with a closer camera. R returns to
+- F9 starts the front-plate guard showcase with a closer camera. R returns to
   the normal sandbox. M toggles sound and saves the choice across launches.
 
-## Mechanized guard
+## Colored-part enemies
 
-The guard has a more detailed metal chassis and three color-coded mechanisms:
+- **Blue connector:** cutting across it kills a blue-only enemy. A curved stroke
+  can kill several; the cutter continues through enemies. It still stops at cover.
+- **Yellow target:** an accurate flash shot kills it, including a quick tap.
+- **Orange covering:** sustained cone heat breaks it and kills an orange-only enemy.
+- **Side-attachment / front-plate guards:** cut the blue connector OR heat the
+  orange covering, then shoot the exposed yellow target. Both openings are
+  permanent; a quick accurate shot is enough to clean up. Body shots before
+  opening do not receive the core kill.
 
-- **Cyan cable:** physically cross it with a cutting stroke. Severing it deals
-  substantial damage and permanently opens the shield. A stroke can hit the
-  body first and cut the cable later, without repeating its ordinary damage.
-- **Orange shield vents:** keep the cone on the guard to heat it. The shield
-  opens temporarily, revealing the core; the heavy chassis resists displacement
-  while still visibly staggering.
-- **Yellow core:** one fully charged flash into the exposed core finishes the
-  guard after either opening route. Quick shots and ordinary body hits still
-  do damage, but do not receive that finishing damage without enough charge.
+Every tool can kill every enemy through ordinary damage. New enemies have high
+health and take 12% ordinary body damage: a blue enemy takes about 30 fully charged
+body shots versus one cable cut. This spends existing equipment condition; there
+is no extra ammunition system. Correct part hits are decisive, not immunity rules.
+These initial values need playtesting.
 
-Try cut → charged flash, or heat → charged flash. The original four enemy
-archetypes remain. Both mechanisms and their opening timers rewind correctly.
-The guard is a worked example rather than a finished boss.
+Blue connectors and guards approach in small cohorts that seek spaced slots on
+a shrinking arc around the player. They release formation close to contact, so
+packing never prevents attacks. Cohesion, spacing and approach are in `Tuning.PACK`;
+set strength to zero for direct chasing. Cover avoidance still applies.
 
-The player now has an articulated model with walking/idle motion and a visible
-equipped tool. Tool colors match the nearby gauges; movement and collision are
-unchanged. Cosmetic animation stops during frozen inspection.
+New enemies wind up before striking, then stop during recovery. Cone pulses
+shove light enemies farther and stun for about two world seconds. Heavy guards
+move less but still stun, so heating remains practical. Correct kills, recovery
+and shove are intended to earn repair windows. No damage immunity is granted
+while repairing. Mechanisms, windups, recovery and pack placement rewind.
 
-Tool colors are shared across HUD, vulnerable parts and effects. Placeholder
-audio is synthesized in memory: spinning cutter, rising charge, cone hiss,
-impacts, mechanism breaks, repair clicks and a mechanical clock loop. Clock
-playback speed/pitch ramps down into slow time and spins up on release; scrub
-speed changes it too. No hit/break sounds replay while browsing history.
+The temporary player model is 30% larger, with both hands gripping the equipment
+and forearms following those grips during walking. Collision and history roots
+are unchanged. Jam-5's separate Blender model trial is not integrated here.
+
+Tool colors are shared across HUD, parts and effects. Placeholder sounds include
+weapon loops, impacts, mechanism breaks, repair clicks and clock speed ramps.
+M mutes them. Historical browsing never replays hit/break cues.
 
 ## Equipment and repairs
 
@@ -69,8 +79,8 @@ colors distinguish reachable and blocked portions of the cutting path.
 Flash has a 35-unit range, 30–100 damage over 0.9 seconds of charge, and a short
 cooldown. Visible pulses hit the first enemy or cover. Cone damages multiple
 enemies and shoves/staggers at 1.2-world-second intervals while held. Brutes
-travel less but still visibly stagger. All tools can kill every archetype;
-front armor reduces actual contact damage to 25%, not a weapon matchup bonus.
+travel less but still visibly stagger. All tools can kill every archetype; correct colored-part contacts are much
+more efficient than ordinary body damage.
 
 Starting condition: 32 ring launches, 48 flash shots, 45 cone firing-seconds,
 24 clock slow-seconds. Cone pulses add wear. Clock has no passive recharge.
@@ -124,10 +134,12 @@ stays 1. Player input, movement, flash charge, cooldowns, wear and repair use
 real time. Enemy behavior, attack flight, cone damage and shove cadence use
 world time. During inspection only its real-time clock wear advances.
 
-F5 adds two swarmers, a skirmisher and a guard. F6 introduces swarmers first,
-then a skirmisher at 12 seconds and a guard at 24 seconds, with small later
-reinforcements. The 75-world-second encounter is capped at six live enemies. Clear survivors
-after the schedule to win. Final art, bosses and authored levels are later work.
+F5 adds two blues, both opening layouts, one yellow and one orange. F6 begins
+with three blues, adds yellow/orange at 12 seconds and guards at 24 seconds.
+There are no new arrivals at the 36-second checkpoint; reinforcements resume
+at 48 seconds. Clear current enemies to earn that breathing room. The encounter
+lasts 75 world seconds and caps live enemies at eight; clear survivors to win.
+Final art, bosses and authored levels are later work.
 Tests establish behavior and state restoration, not enjoyable balance.
 
 ```sh
@@ -135,7 +147,8 @@ python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 ```
 
 Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
-resource_integration, integration, parts, feedback, scrub_view, presentation.
+resource_integration, integration, parts, feedback, scrub_view, presentation,
+player_visual, variants.
 Use import after script/scene changes.
 The shared lab runner bounds execution and saves full logs in seat state.
 On another machine: `timeout 60s godot --headless --path . --script

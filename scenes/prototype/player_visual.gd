@@ -22,6 +22,9 @@ var left_boot: MeshInstance3D
 var right_boot: MeshInstance3D
 var boots: Array[MeshInstance3D] = []
 var held_tool: Node3D
+var left_hand: MeshInstance3D
+var left_forearm: MeshInstance3D
+var right_forearm: MeshInstance3D
 var tool_attachments: Dictionary = {}
 
 var coat_material: StandardMaterial3D
@@ -148,16 +151,16 @@ func build() -> void:
 	left_arm_pivot.name = "LeftArmPivot"
 	left_arm_pivot.position = Vector3(-0.34, 0.38, 0.0)
 	body_pivot.add_child(left_arm_pivot)
-	_box(left_arm_pivot, Vector3(0.16, 0.36, 0.18), Vector3(0.0, -0.15, -0.03), coat_material, "LeftArm")
-	_box(left_arm_pivot, Vector3(0.17, 0.13, 0.19), Vector3(0.0, -0.32, -0.05), dark_material, "LeftGlove")
+	_box(left_arm_pivot, Vector3(0.16, 0.23, 0.18), Vector3(0.0, -0.10, -0.03), coat_material, "LeftArm")
+	left_hand = _box(left_arm_pivot, Vector3(0.17, 0.13, 0.19), Vector3(0.0, -0.32, -0.05), dark_material, "LeftGlove")
 
 	# Right arm + forward held tool mount
 	right_arm_pivot = Node3D.new()
 	right_arm_pivot.name = "RightArmPivot"
 	right_arm_pivot.position = Vector3(0.34, 0.38, 0.0)
 	body_pivot.add_child(right_arm_pivot)
-	_box(right_arm_pivot, Vector3(0.16, 0.32, 0.22), Vector3(0.0, -0.12, -0.10), coat_material, "RightArm")
-	_box(right_arm_pivot, Vector3(0.18, 0.14, 0.22), Vector3(0.0, -0.22, -0.22), dark_material, "RightGlove")
+	_box(right_arm_pivot, Vector3(0.16, 0.23, 0.22), Vector3(0.0, -0.10, -0.04), coat_material, "RightArm")
+	_box(right_arm_pivot, Vector3(0.18, 0.14, 0.22), Vector3(0.02, -0.20, -0.35), dark_material, "RightGlove")
 
 	held_tool = Node3D.new()
 	held_tool.name = "HeldTool"
@@ -165,11 +168,17 @@ func build() -> void:
 	right_arm_pivot.add_child(held_tool)
 	_box(held_tool, Vector3(0.14, 0.14, 0.26), Vector3(0.0, 0.0, 0.04), copper_material, "ToolStock")
 
+	left_hand.reparent(held_tool, false)
+	left_hand.position = Vector3(-0.24, 0.0, 0.04)
+	_box(held_tool, Vector3(0.40, 0.08, 0.08), Vector3(-0.10, 0.0, 0.04), copper_material, "SupportHandle")
+	left_forearm = _box(body_pivot, Vector3(0.13, 1.0, 0.14), Vector3.ZERO, coat_material, "LeftForearm")
+	right_forearm = _box(body_pivot, Vector3(0.13, 1.0, 0.14), Vector3.ZERO, coat_material, "RightForearm")
+
 	# 1. Ring launcher attachment (horizontal cyan disc/ring in front of hand)
 	var ring_node := Node3D.new()
 	ring_node.name = "ToolRing"
 	held_tool.add_child(ring_node)
-	_cylinder(ring_node, 0.23, 0.23, 0.06, Vector3(0.0, 0.02, -0.14), tool_material, 12, "RingDisc")
+	_cylinder(ring_node, 0.23, 0.23, 0.06, Vector3(0.0, 0.02, -0.14), tool_material, 24, "RingDisc")
 	_cylinder(ring_node, 0.10, 0.10, 0.08, Vector3(0.0, 0.02, -0.14), dark_material, 10, "RingHub")
 	tool_attachments[&"ring"] = ring_node
 
@@ -177,7 +186,7 @@ func build() -> void:
 	var beam_node := Node3D.new()
 	beam_node.name = "ToolBeam"
 	held_tool.add_child(beam_node)
-	var barrel := _cylinder(beam_node, 0.065, 0.08, 0.44, Vector3(0.0, 0.02, -0.22), tool_material, 8, "BeamBarrel")
+	var barrel := _cylinder(beam_node, 0.065, 0.08, 0.44, Vector3(0.0, 0.02, -0.22), tool_material, 16, "BeamBarrel")
 	barrel.rotation.x = PI * 0.5
 	_box(beam_node, Vector3(0.18, 0.12, 0.14), Vector3(0.0, 0.02, -0.08), trim_material, "BeamCoil")
 	tool_attachments[&"beam"] = beam_node
@@ -240,9 +249,19 @@ func _apply_pose() -> void:
 	var swing := sin(walk_phase) * 0.62 * stride_blend
 	left_leg_pivot.rotation = Vector3(swing, 0.0, 0.0)
 	right_leg_pivot.rotation = Vector3(-swing, 0.0, 0.0)
-	left_arm_pivot.rotation = Vector3(-swing * 0.70 + sin(idle_phase) * 0.04 * idle_weight, 0.0, 0.0)
+	left_arm_pivot.rotation = Vector3(-swing * 0.15 + sin(idle_phase) * 0.04 * idle_weight, 0.0, 0.0)
 	right_arm_pivot.rotation = Vector3(swing * 0.30 + sin(idle_phase + 0.7) * 0.03 * idle_weight, 0.0, 0.0)
 	var bob := absf(sin(walk_phase)) * 0.055 * stride_blend + sin(idle_phase) * 0.018 * idle_weight
 	body_pivot.position = Vector3(0.0, 0.52 + bob, 0.0)
 	body_pivot.rotation = Vector3(-0.09 * stride_blend, 0.0, -cos(walk_phase) * 0.04 * stride_blend)
 	head_pivot.rotation = Vector3(0.04 * stride_blend, sin(idle_phase * 0.5) * 0.04 * idle_weight, 0.0)
+	var tool_pose := right_arm_pivot.transform * held_tool.transform
+	_place_forearm(left_forearm, left_arm_pivot.transform * Vector3(0, -0.22, -0.03), tool_pose * left_hand.position)
+	_place_forearm(right_forearm, right_arm_pivot.transform * Vector3(0, -0.20, -0.04), tool_pose * Vector3(0, 0, 0.08))
+
+
+func _place_forearm(mesh: MeshInstance3D, start: Vector3, finish: Vector3) -> void:
+	var delta := finish - start
+	var axis := delta.normalized()
+	var right := axis.cross(Vector3.FORWARD).normalized()
+	mesh.transform = Transform3D(Basis(right, axis * delta.length(), right.cross(axis)), (start + finish) * 0.5)

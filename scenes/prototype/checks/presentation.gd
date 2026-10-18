@@ -122,7 +122,7 @@ func run() -> void:
 	spawn.physical_keycode = KEY_F9
 	spawn.pressed = true
 	arena._unhandled_input(spawn)
-	expect(arena.director.enemies.size() == 1 and arena.director.enemies[0].kind == &"warden", "F9 starts a clean guard showcase")
+	expect(arena.director.enemies.size() == 1 and arena.director.enemies[0].kind == &"front_guard", "F9 starts a clean front-plate variant showcase")
 
 	fresh(Vector3(0, 0, -4))
 	# Aim a shot through the solid wall toward an opened core behind it.

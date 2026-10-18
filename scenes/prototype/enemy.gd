@@ -4,6 +4,7 @@ extends Node3D
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 const WardenVisual = preload("res://scenes/prototype/warden_visual.gd")
+const PartVisual = preload("res://scenes/prototype/part_visual.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
 const MAX_KNOCKBACK_SPEED := 32.0
 
@@ -22,6 +23,10 @@ var shield_heat: float = 0.0
 var shield_open_timer: float = 0.0
 var core_broken: bool = false
 var warden_visual: Node3D
+var part_visual: Node3D
+var plate_broken := false
+var attack_phase: StringName = &"approach"
+var attack_timer := 0.0
 var status_root: Node3D
 
 # Crowd control / knockback / stagger state (world units and world seconds)
@@ -79,6 +84,9 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	contact_damage = float(cfg.get("damage", 0.0))
 	contact_cooldown = 0.0
 	cable_cut = false
+	plate_broken = false
+	attack_phase = &"approach"
+	attack_timer = 0.0
 	shield_heat = 0.0
 	shield_open_timer = 0.0
 	core_broken = false
@@ -120,6 +128,9 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 		# from cone range. It still moves and visibly staggers.
 		impulse_resist = _part("push_resistance", 0.25)
 		stagger_resist = _part("stagger_resistance", 0.8)
+	if mechanism() != &"":
+		impulse_resist = float(Tuning.MATCHUPS.push_heavy if mechanism() in [&"heat", &"open"] else Tuning.MATCHUPS.push_light)
+		stagger_resist = float(Tuning.MATCHUPS.stagger_scale)
 	var eff_impulse := maxf(0.0, impulse) * impulse_resist
 	var eff_stagger := maxf(0.0, stagger_seconds) * stagger_resist
 
@@ -159,11 +170,15 @@ func capture_state() -> Dictionary:
 		"flash_timer": float(flash_timer),
 		"feedback_timer": float(feedback_timer),
 	}
-	if kind == &"warden":
+	if kind == &"warden" or mechanism() != &"":
 		state["cable_cut"] = cable_cut
 		state["shield_heat"] = shield_heat
 		state["shield_open_timer"] = shield_open_timer
 		state["core_broken"] = core_broken
+	if mechanism() != &"":
+		state["plate_broken"] = plate_broken
+		state["attack_phase"] = String(attack_phase)
+		state["attack_timer"] = attack_timer
 	if flash_timer > 0.0 or feedback_timer > 0.0:
 		state["feedback_text"] = feedback_label.text if is_instance_valid(feedback_label) else ""
 		state["feedback_color"] = feedback_label.modulate if is_instance_valid(feedback_label) else Color.WHITE
@@ -194,6 +209,9 @@ func restore_state(data: Dictionary) -> void:
 	health = clampf(float(data.get("health", max_health)), 0.0, max_health)
 	contact_cooldown = maxf(0.0, float(data.get("contact_cooldown", data.get("contact_timer", 0.0))))
 	cable_cut = bool(data.get("cable_cut", false))
+	plate_broken = bool(data.get("plate_broken", false))
+	attack_phase = StringName(data.get("attack_phase", "approach"))
+	attack_timer = maxf(0.0, float(data.get("attack_timer", 0.0)))
 	shield_heat = maxf(0.0, float(data.get("shield_heat", 0.0)))
 	shield_open_timer = maxf(0.0, float(data.get("shield_open_timer", 0.0)))
 	core_broken = bool(data.get("core_broken", false))
@@ -257,6 +275,7 @@ func _build_visuals() -> void:
 	if is_instance_valid(status_root):
 		status_root.queue_free()
 	warden_visual = null
+	part_visual = null
 	visual_root = Node3D.new()
 	add_child(visual_root)
 	status_root = Node3D.new()
@@ -279,6 +298,9 @@ func _build_visuals() -> void:
 		&"warden":
 			base_body_color = Color("495962")
 			body_height = 1.7
+		_:
+			base_body_color = Color("6d7882")
+			body_height = 1.4
 
 	body_material = _make_mat(base_body_color)
 	body_mesh = MeshInstance3D.new()
@@ -337,6 +359,14 @@ func _build_visuals() -> void:
 		rear_tab.position = Vector3(0.0, body_height * 0.35, radius * 0.88)
 		rear_tab.material_override = _make_mat(Color("222a35"), true)
 		visual_root.add_child(rear_tab)
+
+	if mechanism() != &"":
+		for old in visual_root.get_children():
+			old.visible = false
+		part_visual = PartVisual.new()
+		visual_root.add_child(part_visual)
+		part_visual.build(mechanism(), part_layout(), radius, body_material)
+		_update_warden_visuals()
 
 	# Overhead health bar (kept unrotated in world space on self)
 	var bar_y := body_height + (0.85 if kind == &"warden" else 0.45)
@@ -404,21 +434,33 @@ func _part(key: String, fallback: float) -> float:
 	return float(Tuning.PARTS.get(key, fallback))
 
 
+func mechanism() -> StringName:
+	return StringName(Tuning.ENEMIES[String(kind)].get("mechanism", ""))
+
+
+func part_layout() -> StringName:
+	return StringName(Tuning.ENEMIES[String(kind)].get("layout", "bridge"))
+
+
 func is_core_exposed() -> bool:
+	if mechanism() != &"":
+		return mechanism() == &"shot" or (mechanism() == &"open" and (cable_cut or plate_broken))
 	return cable_cut or shield_open_timer > 0.0
 
 
 func _update_warden_visuals() -> void:
 	if kind == &"warden" and is_instance_valid(warden_visual):
 		warden_visual.sync(cable_cut, is_core_exposed(), core_broken, shield_heat / maxf(0.01, _part("heat_threshold", 1.1)))
+	if is_instance_valid(part_visual):
+		part_visual.sync(cable_cut, is_core_exposed() or plate_broken, core_broken, shield_heat / float(Tuning.MATCHUPS.heat_seconds))
 
 
 func attack_radius(tool: StringName) -> float:
-	return radius + 0.5 if kind == &"warden" and tool == &"ring" and not cable_cut else radius
+	return radius + 0.65 if tool == &"ring" and has_cuttable_part() else radius
 
 
 func has_cuttable_part() -> bool:
-	return kind == &"warden" and not cable_cut and health > 0.0
+	return (kind == &"warden" or mechanism() in [&"cut", &"open"]) and not cable_cut and health > 0.0
 
 
 func _local_part_world(local: Vector3) -> Vector3:
@@ -428,13 +470,17 @@ func _local_part_world(local: Vector3) -> Vector3:
 
 func cable_world_points() -> Array[Vector3]:
 	var points: Array[Vector3] = []
+	if mechanism() != &"":
+		for point: Vector3 in PartVisual.cable_points(part_layout(), radius):
+			points.append(_local_part_world(point))
+		return points
 	for point: Vector3 in [Vector3(radius * 0.9, 0.0, -0.48), Vector3(radius + 0.38, 0.0, -0.48), Vector3(radius + 0.38, 0.0, 0.48), Vector3(radius * 0.9, 0.0, 0.48)]:
 		points.append(_local_part_world(point))
 	return points
 
 
 func core_world_position() -> Vector3:
-	return _local_part_world(Vector3(0.0, 1.05, -0.74))
+	return _local_part_world(PartVisual.core_point(radius) if mechanism() != &"" else Vector3(0.0, 1.05, -0.74))
 
 
 func _point_segment_distance(point: Vector3, a: Vector3, b: Vector3) -> float:
@@ -454,6 +500,8 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 	var miss := {"dealt": 0.0, "armored": false, "killed": false, "connected": false, "cue": &""}
 	if health <= 0.0 or amount <= 0.0:
 		return miss
+	if mechanism() != &"":
+		return _variant_attack(tool, amount, contact_world, context)
 	if kind != &"warden":
 		var ordinary := hit(amount, contact_world)
 		ordinary["connected"] = true
@@ -511,6 +559,52 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 	return result
 
 
+func _variant_attack(tool: StringName, amount: float, contact: Vector3, context: Dictionary) -> Dictionary:
+	var mode := mechanism()
+	var start: Vector3 = context.get("segment_start", contact)
+	var finish: Vector3 = context.get("segment_end", contact)
+	var width := float(context.get("radius", 0.0))
+	var connected := _point_segment_distance(position, start, finish) <= radius + width + 0.001
+	var cut := false
+	if tool == &"ring" and has_cuttable_part() and context.has("segment_start"):
+		var points := cable_world_points()
+		cut = _segment_distance(start, finish, points[0], points[1]) <= width + float(Tuning.MATCHUPS.cut_radius)
+	var already_hit := tool == &"ring" and bool(context.get("already_hit", false))
+	if (not connected and not cut) or (already_hit and not cut):
+		return {"dealt": 0.0, "armored": false, "killed": false, "connected": false, "cue": &""}
+	var cue: StringName = &""
+	var decisive := false
+	if cut:
+		cable_cut = true
+		cue = &"cable_cut"
+		decisive = mode == &"cut"
+	if tool == &"cone" and mode in [&"heat", &"open"] and not plate_broken:
+		shield_heat += maxf(0.0, float(context.get("dt", 0.0)))
+		if shield_heat >= float(Tuning.MATCHUPS.heat_seconds):
+			plate_broken = true
+			cue = &"vent"
+			decisive = mode == &"heat"
+	if tool == &"beam" and is_core_exposed() and not core_broken and context.has("segment_start"):
+		var direction := Vector3(finish.x - start.x, 0, finish.z - start.z).normalized()
+		var core_position := core_world_position()
+		var along := (core_position - start).dot(direction)
+		var ray_end := start + direction * maxf(start.distance_to(finish), along + radius * 2)
+		if along >= 0 and _point_segment_distance(core_position, start, ray_end) <= width + float(Tuning.MATCHUPS.core_radius):
+			core_broken = true
+			cue = &"core_break"
+			decisive = true
+	# Every body hit progresses, but consumes far more condition than a part hit.
+	var damage := health if decisive else (0.0 if already_hit else amount * float(Tuning.MATCHUPS.body_damage))
+	var result := hit(damage, contact)
+	result["connected"] = true
+	result["cue"] = cue
+	result["armored"] = not decisive
+	if not decisive and is_instance_valid(feedback_label) and damage > 0:
+		feedback_label.text = "-%.0f BODY" % result.dealt
+	_update_warden_visuals()
+	return result
+
+
 func hit(amount: float, contact_world: Vector3) -> Dictionary:
 	if health <= 0.0 or amount <= 0.0:
 		return {"dealt": 0.0, "armored": false, "killed": false}
@@ -544,6 +638,9 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> void:
 	if health <= 0.0:
 		return
+	if mechanism() != &"" and world_delta > 0.0:
+		shield_heat = maxf(0.0, shield_heat - world_delta * float(Tuning.MATCHUPS.heat_decay))
+		_update_warden_visuals()
 	if kind == &"warden" and world_delta > 0.0:
 		shield_open_timer = maxf(0.0, shield_open_timer - world_delta)
 		shield_heat = maxf(0.0, shield_heat - world_delta * _part("heat_decay", 0.25))
@@ -628,6 +725,18 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 				var raw_dir := combined.normalized() if combined.length_squared() > 0.0001 else dir_to_player
 				move_dir = _steer_around_cover(self_xz, raw_dir, self_xz + raw_dir * 3.0)
 
+	if mechanism() != &"":
+		facing = _rotate_xz_toward(facing, dir_to_player, 3.0 * active_ai_delta)
+		var destination := pack_target(player_xz, neighbors)
+		var pack_direction := destination - self_xz
+		var blend := float(Tuning.PACK.strength) if mechanism() in [&"cut", &"open"] else 0.0
+		var approach := dir_to_player.lerp(pack_direction.normalized(), blend)
+		var separation := _compute_separation(neighbors, radius * 2.0 + 0.15)
+		approach += separation * float(Tuning.PACK.separation)
+		move_dir = _steer_around_cover(self_xz, approach.normalized(), destination)
+		if attack_phase != &"approach":
+			move_dir = Vector3.ZERO
+
 	var stop_dist := radius + PLAYER_CONTACT_RADIUS - 0.04
 	if dist > stop_dist and move_dir.length_squared() > 0.0001:
 		var step_len := move_speed * active_ai_delta
@@ -636,6 +745,9 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 	# Recompute XZ distance for contact damage (suppressed while staggered)
 	var post_xz := Vector3(position.x, 0.0, position.z)
 	var post_dist := post_xz.distance_to(player_xz)
+	if mechanism() != &"":
+		_step_part_attack(active_ai_delta, player, post_dist)
+		return
 	if stagger_timer <= 0.0 and contact_damage > 0.0 and post_dist <= (radius + PLAYER_CONTACT_RADIUS + 0.05):
 		if float(player.health) > 0.0 and contact_cooldown <= 0.0:
 			player.take_damage(contact_damage)
@@ -644,6 +756,57 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 				skirmish_phase = &"orbit"
 				skirmish_timer = 0.0
 				skirmish_strafe_sign = -skirmish_strafe_sign
+
+
+func pack_target(player_position: Vector3, neighbors: Array) -> Vector3:
+	if mechanism() not in [&"cut", &"open"]:
+		return player_position
+	var members: Array = []
+	var pack_size := int(Tuning.PACK.size)
+	var cohort := floori(float(combat_id() - 1) / pack_size)
+	for other in neighbors:
+		if not is_instance_valid(other) or other.health <= 0 or not other.has_method("mechanism"):
+			continue
+		if other.mechanism() not in [&"cut", &"open"] or floori(float(other.combat_id() - 1) / pack_size) != cohort:
+			continue
+		if position.distance_to(other.position) <= float(Tuning.PACK.neighbor_range):
+			members.append(other)
+	if members.size() < 2 or not members.has(self):
+		return player_position
+	members.sort_custom(func(a, b): return a.combat_id() < b.combat_id())
+	var center := Vector3.ZERO
+	for other in members:
+		center += other.position
+	center /= members.size()
+	var radial := Vector2(center.x - player_position.x, center.z - player_position.z)
+	# Release the formation near contact so cohesion never prevents an attack.
+	if radial.length() < float(Tuning.PACK.break_distance):
+		return player_position
+	var distance := maxf(1.7, radial.length() - float(Tuning.PACK.advance))
+	var slot := float(members.find(self)) - float(members.size() - 1) * 0.5
+	var angle := radial.angle() + slot * float(Tuning.PACK.spacing) / distance
+	return player_position + Vector3(cos(angle), 0, sin(angle)) * distance
+
+
+func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> void:
+	var reach := radius + PLAYER_CONTACT_RADIUS + 0.1
+	if attack_phase == &"approach":
+		if distance <= reach:
+			attack_phase = &"windup"
+			attack_timer = float(Tuning.MATCHUPS.attack_windup)
+			feedback_label.text = "!"
+			feedback_timer = attack_timer
+		return
+	attack_timer = maxf(0.0, attack_timer - world_delta)
+	if attack_timer > 0.0:
+		return
+	if attack_phase == &"windup":
+		if distance <= reach and player.health > 0:
+			player.take_damage(contact_damage)
+		attack_phase = &"recover"
+		attack_timer = float(Tuning.MATCHUPS.attack_recovery)
+	else:
+		attack_phase = &"approach"
 
 
 func overlaps_cover(margin: float = -0.01) -> bool:

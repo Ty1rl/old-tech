@@ -59,7 +59,7 @@ func _ready() -> void:
 	legend.offset_right = -16
 	legend.offset_top = -52
 	legend.offset_bottom = -30
-	legend.text = "[center][color=#%s]Cut cable[/color] · [color=#%s]Heat shield[/color] · [color=#%s]Charge core[/color][/center]" % [ToolStyle.RING.to_html(false), ToolStyle.CONE.to_html(false), ToolStyle.BEAM.to_html(false)]
+	legend.text = "[center][color=#%s]Cut blue[/color] · [color=#%s]Heat orange[/color] · [color=#%s]Shoot yellow[/color][/center]" % [ToolStyle.RING.to_html(false), ToolStyle.CONE.to_html(false), ToolStyle.BEAM.to_html(false)]
 
 
 func cycle_readout() -> void:

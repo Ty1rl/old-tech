@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="TimeSettings" format=3]
+
+[ext_resource type="Script" path="res://scripts/time/time_settings.gd" id="1_settings"]
+
+[resource]
+script = ExtResource("1_settings")
+capacity = 100.0
+recharge_per_second = 12.0
+recharge_delay_after_hit = 1.5
+hit_multiplier = 1.0
+slow_scale = 0.18
+slow_drain_per_second = 8.0
+slow_min_to_start = 15.0
+repair_cost_per_checkpoint = 6.0
+charges_per_attempt = 3
+recovery_floor = 40.0
+recovery_grace_seconds = 1.5
+history_seconds = 12.0
+history_sample_rate = 20.0
+history_max_snapshots = 240

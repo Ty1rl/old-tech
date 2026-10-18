@@ -1,0 +1,16 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/time/time_controller.gd" id="1_controller"]
+[ext_resource type="Resource" path="res://scripts/time/time_settings.tres" id="2_settings"]
+[ext_resource type="Script" path="res://scripts/time/emergency_rewind.gd" id="3_emergency"]
+
+[node name="TimeCore" type="Node"]
+
+[node name="TimeController" type="Node" parent="."]
+script = ExtResource("1_controller")
+settings = ExtResource("2_settings")
+
+[node name="EmergencyRewind" type="Node" parent="." node_paths=PackedStringArray("time_controller")]
+process_mode = 3
+script = ExtResource("3_emergency")
+time_controller = NodePath("../TimeController")

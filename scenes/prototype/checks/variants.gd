@@ -186,9 +186,8 @@ func run() -> void:
 	fresh(&"target")
 	expect(arena.player.visual.scale.is_equal_approx(Vector3.ONE * 1.3), "Player visual is larger without changing collider or history root")
 	arena.player.visual.step_visual(0.1, 4.0)
-	var arm_tip: Vector3 = arena.player.visual.left_forearm.global_transform * Vector3(0, 0.5, 0)
-	expect(arm_tip.distance_to(arena.player.visual.left_hand.global_position) < 0.001,
-		"Support forearm reaches the hand gripping the tool while walking")
+	expect(arena.player.visual.grip_error("L") < 0.025,
+		"Skinned support arm reaches actual equipment handle while walking")
 	key(KEY_1)
 	arena.weapons.handle_event(mouse(true), arena.player, Vector3(0, 0, -5))
 	key(KEY_TAB)

@@ -64,9 +64,13 @@ move less but still stun, so heating remains practical. Correct kills, recovery
 and shove are intended to earn repair windows. No damage immunity is granted
 while repairing. Mechanisms, windups, recovery and pack placement rewind.
 
-The temporary player model is 30% larger, with both hands gripping the equipment
-and forearms following those grips during walking. Collision and history roots
-are unchanged. Jam-5's separate Blender model trial is not integrated here.
+The player uses the Blender protagonist with a skinned rig, idle/walk animations
+and four modeled tools. Both arms fit the real equipment handles; walking keeps
+the holding pose. Art remains 30% enlarged for readability. Animation advances
+only through the arena's real-time tick, so pause and inspection freeze it.
+Collision and history roots are unchanged; meshes and bones never enter snapshots.
+The current gait is a stylized in-place cycle, with some knee/cloth compression
+and foot sliding at high movement speed. Detailed fingers are not animated.
 
 Tool colors are shared across HUD, parts and effects. Placeholder sounds include
 weapon loops, impacts, mechanism breaks, repair clicks and clock speed ramps.

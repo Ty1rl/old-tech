@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/prototype/museum_environment.gd" id="1_museum"]
+
+[node name="MuseumEnvironment" type="Node3D"]
+script = ExtResource("1_museum")

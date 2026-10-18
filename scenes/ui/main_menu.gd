@@ -50,6 +50,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if SceneManager.developer_tools and event is InputEventKey and event.pressed and event.physical_keycode == KEY_F10:
 		SceneManager.push_popup(&"Developer")
 
-func _on_play_button_pressed() -> void: SceneManager.start_play()
+func _on_play_button_pressed() -> void: SceneManager.push_popup(&"NewGame")
 func _on_settings_button_pressed() -> void: SceneManager.push_popup(&"Settings")
 func _on_exit_button_pressed() -> void: get_tree().quit()

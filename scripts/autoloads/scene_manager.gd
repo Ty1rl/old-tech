@@ -17,6 +17,7 @@ const SCENES: Dictionary[StringName, String] = {
 const POPUPS: Dictionary[StringName, String] = {
 	&"PauseMenu": "uid://c1f3c6w6w2oy0",
 	&"Settings": "res://scenes/ui/settings.tscn",
+	&"NewGame": "res://scenes/ui/new_game.tscn",
 	&"RunResult": "res://scenes/ui/run_result.tscn",
 	&"Developer": "res://scenes/ui/encounter_menu.tscn",
 	&"Repair": "res://scenes/prototype/repair.tscn"
@@ -168,6 +169,20 @@ func has_popup(key: StringName = &"") -> bool:
 	return false
 
 
+## Returns the topmost matching CONTENT root, never its dimming wrapper.
+## Empty key queries the top popup for focus management. Closing/freed nodes
+## are excluded immediately, even before the deferred deletion queue drains.
+func get_popup(key: StringName) -> Node:
+	for i in range(_popups.size() - 1, -1, -1):
+		var holder := _popups[i]
+		if not is_instance_valid(holder) or holder.is_queued_for_deletion(): continue
+		if not key.is_empty() and holder.get_meta(KEY_META) != key: continue
+		if holder.get_child_count() < 2: continue
+		var content := holder.get_child(1)
+		if not content.is_queued_for_deletion(): return content
+	return null
+
+
 func get_current_scene() -> Node:
 	return get_tree().current_scene
 
@@ -231,10 +246,10 @@ func _on_popup_removed(holder: Control, key: StringName) -> void:
 func play_key(sandbox: bool = false) -> StringName:
 	return &"Campaign" if not sandbox and ResourceLoader.exists(SCENES[&"Campaign"]) else &"Prototype"
 
-func start_play(sandbox: bool = false) -> bool:
-	if _transitioning:
+func start_play(sandbox: bool = false, difficulty: StringName = &"easy") -> bool:
+	if _transitioning or difficulty not in [&"easy", &"hard"]:
 		return false
-	var accepted := go_to(play_key(sandbox), {"new_run": true})
+	var accepted := go_to(play_key(sandbox), {"new_run": true, "difficulty": difficulty})
 	if accepted:
 		GameState.start_game()
 	return accepted

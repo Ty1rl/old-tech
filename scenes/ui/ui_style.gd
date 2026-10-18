@@ -126,8 +126,8 @@ static func focus_on_open(view: Control, target: Control) -> void:
 		if not owner_view.can_process() or not control.is_visible_in_tree(): return
 		var manager := control.get_node_or_null("/root/SceneManager")
 		if manager != null and manager.has_popup():
-			var popup: Node = manager._popups.back().get_child(1)
-			if popup != owner_view and not popup.is_ancestor_of(owner_view): return
+			var popup: Node = manager.get_popup(&"")
+			if popup != null and popup != owner_view and not popup.is_ancestor_of(owner_view): return
 		wire_focus(owner_view)
 		var current := control.get_viewport().gui_get_focus_owner()
 		if current != null and owner_view.is_ancestor_of(current):

@@ -3,6 +3,7 @@ extends Control
 ## Display only. Arena supplies its ONE TimeController through bind_time_controller.
 ## Weapon IDs remain 1=ring, 2=beam, 3=cone. Time is never equipment.
 const UI = preload("res://scenes/ui/ui_style.gd")
+const Segments = preload("res://scenes/ui/condition_segments.gd")
 const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 const TOOLS: Array[StringName] = [&"ring", &"beam", &"cone"]
 const COLORS: Array[Color] = [ToolStyle.RING, ToolStyle.BEAM, ToolStyle.CONE]
@@ -28,6 +29,7 @@ var _scale := 1.0
 var _font: Font
 var _hit_light := 0.0
 var _hint_state := -1
+var _muted := false
 var _repair_overlay: CanvasLayer
 var _repair_gauge: Control
 
@@ -60,6 +62,7 @@ func bind_time_controller(controller: TimeController) -> void:
 	time_controller = controller
 	if is_instance_valid(time_controller):
 		time_controller.hit_taken.connect(_on_hit)
+	if is_node_ready(): set_combat_hint(_muted)
 	queue_redraw()
 
 func _on_hit(cost: float) -> void:
@@ -74,10 +77,14 @@ func cycle_readout() -> void:
 func set_combat_hint(muted: bool) -> void:
 	var manager := get_node_or_null("/root/SceneManager")
 	var developer := bool(manager.developer_tools) if manager else false
-	var next := int(muted) + 2 * int(developer)
+	_muted = muted
+	var slow: bool = is_instance_valid(time_controller) and time_controller.slow_unlocked
+	var next := int(muted) + 2 * int(developer) + 4 * int(slow)
 	if next == _hint_state: return
 	_hint_state = next
-	key_hint.text = "E toggle repair · hold Space: slow · M sound: %s · F7 numbers" % ("off" if muted else "on")
+	key_hint.text = "E toggle repair"
+	if slow: key_hint.text += " · hold Space: slow"
+	key_hint.text += " · M sound: %s · F7 numbers" % ("off" if muted else "on")
 	if developer: key_hint.text += " · F10 encounters"
 
 func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> void:
@@ -107,6 +114,7 @@ func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> vo
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	set_combat_hint(_muted)
 	_hit_light = maxf(0.0, _hit_light - delta * 1.6)
 	var scale := UI.scale_for(self)
 	if not is_equal_approx(_scale, scale):
@@ -136,14 +144,8 @@ func _draw() -> void:
 		var start := -PI + i * PI / 3.0 + .08
 		var end := -PI + (i + 1) * PI / 3.0 - .08
 		var color := Color(COLORS[i], .92 if active else .22)
-		# Each quarter is one real repair checkpoint, including partial condition.
-		for checkpoint in range(checkpoints):
-			var a := lerpf(start, end, float(checkpoint) / checkpoints) + .018
-			var b := lerpf(start, end, float(checkpoint + 1) / checkpoints) - .018
-			draw_arc(center, radius, a, b, 10, Color(COLORS[i], .14 if active else .06), 7 * _scale, true)
-			var fill := clampf(fractions[i] * checkpoints - checkpoint, 0, 1)
-			if fill > 0:
-				draw_arc(center, radius, a, lerpf(a, b, fill), 10, color, 6 * _scale, true)
+		Segments.draw(self, center, radius, start, end, fractions[i], checkpoints,
+			color, Color(COLORS[i], .14 if active else .06), 6 * _scale)
 		if active:
 			draw_arc(center, radius + 8 * _scale, start, end, 24, color, 1.5 * _scale, true)
 		var middle := (start + end) * .5
@@ -169,7 +171,7 @@ func _draw_time(surface: Control, origin: Vector2) -> void:
 		if fraction > 0:
 			surface.draw_arc(origin, radius, start, lerpf(start, end, fraction), 48, Color(TIME_COLOR.lightened(_hit_light * .35), .9), 6 * _scale, true)
 		# Emergency header carries the charge count above its timeline.
-		if not time_controller.emergency_active:
+		if rewind_pips_visible():
 			for i in range(time_controller.charges_per_attempt):
 				var at := origin + Vector2((i - (time_controller.charges_per_attempt - 1) * .5) * 15, 79) * _scale
 				var points := PackedVector2Array([at + Vector2(0, -5) * _scale, at + Vector2(4, 0) * _scale, at + Vector2(0, 5) * _scale, at + Vector2(-4, 0) * _scale])
@@ -177,7 +179,16 @@ func _draw_time(surface: Control, origin: Vector2) -> void:
 				else:
 					points.append(points[0]); surface.draw_polyline(points, Color(TIME_COLOR, .4), _scale, true)
 		if (repairing or readout_mode < 2) and not time_controller.emergency_active:
-			_draw_centered("Time %.0f%% · %d rewinds left" % [fraction * 100, time_controller.charges_remaining], origin + Vector2(0, 104) * _scale, 12, Color(TIME_COLOR, 1.0 if repairing else READOUT_ALPHA[readout_mode]), surface)
+			_draw_centered(time_readout(), origin + Vector2(0, 104) * _scale, 12, Color(TIME_COLOR, 1.0 if repairing else READOUT_ALPHA[readout_mode]), surface)
+
+func rewind_pips_visible() -> bool:
+	return is_instance_valid(time_controller) and time_controller.rewind_unlocked and not time_controller.emergency_active
+
+func time_readout() -> String:
+	if not is_instance_valid(time_controller): return ""
+	var text := "Time %.0f%%" % (100 * time_controller.meter / maxf(.00001, time_controller.capacity))
+	if time_controller.rewind_unlocked: text += " · %d rewinds left" % time_controller.charges_remaining
+	return text
 
 func _draw_centered(text: String, at: Vector2, font_size: int, color: Color, surface: Control = self) -> void:
 	font_size = roundi(font_size * _scale)

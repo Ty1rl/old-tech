@@ -13,7 +13,7 @@ func _ready() -> void:
 		retry.text = "Play again"
 	UI.focus_on_open(self, retry)
 func _on_retry() -> void:
-	if won: SceneManager.start_play()
+	if won: SceneManager.push_popup(&"NewGame")
 	else: SceneManager.request_restart_room()
 func _on_settings() -> void: SceneManager.push_popup(&"Settings")
 func _on_main() -> void: SceneManager.return_main()

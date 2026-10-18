@@ -36,10 +36,10 @@ func _refresh() -> void:
 	visible = is_instance_valid(emergency_rewind) and emergency_rewind.active
 	if not visible: return
 	var age := emergency_rewind.choice_age(emergency_rewind.selected_index)
-	choice.text = "NOW · recover here" if age == 0 else "ROOM CHECKPOINT" if age == EmergencyRewind.CHECKPOINT_AGE else "−%.2f seconds" % age
+	choice.text = "NOW" if age == 0 else "ROOM CHECKPOINT" if age == EmergencyRewind.CHECKPOINT_AGE else "−%.2fs" % age
 	var controller := emergency_rewind.time_controller
-	charges.text = "1 rewind spent · %d left this room attempt" % controller.charges_remaining if is_instance_valid(controller) else "Choose a recovery moment"
-	if emergency_rewind.choice_count == 1: choice.text += " · no earlier moments recorded"
+	charges.text = "1 rewind spent · %d left" % controller.charges_remaining if is_instance_valid(controller) else "Choose a recovery moment"
+	if emergency_rewind.choice_count == 1: choice.text += " · no earlier moments"
 	timeline.queue_redraw()
 
 func _draw_timeline() -> void:

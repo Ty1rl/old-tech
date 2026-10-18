@@ -1,3 +1,6 @@
+ROUND O: current UI/public API hookup and evidence are in scenes/ui/ROUND-O.txt.
+The notes below describe prior Round N and older integrations.
+
 ROUND N WAVE2 — JAM-7 (base N1 8b38209)
 
 TimeStatusHUD replaces the four-tool/health/manual-clock HUD. The stable caller

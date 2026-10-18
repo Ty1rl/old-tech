@@ -1,0 +1,64 @@
+[gd_scene load_steps=10 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone"]
+albedo_color = Color(0.44, 0.42, 0.39, 1)
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_pedestal"]
+size = Vector3(1, 1.18, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cap"]
+albedo_color = Color(0.6, 0.57, 0.52, 1)
+roughness = 0.68
+
+[sub_resource type="BoxMesh" id="BoxMesh_crown"]
+size = Vector3(0.9, 0.12, 0.9)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_base"]
+albedo_color = Color(0.28, 0.25, 0.23, 1)
+roughness = 0.82
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_socle"]
+top_radius = 0.18
+bottom_radius = 0.22
+height = 0.14
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bust"]
+albedo_color = Color(0.68, 0.66, 0.62, 1)
+roughness = 0.62
+
+[sub_resource type="BoxMesh" id="BoxMesh_shoulders"]
+size = Vector3(0.44, 0.26, 0.28)
+
+[sub_resource type="SphereMesh" id="SphereMesh_head"]
+radius = 0.26
+height = 0.58
+
+[node name="Plinth" type="Node3D"]
+
+[node name="ScaleRoot" type="Node3D" parent="."]
+
+[node name="PedestalBody" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.59, 0)
+mesh = SubResource("BoxMesh_pedestal")
+surface_material_override/0 = SubResource("StandardMaterial3D_stone")
+
+[node name="PlinthCrown" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.24, 0)
+mesh = SubResource("BoxMesh_crown")
+surface_material_override/0 = SubResource("StandardMaterial3D_cap")
+
+[node name="BustSocle" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.36, 0)
+mesh = SubResource("CylinderMesh_socle")
+surface_material_override/0 = SubResource("StandardMaterial3D_base")
+
+[node name="BustShoulders" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.54, 0)
+mesh = SubResource("BoxMesh_shoulders")
+surface_material_override/0 = SubResource("StandardMaterial3D_bust")
+
+[node name="BustHead" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.84, 0)
+mesh = SubResource("SphereMesh_head")
+surface_material_override/0 = SubResource("StandardMaterial3D_bust")

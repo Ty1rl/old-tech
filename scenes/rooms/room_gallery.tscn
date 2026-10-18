@@ -1,0 +1,34 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/rooms/north_exit_doorway.tscn" id="1_north"]
+[ext_resource type="PackedScene" path="res://scenes/rooms/south_entrance_doorway.tscn" id="2_south"]
+[ext_resource type="PackedScene" path="res://scenes/rooms/display_island.tscn" id="3_island"]
+[ext_resource type="PackedScene" path="res://scenes/rooms/plinth.tscn" id="4_plinth"]
+
+[node name="RoomGallery" type="Node3D"]
+
+[node name="NorthExitDoorway" parent="." instance=ExtResource("1_north")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -19.5)
+
+[node name="SouthEntranceDoorway" parent="." instance=ExtResource("2_south")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 19.2)
+
+[node name="CoverKit" type="Node3D" parent="."]
+
+[node name="CoverPiece_01" parent="CoverKit" instance=ExtResource("3_island")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 0, -10.7)
+
+[node name="CoverPiece_02" parent="CoverKit" instance=ExtResource("3_island")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -10.7)
+
+[node name="CoverPiece_03" parent="CoverKit" instance=ExtResource("3_island")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15.1, 0, -0.1)
+
+[node name="CoverPiece_04" parent="CoverKit" instance=ExtResource("3_island")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.1, 0, -0.1)
+
+[node name="CoverPiece_05" parent="CoverKit" instance=ExtResource("4_plinth")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.9, 0, 8.5)
+
+[node name="CoverPiece_06" parent="CoverKit" instance=ExtResource("4_plinth")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.9, 0, 8.5)

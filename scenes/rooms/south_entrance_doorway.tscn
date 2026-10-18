@@ -1,0 +1,95 @@
+[gd_scene load_steps=14 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone_dark"]
+albedo_color = Color(0.24, 0.23, 0.22, 1)
+roughness = 0.88
+
+[sub_resource type="BoxMesh" id="BoxMesh_threshold"]
+size = Vector3(4.8, 0.05, 1.2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone_pier"]
+albedo_color = Color(0.36, 0.34, 0.31, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_pier"]
+size = Vector3(0.76, 3.1, 1.45)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_brass_trim"]
+albedo_color = Color(0.58, 0.46, 0.26, 1)
+metallic = 0.72
+roughness = 0.35
+
+[sub_resource type="BoxMesh" id="BoxMesh_lintel"]
+size = Vector3(5.4, 0.48, 1.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_cornice"]
+size = Vector3(5.6, 0.16, 1.62)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gate_door"]
+albedo_color = Color(0.28, 0.24, 0.19, 1)
+metallic = 0.48
+roughness = 0.52
+
+[sub_resource type="BoxMesh" id="BoxMesh_gate_leaf"]
+size = Vector3(1.5, 2.75, 0.32)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ceremony_beacon"]
+resource_local_to_scene = true
+albedo_color = Color(0.78, 0.46, 0.2, 1)
+emission_enabled = true
+emission = Color(0.88, 0.5, 0.2, 1)
+emission_energy_multiplier = 0.45
+
+[sub_resource type="BoxMesh" id="BoxMesh_beacon"]
+size = Vector3(2.2, 0.16, 0.16)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_south_blocker"]
+size = Vector3(5.4, 3, 0.6)
+
+[node name="SouthEntranceDoorway" type="Node3D"]
+
+[node name="ThresholdApron" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, -0.1)
+mesh = SubResource("BoxMesh_threshold")
+surface_material_override/0 = SubResource("StandardMaterial3D_stone_dark")
+
+[node name="LeftPier" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.28, 1.55, 0.2)
+mesh = SubResource("BoxMesh_pier")
+surface_material_override/0 = SubResource("StandardMaterial3D_stone_pier")
+
+[node name="RightPier" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.28, 1.55, 0.2)
+mesh = SubResource("BoxMesh_pier")
+surface_material_override/0 = SubResource("StandardMaterial3D_stone_pier")
+
+[node name="LintelBeam" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.12, 0.2)
+mesh = SubResource("BoxMesh_lintel")
+surface_material_override/0 = SubResource("StandardMaterial3D_stone_pier")
+
+[node name="LintelCornice" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.42, 0.2)
+mesh = SubResource("BoxMesh_cornice")
+surface_material_override/0 = SubResource("StandardMaterial3D_brass_trim")
+
+[node name="SouthGateLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.45, 1.38, 0.15)
+mesh = SubResource("BoxMesh_gate_leaf")
+surface_material_override/0 = SubResource("StandardMaterial3D_gate_door")
+
+[node name="SouthGateRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.45, 1.38, 0.15)
+mesh = SubResource("BoxMesh_gate_leaf")
+surface_material_override/0 = SubResource("StandardMaterial3D_gate_door")
+
+[node name="CeremonyBeacon" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.1, -0.58)
+mesh = SubResource("BoxMesh_beacon")
+surface_material_override/0 = SubResource("StandardMaterial3D_ceremony_beacon")
+
+[node name="SouthBoundaryBody" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0.45)
+
+[node name="SouthBoundaryShape" type="CollisionShape3D" parent="SouthBoundaryBody"]
+shape = SubResource("BoxShape3D_south_blocker")

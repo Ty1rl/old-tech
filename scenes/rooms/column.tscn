@@ -1,0 +1,49 @@
+[gd_scene load_steps=8 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_base"]
+albedo_color = Color(0.28, 0.25, 0.23, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="BoxMesh_socle"]
+size = Vector3(1, 1.85, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone"]
+albedo_color = Color(0.44, 0.42, 0.39, 1)
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_shaft"]
+size = Vector3(0.82, 1.64, 0.82)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cap"]
+albedo_color = Color(0.6, 0.57, 0.52, 1)
+roughness = 0.68
+
+[sub_resource type="BoxMesh" id="BoxMesh_capital"]
+size = Vector3(0.96, 0.16, 0.96)
+
+[sub_resource type="BoxMesh" id="BoxMesh_inner_cap"]
+size = Vector3(0.72, 0.1, 0.72)
+
+[node name="Column" type="Node3D"]
+
+[node name="ScaleRoot" type="Node3D" parent="."]
+
+[node name="BaseSocle" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.925, 0)
+mesh = SubResource("BoxMesh_socle")
+surface_material_override/0 = SubResource("StandardMaterial3D_base")
+
+[node name="ColumnShaft" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.965, 0)
+mesh = SubResource("BoxMesh_shaft")
+surface_material_override/0 = SubResource("StandardMaterial3D_stone")
+
+[node name="ColumnCapital" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.9, 0)
+mesh = SubResource("BoxMesh_capital")
+surface_material_override/0 = SubResource("StandardMaterial3D_cap")
+
+[node name="ColumnCapInner" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.01, 0)
+mesh = SubResource("BoxMesh_inner_cap")
+surface_material_override/0 = SubResource("StandardMaterial3D_stone")

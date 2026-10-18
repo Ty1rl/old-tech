@@ -81,21 +81,16 @@ static func _make_wave(lesson: StringName, formation: StringName, enemies: Array
 	return wave
 
 
+const GALLERY_LAYOUT := preload("res://scenes/rooms/gallery_layout.tres")
+const COLLECTIONS_LAYOUT := preload("res://scenes/rooms/collections_layout.tres")
+const RESTORATION_LAYOUT := preload("res://scenes/rooms/restoration_layout.tres")
+const BURIAL_LAYOUT := preload("res://scenes/rooms/burial_layout.tres")
+
+
 static func definitions() -> Array[Dictionary]:
 	# Room 1: Public Galleries (1 — LOOP ROUTES from 11.png)
 	# Yellow aiming and charge, then orange heat and a deliberate wear-free -> empty repair lesson.
-	var gallery_cover: Array[Rect2] = [
-		Rect2(-8.5, -6.5, 6.0, 3.0),
-		Rect2(3.0, 0.5, 6.0, 3.0),
-		Rect2(-9.0, 2.0, 2.5, 2.5),
-		Rect2(6.0, -7.0, 2.5, 2.5),
-	]
-	var gallery_pieces: Array[Dictionary] = [
-		{"rect": gallery_cover[0], "kind": &"display_island", "height": 1.45, "label": "North-West Vitrine Island"},
-		{"rect": gallery_cover[1], "kind": &"display_island", "height": 1.45, "label": "South-East Vitrine Island"},
-		{"rect": gallery_cover[2], "kind": &"column", "height": 1.85, "label": "South-West Gallery Column"},
-		{"rect": gallery_cover[3], "kind": &"column", "height": 1.85, "label": "North-East Gallery Column"},
-	]
+	var gallery_geom: Dictionary = GALLERY_LAYOUT.to_geometry_dict()
 	var gallery_lessons: Array[StringName] = [&"shot", &"charge", &"heat", &"repair"]
 	var gallery_waves: Array[Dictionary] = [
 		_make_wave(&"shot", &"curve", [&"yellow"], 8, 2.2, {"acquire": 2, "burst": 2, "max_live": 4, "interval": 4.2}),
@@ -107,18 +102,7 @@ static func definitions() -> Array[Dictionary]:
 
 	# Room 2: Connected Collections (blue cutter, time slow and emergency rewind, mixed enemies, Loop Curator)
 	# Blue cutting and guard openings lead into time slow and emergency rewind, then loops and their boss.
-	var collections_cover: Array[Rect2] = [
-		Rect2(-10.0, -4.0, 5.5, 2.2),
-		Rect2(3.5, -6.5, 6.0, 3.0),
-		Rect2(-2.2, -9.0, 2.6, 2.6),
-		Rect2(4.0, 2.2, 5.2, 2.2),
-	]
-	var collections_pieces: Array[Dictionary] = [
-		{"rect": collections_cover[0], "kind": &"bench", "height": 1.05, "label": "West Archive Bench"},
-		{"rect": collections_cover[1], "kind": &"display_island", "height": 1.45, "label": "North-East Collection Case"},
-		{"rect": collections_cover[2], "kind": &"plinth", "height": 1.65, "label": "North Relic Plinth"},
-		{"rect": collections_cover[3], "kind": &"bench", "height": 1.05, "label": "South-East Gallery Bench"},
-	]
+	var collections_geom: Dictionary = COLLECTIONS_LAYOUT.to_geometry_dict()
 	var collections_lessons: Array[StringName] = [&"cut", &"opening", &"slow", &"rewind", &"loop"]
 	var collections_waves: Array[Dictionary] = [
 		_make_wave(&"cut", &"curve", [&"blue", &"yellow", &"orange"], 9, 2.5, {"acquire": 1, "interval": 4.5}),
@@ -131,20 +115,7 @@ static func definitions() -> Array[Dictionary]:
 
 	# Room 3: Restoration Rooms (2 — STAGGERED GALLERIES from 11.png)
 	# Staggered workbenches introduce paired valves and zigzags before combined pressure and Sequence Warden.
-	var restoration_cover: Array[Rect2] = [
-		Rect2(-10.5, -7.5, 6.2, 1.8),
-		Rect2(-8.5, 0.2, 6.2, 1.8),
-		Rect2(3.0, -8.0, 5.8, 2.0),
-		Rect2(3.8, -1.2, 6.2, 1.8),
-		Rect2(2.0, 4.2, 5.8, 2.8),
-	]
-	var restoration_pieces: Array[Dictionary] = [
-		{"rect": restoration_cover[0], "kind": &"partition", "height": 1.50, "label": "North-West Staggered Partition"},
-		{"rect": restoration_cover[1], "kind": &"partition", "height": 1.50, "label": "Mid-West Staggered Partition"},
-		{"rect": restoration_cover[2], "kind": &"bench", "height": 1.05, "label": "North-East Restoration Table"},
-		{"rect": restoration_cover[3], "kind": &"partition", "height": 1.50, "label": "Mid-East Staggered Partition"},
-		{"rect": restoration_cover[4], "kind": &"display_island", "height": 1.45, "label": "South-East Specimen Case"},
-	]
+	var restoration_geom: Dictionary = RESTORATION_LAYOUT.to_geometry_dict()
 	var restoration_lessons: Array[StringName] = [&"pair", &"zigzag"]
 	var restoration_waves: Array[Dictionary] = [
 		_make_wave(&"pair", &"line", [&"pair", &"yellow", &"front_guard"], 8, 2.6, {"burst": 2, "interval": 4.5}),
@@ -155,22 +126,7 @@ static func definitions() -> Array[Dictionary]:
 
 	# Room 4: Burial Exhibition (3 — BOSS COURT from 11.png)
 	# Wide-open central court for pattern execution, framed by four outer corner plinths and two perimeter partitions.
-	var burial_cover: Array[Rect2] = [
-		Rect2(-12.0, -8.5, 2.8, 2.8),
-		Rect2(9.2, -8.5, 2.8, 2.8),
-		Rect2(-12.0, 4.2, 2.8, 2.8),
-		Rect2(9.2, 4.2, 2.8, 2.8),
-		Rect2(-12.5, -2.5, 1.8, 4.8),
-		Rect2(10.7, -2.5, 1.8, 4.8),
-	]
-	var burial_pieces: Array[Dictionary] = [
-		{"rect": burial_cover[0], "kind": &"plinth", "height": 1.70, "label": "North-West Bust Plinth"},
-		{"rect": burial_cover[1], "kind": &"plinth", "height": 1.70, "label": "North-East Bust Plinth"},
-		{"rect": burial_cover[2], "kind": &"plinth", "height": 1.70, "label": "South-West Bust Plinth"},
-		{"rect": burial_cover[3], "kind": &"plinth", "height": 1.70, "label": "South-East Bust Plinth"},
-		{"rect": burial_cover[4], "kind": &"partition", "height": 1.50, "label": "West Court Screen"},
-		{"rect": burial_cover[5], "kind": &"partition", "height": 1.50, "label": "East Court Screen"},
-	]
+	var burial_geom: Dictionary = BURIAL_LAYOUT.to_geometry_dict()
 	var burial_lessons: Array[StringName] = []
 	var burial_waves: Array[Dictionary] = [
 		_make_wave(&"", &"mixed", [&"pair", &"zigzag", &"loop", &"ranged", &"orange", &"front_guard"], 18, 4.0, {"interval": 4.8, "max_live": 6}),
@@ -183,108 +139,68 @@ static func definitions() -> Array[Dictionary]:
 			"title": "Public Galleries",
 			"story": "The upper public halls have gone cold. Exhibit cases tremble as wires and glass lenses knit themselves into patrolling husks.",
 			"layout_archetype": &"loop_routes",
-			"cover": gallery_cover,
-			"cover_pieces": gallery_pieces,
-			"player_spawn": Vector3(0.0, 0.55, 8.5),
+			"layout_scene": gallery_geom["layout_scene"],
+			"cover": gallery_geom["cover"],
+			"cover_pieces": gallery_geom["cover_pieces"],
+			"player_spawn": gallery_geom["player_spawn"],
 			"lessons": gallery_lessons,
 			"waves": gallery_waves,
 			"is_boss_room": false,
-			"floor_palette": {
-				"base": Color(0.20, 0.22, 0.24),
-				"accent": Color(0.23, 0.25, 0.27),
-				"border": Color(0.17, 0.19, 0.21),
-				"style": &"aisle",
-			},
-			"lighting": {
-				"light_color": Color(1.0, 0.96, 0.90),
-				"light_energy": 1.05,
-				"ambient_color": Color(0.86, 0.90, 0.96),
-				"ambient_energy": 0.66,
-				"wall_tint": Color(1.18, 1.12, 1.05),
-			},
-			"entrance_door": {"position": Vector3(0.0, 0.0, 12.2), "width": 6.4},
-			"exit_door": {"position": Vector3(0.0, 0.0, -11.8), "width": 6.4},
+			"floor_palette": gallery_geom["floor_palette"],
+			"lighting": gallery_geom["lighting"],
+			"entrance_door": gallery_geom["entrance_door"],
+			"exit_door": gallery_geom["exit_door"],
 		},
 		{
 			"id": &"collections",
 			"title": "Connected Collections",
 			"story": "Deeper in the archive wings, armored wardens and twin-valve mechanisms guard the sealed collection vaults.",
 			"layout_archetype": &"connected_collections",
-			"cover": collections_cover,
-			"cover_pieces": collections_pieces,
-			"player_spawn": Vector3(0.0, 0.55, 8.5),
+			"layout_scene": collections_geom["layout_scene"],
+			"cover": collections_geom["cover"],
+			"cover_pieces": collections_geom["cover_pieces"],
+			"player_spawn": collections_geom["player_spawn"],
 			"lessons": collections_lessons,
 			"waves": collections_waves,
 			"is_boss_room": false,
-			"floor_palette": {
-				"base": Color(0.23, 0.21, 0.19),
-				"accent": Color(0.26, 0.23, 0.20),
-				"border": Color(0.18, 0.16, 0.15),
-				"style": &"cross_hall",
-			},
-			"lighting": {
-				"light_color": Color(1.0, 0.92, 0.82),
-				"light_energy": 1.08,
-				"ambient_color": Color(0.95, 0.88, 0.80),
-				"ambient_energy": 0.64,
-				"wall_tint": Color(1.24, 1.10, 0.96),
-			},
-			"entrance_door": {"position": Vector3(0.0, 0.0, 12.2), "width": 6.4},
-			"exit_door": {"position": Vector3(0.0, 0.0, -11.8), "width": 6.4},
+			"floor_palette": collections_geom["floor_palette"],
+			"lighting": collections_geom["lighting"],
+			"entrance_door": collections_geom["entrance_door"],
+			"exit_door": collections_geom["exit_door"],
 		},
 		{
 			"id": &"restoration",
 			"title": "Restoration Rooms",
 			"story": "In the basement restoration labs, half-wired spines and iron lungs are being stitched together on worktables.",
 			"layout_archetype": &"staggered_galleries",
-			"cover": restoration_cover,
-			"cover_pieces": restoration_pieces,
-			"player_spawn": Vector3(-6.5, 0.55, 8.5),
+			"layout_scene": restoration_geom["layout_scene"],
+			"cover": restoration_geom["cover"],
+			"cover_pieces": restoration_geom["cover_pieces"],
+			"player_spawn": restoration_geom["player_spawn"],
 			"lessons": restoration_lessons,
 			"waves": restoration_waves,
 			"is_boss_room": false,
-			"floor_palette": {
-				"base": Color(0.18, 0.22, 0.21),
-				"accent": Color(0.21, 0.25, 0.24),
-				"border": Color(0.15, 0.18, 0.17),
-				"style": &"work_bays",
-			},
-			"lighting": {
-				"light_color": Color(0.88, 0.97, 1.0),
-				"light_energy": 1.10,
-				"ambient_color": Color(0.80, 0.92, 0.94),
-				"ambient_energy": 0.65,
-				"wall_tint": Color(1.06, 1.14, 1.12),
-			},
-			"entrance_door": {"position": Vector3(-6.5, 0.0, 12.2), "width": 6.0},
-			"exit_door": {"position": Vector3(6.0, 0.0, -11.8), "width": 6.0},
+			"floor_palette": restoration_geom["floor_palette"],
+			"lighting": restoration_geom["lighting"],
+			"entrance_door": restoration_geom["entrance_door"],
+			"exit_door": restoration_geom["exit_door"],
 		},
 		{
 			"id": &"burial",
 			"title": "Burial Exhibition",
 			"story": "At the heart of the subterranean rotunda, the restored burial device pulses—drawing every mechanism into a single vessel.",
 			"layout_archetype": &"boss_court",
-			"cover": burial_cover,
-			"cover_pieces": burial_pieces,
-			"player_spawn": Vector3(0.0, 0.55, 8.5),
+			"layout_scene": burial_geom["layout_scene"],
+			"cover": burial_geom["cover"],
+			"cover_pieces": burial_geom["cover_pieces"],
+			"player_spawn": burial_geom["player_spawn"],
 			"lessons": burial_lessons,
 			"waves": burial_waves,
 			"is_boss_room": true,
-			"floor_palette": {
-				"base": Color(0.17, 0.18, 0.21),
-				"accent": Color(0.21, 0.19, 0.18),
-				"border": Color(0.14, 0.15, 0.18),
-				"style": &"boss_court",
-			},
-			"lighting": {
-				"light_color": Color(1.0, 0.89, 0.78),
-				"light_energy": 1.12,
-				"ambient_color": Color(0.82, 0.84, 0.94),
-				"ambient_energy": 0.62,
-				"wall_tint": Color(1.14, 1.04, 0.98),
-			},
-			"entrance_door": {"position": Vector3(0.0, 0.0, 12.2), "width": 6.8},
-			"exit_door": {"position": Vector3(0.0, 0.0, -11.8), "width": 6.8},
+			"floor_palette": burial_geom["floor_palette"],
+			"lighting": burial_geom["lighting"],
+			"entrance_door": burial_geom["entrance_door"],
+			"exit_door": burial_geom["exit_door"],
 		},
 	]
 	return rooms

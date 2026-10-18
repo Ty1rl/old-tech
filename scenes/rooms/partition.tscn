@@ -1,0 +1,49 @@
+[gd_scene load_steps=8 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone"]
+albedo_color = Color(0.44, 0.42, 0.39, 1)
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall"]
+size = Vector3(1, 1.5, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_base"]
+albedo_color = Color(0.28, 0.25, 0.23, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="BoxMesh_plinth"]
+size = Vector3(0.99, 0.24, 0.99)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cap"]
+albedo_color = Color(0.6, 0.57, 0.52, 1)
+roughness = 0.68
+
+[sub_resource type="BoxMesh" id="BoxMesh_coping"]
+size = Vector3(0.96, 0.1, 0.94)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ridge"]
+size = Vector3(0.88, 0.06, 0.36)
+
+[node name="Partition" type="Node3D"]
+
+[node name="ScaleRoot" type="Node3D" parent="."]
+
+[node name="WallBody" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+mesh = SubResource("BoxMesh_wall")
+surface_material_override/0 = SubResource("StandardMaterial3D_stone")
+
+[node name="BasePlinth" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+mesh = SubResource("BoxMesh_plinth")
+surface_material_override/0 = SubResource("StandardMaterial3D_base")
+
+[node name="TopCoping" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.54, 0)
+mesh = SubResource("BoxMesh_coping")
+surface_material_override/0 = SubResource("StandardMaterial3D_cap")
+
+[node name="SpineRidge" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.61, 0)
+mesh = SubResource("BoxMesh_ridge")
+surface_material_override/0 = SubResource("StandardMaterial3D_base")

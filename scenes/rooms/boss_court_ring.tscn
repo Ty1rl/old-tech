@@ -1,0 +1,41 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ring"]
+resource_local_to_scene = true
+albedo_color = Color(0.32, 0.28, 0.25, 1)
+emission_enabled = true
+emission = Color(0.32, 0.28, 0.25, 1)
+emission_energy_multiplier = 0.05
+roughness = 0.6
+
+[sub_resource type="TorusMesh" id="TorusMesh_outer"]
+inner_radius = 5.45
+outer_radius = 5.75
+rings = 48
+ring_segments = 12
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_core"]
+resource_local_to_scene = true
+albedo_color = Color(0.36, 0.31, 0.27, 1)
+emission_enabled = true
+emission = Color(0.36, 0.31, 0.27, 1)
+emission_energy_multiplier = 0.05
+roughness = 0.55
+
+[sub_resource type="TorusMesh" id="TorusMesh_inner"]
+inner_radius = 2.45
+outer_radius = 2.7
+rings = 40
+ring_segments = 12
+
+[node name="BossCourtRing" type="Node3D"]
+
+[node name="OuterRing" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.08, 0, 0, 0, 1, 0, 0.015, -2)
+mesh = SubResource("TorusMesh_outer")
+surface_material_override/0 = SubResource("StandardMaterial3D_ring")
+
+[node name="InnerRing" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.08, 0, 0, 0, 1, 0, 0.016, -2)
+mesh = SubResource("TorusMesh_inner")
+surface_material_override/0 = SubResource("StandardMaterial3D_core")

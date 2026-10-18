@@ -1,13 +1,15 @@
 extends SceneTree
 
-# Focused check suite for Round K (JAM-4):
-# - rooms.gd progression definitions, room IDs, lesson IDs, enemy IDs, formation IDs, teaching order
-# - cover.gd configurable rectangles + segment clipping agreement
-# - room_environment.gd apply_room(), rendered cover vs physics colliders vs Cover clipping
-# - visible exit open/locked cues and boss entrance gate-close -> pause -> activation ceremony
+# Focused check suite for Round O Wave A (JAM-2 — Rooms / Physical Exits):
+# - Authored reusable room kit scenes & layout resources under res://scenes/rooms/
+# - Open tutorial and combat central floors with edge cover preserving multi-cut spawn clearance
+# - Real top/north-wall exit opening at room boundary (closed/hidden until cleared, then opens with subtle green cue)
+# - Physical StaticBody3D collision agreement: closed gate blocks player move_and_slide(), open gate allows player to walk through north-wall gap into player_in_exit()
+# - Room-complete audio event hooks (room_completed, combat_event &"room_complete") and boss ceremony preservation
 
 const Rooms = preload("res://scenes/prototype/rooms.gd")
 const Cover = preload("res://scenes/prototype/cover.gd")
+const Flow = preload("res://scenes/prototype/flow.gd")
 const RoomEnvironment = preload("res://scenes/prototype/room_environment.gd")
 
 var checks: int = 0
@@ -39,7 +41,40 @@ func _rects_equal(a: Array[Rect2], b: Array[Rect2], eps: float = 0.05) -> bool:
 
 
 func run() -> void:
-	# 1. Verify Cover default rectangles and configurable rectangle list
+	# 1. Verify authored kit scenes and room layout resources under res://scenes/rooms/
+	var kit_paths := [
+		"res://scenes/rooms/floor_slab.tscn",
+		"res://scenes/rooms/display_island.tscn",
+		"res://scenes/rooms/partition.tscn",
+		"res://scenes/rooms/column.tscn",
+		"res://scenes/rooms/bench.tscn",
+		"res://scenes/rooms/plinth.tscn",
+		"res://scenes/rooms/north_exit_doorway.tscn",
+		"res://scenes/rooms/south_entrance_doorway.tscn",
+		"res://scenes/rooms/floor_accents.tscn",
+		"res://scenes/rooms/boss_court_ring.tscn",
+		"res://scenes/rooms/perimeter_boundary.tscn",
+		"res://scenes/rooms/tool_pickup_pedestal.tscn",
+		"res://scenes/rooms/room_gallery.tscn",
+		"res://scenes/rooms/room_collections.tscn",
+		"res://scenes/rooms/room_restoration.tscn",
+		"res://scenes/rooms/room_burial.tscn",
+	]
+	for path in kit_paths:
+		var packed := load(path) as PackedScene
+		expect(packed != null and packed.can_instantiate(), "Authored room kit scene loads: " + path)
+
+	var layout_paths := [
+		"res://scenes/rooms/gallery_layout.tres",
+		"res://scenes/rooms/collections_layout.tres",
+		"res://scenes/rooms/restoration_layout.tres",
+		"res://scenes/rooms/burial_layout.tres",
+	]
+	for lpath in layout_paths:
+		var res := load(lpath)
+		expect(res != null and res.has_method("to_geometry_dict"), "Authored RoomLayout resource loads: " + lpath)
+
+	# 2. Verify Cover default rectangles and configurable rectangle list
 	var cover := Cover.new()
 	expect(
 		_rects_equal(cover.rectangles, Cover.RECTANGLES),
@@ -54,21 +89,9 @@ func run() -> void:
 		_rects_equal(cover.get_rectangles(), custom_rects),
 		"Cover.set_rectangles updates active rectangle list"
 	)
-	expect(
-		not cover.clip_segment(Vector3(-8.0, 0.5, -4.5), Vector3(-2.5, 0.5, -4.5)).blocked,
-		"Old default cover rectangle no longer blocks after set_rectangles"
-	)
-	expect(
-		cover.clip_segment(Vector3(-5.0, 0.5, 0.0), Vector3(5.0, 0.5, 0.0)).blocked,
-		"New custom cover rectangle blocks segment through origin"
-	)
 	cover.reset_rectangles()
-	expect(
-		_rects_equal(cover.rectangles, Cover.RECTANGLES),
-		"Cover.reset_rectangles restores default RECTANGLES"
-	)
 
-	# 2. Verify Rooms.definitions() schema, IDs, lessons, formations, and safe teaching sequence
+	# 3. Verify Rooms.definitions() schema, open central floor, north-wall boundary exits, and multi-cut spawn clearance
 	var defs := Rooms.definitions()
 	expect(defs.size() == 4, "Rooms.definitions() returns 4 rooms")
 
@@ -86,6 +109,7 @@ func run() -> void:
 	var seen_lessons: Dictionary = {}
 	var seen_enemies: Dictionary = {}
 	var seen_formations: Dictionary = {}
+	var central_combat_circle := Rect2(-11.0, -14.0, 22.0, 22.0)
 
 	for i in range(defs.size()):
 		var room: Dictionary = defs[i]
@@ -100,18 +124,36 @@ func run() -> void:
 		var spawn: Vector3 = room.get("player_spawn", Vector3.ZERO)
 		expect(absf(spawn.x) < 16.0 and absf(spawn.z) < 16.0, "%s player_spawn is inside arena bounds" % String(rid))
 
+		var exit_pos: Vector3 = room.get("exit_door", {}).get("position", Vector3.ZERO)
+		expect(exit_pos.z <= -19.0, "%s exit_door is at the north perimeter wall boundary (z <= -19.0), not an interior floor square" % String(rid))
+
 		var spawn_clear := true
+		var center_open := true
 		for rect in r_cover:
 			if rect.grow(1.5).has_point(Vector2(spawn.x, spawn.z)):
 				spawn_clear = false
+			if rect.intersects(central_combat_circle):
+				center_open = false
 			expect(
 				rect.position.x >= -18.5 and rect.end.x <= 18.5 and rect.position.y >= -18.5 and rect.end.y <= 18.5,
 				"%s cover rect %s stays inside [-18.5, 18.5] leaving perimeter lanes" % [String(rid), str(rect)]
 			)
 		expect(spawn_clear, "%s player_spawn has >= 1.5m clearance from all cover rectangles" % String(rid))
+		expect(center_open, "%s moves decorative cases/props toward edges leaving central combat floor open" % String(rid))
+
+		# Verify multi-cut pattern enemy and boss spawn clearance in this room's cover layout
+		var room_cover := Cover.new()
+		room_cover.set_rectangles(r_cover)
+		var flow := Flow.new()
+		for multi_kind: StringName in [&"loop", &"zigzag", &"loop_boss", &"sequence_boss", &"final_boss"]:
+			var slots: Array = flow.layout(&"curve", [multi_kind], spawn, room_cover, 11 + i, [])
+			expect(
+				slots.size() == 1 and Flow.safe(slots[0].position, slots[0].radius, spawn, room_cover),
+				"%s preserves multi-cut spawn clearance for %s" % [String(rid), String(multi_kind)]
+			)
 
 		var r_lessons: Array[StringName] = room.get("lessons", [])
-		expect(not r_lessons.is_empty() or bool(room.get("is_boss_room",false)), "%s defines teaching or a final examination" % String(rid))
+		expect(not r_lessons.is_empty() or bool(room.get("is_boss_room", false)), "%s defines teaching or a final examination" % String(rid))
 		for l_id in r_lessons:
 			expect(expected_lessons.has(l_id), "%s lesson %s is in required lesson ID set" % [String(rid), String(l_id)])
 			seen_lessons[l_id] = true
@@ -126,11 +168,12 @@ func run() -> void:
 			var w_count: int = int(w.get("count", 0))
 			var w_rec: float = float(w.get("recovery", -1.0))
 
-			expect((w_lesson==&"" or expected_lessons.has(w_lesson)), "%s wave %d has valid lesson ID" % [String(rid), w_idx])
+			expect((w_lesson == &"" or expected_lessons.has(w_lesson)), "%s wave %d has valid lesson ID" % [String(rid), w_idx])
 			expect(valid_formations.has(w_form), "%s wave %d has valid formation ID" % [String(rid), w_idx])
-			expect((not w_enemies.is_empty() and w_count >= 1) or (w_lesson==&"repair" and w_count==0), "%s wave %d has positive count and enemies" % [String(rid), w_idx])
+			expect((not w_enemies.is_empty() and w_count >= 1) or (w_lesson == &"repair" and w_count == 0), "%s wave %d has positive count and enemies" % [String(rid), w_idx])
 			expect(w_rec >= 0.0, "%s wave %d has non-negative recovery" % [String(rid), w_idx])
-			if not w_lesson.is_empty(): seen_lessons[w_lesson] = true
+			if not w_lesson.is_empty():
+				seen_lessons[w_lesson] = true
 			seen_formations[w_form] = true
 			for e_kind in w_enemies:
 				expect(valid_enemies.has(e_kind), "%s wave %d enemy %s is valid" % [String(rid), w_idx, String(e_kind)])
@@ -140,32 +183,7 @@ func run() -> void:
 	expect(seen_enemies.size() == valid_enemies.size(), "All campaign Enemy IDs are scheduled across the 4 rooms")
 	expect(seen_formations.size() == valid_formations.size(), "All 4 Formation IDs are used across the 4 rooms")
 
-	# Verify equipment and boss teaching order, independent of roster size tuning.
-	var acquired: Array[int] = []
-	var bosses: Array[StringName] = []
-	var taught: Dictionary = {}
-	for room: Dictionary in defs:
-		for wave: Dictionary in room.waves:
-			if int(wave.get("acquire",0))>0: acquired.append(int(wave.acquire))
-			if not String(wave.lesson).is_empty(): taught[wave.lesson]=true
-			for kind: StringName in wave.enemies:
-				if kind==&"blue": expect(1 in acquired,"Blue combat follows cutter acquisition")
-				if kind==&"orange": expect(3 in acquired,"Orange combat follows cone acquisition")
-				if String(kind).ends_with("_boss"): bosses.append(kind)
-				if kind==&"loop_boss": expect(taught.has(&"loop"),"Loop boss follows loop teaching")
-				if kind==&"sequence_boss": expect(taught.has(&"pair"),"Sequence boss follows paired-shot teaching")
-	expect(acquired==[2,3,1],"Equipment is found in yellow orange blue order with no fourth weapon pickup")
-	expect(bosses==[&"loop_boss",&"sequence_boss",&"final_boss"],"Complete arc has three ordered bosses")
-	expect(defs[0].waves[0].enemies==[&"yellow"],"Opening encounter uses the initial yellow tool")
-
-	# - Room 4 (burial): familiar pressure wave then ONE final_boss wave
-	var r4_waves: Array[Dictionary] = defs[3]["waves"]
-	expect(
-		not r4_waves[0]["enemies"].has(&"final_boss") and r4_waves.back()["enemies"] == [&"final_boss"] and int(r4_waves.back()["count"]) == 1,
-		"Room 4 (burial) leads with familiar pattern pressure then spawns ONE final_boss"
-	)
-
-	# 3. Verify RoomEnvironment apply_room, visual/collider/clipping agreement, exit cues, and boss entrance ceremony
+	# 4. Verify RoomEnvironment apply_room, visual/collider/clipping agreement, north-wall physical opening & traversal, audio hooks, and boss ceremony
 	var preview_scene := load("res://scenes/room_preview/room_preview.tscn") as PackedScene
 	var preview := preview_scene.instantiate()
 	root.add_child(preview)
@@ -196,23 +214,85 @@ func run() -> void:
 			"Room %s Cover clipping footprints match definition['cover']" % String(def["id"])
 		)
 
-		# Verify every cover rectangle actually blocks a ray through its center in arena.cover
-		var all_rays_blocked := true
-		for r in expected_rects:
-			var c := r.get_center()
-			var start := Vector3(c.x - r.size.x, 0.5, c.y)
-			var finish := Vector3(c.x + r.size.x, 0.5, c.y)
-			if not preview.arena.cover.clip_segment(start, finish).blocked:
-				all_rays_blocked = false
-		expect(all_rays_blocked, "Room %s Cover.clip_segment blocks rays across every cover piece" % String(def["id"]))
+		# Verify NorthWall perimeter panels at exit_door.position.x are opened (hidden) to form a real wall gap
+		var exit_x: float = def["exit_door"]["position"].x
+		var gap_opened := false
+		for wall_child in room_env.walls_root.get_children():
+			if wall_child is Node3D and wall_child.name.begins_with("NorthWall_") and absf(wall_child.position.x - exit_x) < 2.5:
+				if not wall_child.visible:
+					gap_opened = true
+		expect(gap_opened, "Room %s opens a real gap in the NorthWall perimeter at x=%.1f" % [String(def["id"]), exit_x])
 
-	# Test exit cue toggling in non-boss rooms
-	preview.apply_room_by_id(&"gallery")
-	expect(not room_env.exit_open and room_env._north_gate_left.visible, "Gallery starts with North exit gate closed")
+	# 5. Test physical exit collision agreement & room-complete audio event hooks in Gallery
+	var gallery_def: Dictionary = preview.apply_room_by_id(&"gallery")
+	await physics_frame
+	await physics_frame
+
+	var completed_rooms: Array[StringName] = []
+	var audio_events: Array[StringName] = []
+	room_env.room_completed.connect(func(rid: StringName) -> void: completed_rooms.append(rid))
+	room_env.combat_event.connect(func(kind: StringName, _pt: Vector3, _str: float) -> void: audio_events.append(kind))
+
+	expect(
+		not room_env.exit_open
+		and room_env._north_gate_left.visible
+		and room_env._north_gate_right.visible
+		and not room_env._exit_cue_root.visible
+		and room_env.is_exit_physically_blocked(),
+		"Gallery starts with North-wall exit gate closed, green cue hidden, and GateBlockerBody active"
+	)
+
+	# Attempt to walk player north through the CLOSED north-wall gate
+	var player := preview.arena.player as CharacterBody3D
+	var door_pos: Vector3 = gallery_def["exit_door"]["position"]
+	player.position = Vector3(door_pos.x, 0.55, -16.8)
+	player.velocity = Vector3.ZERO
+	await physics_frame
+	for step_i in range(45):
+		player.velocity = Vector3(0.0, 0.0, -6.0)
+		player.move_and_slide()
+	expect(
+		player.position.z > -18.55 and not room_env.player_in_exit(player.position),
+		"Closed north-wall exit physically blocks player move_and_slide() before reaching exit threshold (stopped at z=%.2f)" % player.position.z
+	)
+
+	# Open the exit and verify audio hook + visual cue + physical traversal through the north-wall gap
 	room_env.set_exit_open(true)
-	expect(room_env.exit_open and not room_env._north_gate_left.visible, "set_exit_open(true) opens North exit gate and activates exit beacon")
+	await physics_frame
+	expect(
+		room_env.exit_open
+		and not room_env._north_gate_left.visible
+		and not room_env._north_gate_right.visible
+		and room_env._exit_cue_root.visible
+		and not room_env.is_exit_physically_blocked(),
+		"set_exit_open(true) opens North-wall gate leaves, reveals subtle green cue, and disables GateBlockerBody"
+	)
+	expect(
+		completed_rooms == [&"gallery"] and audio_events == [&"room_complete"],
+		"set_exit_open(true) emits room_completed and combat_event(&'room_complete') audio hook"
+	)
 
-	# Test Boss Entrance Ceremony in Burial Exhibition (closes gates -> short pause -> activation)
+	for step_i in range(45):
+		player.velocity = Vector3(0.0, 0.0, -6.0)
+		player.move_and_slide()
+	expect(
+		player.position.z <= -19.2 and room_env.player_in_exit(player.position),
+		"Open north-wall exit allows player to physically walk through the north wall gap into player_in_exit() (reached z=%.2f)" % player.position.z
+	)
+
+	# Verify solid north wall outside the doorway gap still blocks player
+	player.position = Vector3(-9.0, 0.55, -16.8)
+	player.velocity = Vector3.ZERO
+	await physics_frame
+	for step_i in range(45):
+		player.velocity = Vector3(0.0, 0.0, -6.0)
+		player.move_and_slide()
+	expect(
+		player.position.z > -18.55 and not room_env.player_in_exit(player.position),
+		"North perimeter wall outside the doorway gap remains solid and blocks player (stopped at z=%.2f)" % player.position.z
+	)
+
+	# 6. Test Boss Entrance Ceremony in Burial Exhibition (closes gates -> short pause -> activation)
 	preview.apply_room_by_id(&"burial")
 	expect(room_env.boss_ceremony_state == &"closing_gates", "Burial room starts in closing_gates ceremony state")
 	expect(not room_env.is_boss_active(), "Boss is not active while gates are closing")

@@ -1,0 +1,133 @@
+[gd_scene load_steps=16 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_border"]
+resource_local_to_scene = true
+albedo_color = Color(0.17, 0.19, 0.21, 1)
+roughness = 0.94
+
+[sub_resource type="BoxMesh" id="BoxMesh_border_ns"]
+size = Vector3(38.4, 0.008, 0.65)
+
+[sub_resource type="BoxMesh" id="BoxMesh_border_ew"]
+size = Vector3(0.65, 0.008, 37)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_accent"]
+resource_local_to_scene = true
+albedo_color = Color(0.24, 0.26, 0.28, 1)
+roughness = 0.92
+
+[sub_resource type="BoxMesh" id="BoxMesh_central_aisle"]
+size = Vector3(5.6, 0.008, 28)
+
+[sub_resource type="BoxMesh" id="BoxMesh_loop_lane"]
+size = Vector3(22, 0.008, 2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_cross_wing"]
+size = Vector3(24, 0.008, 4)
+
+[sub_resource type="BoxMesh" id="BoxMesh_bay_runner"]
+size = Vector3(4, 0.008, 26)
+
+[sub_resource type="BoxMesh" id="BoxMesh_connector"]
+size = Vector3(14, 0.008, 3.2)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_outer_ring"]
+top_radius = 6.4
+bottom_radius = 6.4
+height = 0.006
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_inner_dais"]
+top_radius = 5.4
+bottom_radius = 5.4
+height = 0.008
+
+[sub_resource type="BoxMesh" id="BoxMesh_south_approach"]
+size = Vector3(5.2, 0.006, 12)
+
+[node name="FloorAccents" type="Node3D"]
+
+[node name="BorderNorth" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.005, -18.8)
+mesh = SubResource("BoxMesh_border_ns")
+surface_material_override/0 = SubResource("StandardMaterial3D_border")
+
+[node name="BorderSouth" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.005, 18.8)
+mesh = SubResource("BoxMesh_border_ns")
+surface_material_override/0 = SubResource("StandardMaterial3D_border")
+
+[node name="BorderWest" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.8, 0.005, 0)
+mesh = SubResource("BoxMesh_border_ew")
+surface_material_override/0 = SubResource("StandardMaterial3D_border")
+
+[node name="BorderEast" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.8, 0.005, 0)
+mesh = SubResource("BoxMesh_border_ew")
+surface_material_override/0 = SubResource("StandardMaterial3D_border")
+
+[node name="Style_aisle" type="Node3D" parent="."]
+
+[node name="CentralAisle" type="MeshInstance3D" parent="Style_aisle"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.006, 0)
+mesh = SubResource("BoxMesh_central_aisle")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="LoopLaneNorth" type="MeshInstance3D" parent="Style_aisle"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.006, -9.8)
+mesh = SubResource("BoxMesh_loop_lane")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="LoopLaneSouth" type="MeshInstance3D" parent="Style_aisle"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.006, 6.2)
+mesh = SubResource("BoxMesh_loop_lane")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="Style_cross_hall" type="Node3D" parent="."]
+visible = false
+
+[node name="MainCorridor" type="MeshInstance3D" parent="Style_cross_hall"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.006, 0)
+mesh = SubResource("BoxMesh_central_aisle")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="CrossWing" type="MeshInstance3D" parent="Style_cross_hall"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.006, -1)
+mesh = SubResource("BoxMesh_cross_wing")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="Style_work_bays" type="Node3D" parent="."]
+visible = false
+
+[node name="WestBayRunner" type="MeshInstance3D" parent="Style_work_bays"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 0.006, 0)
+mesh = SubResource("BoxMesh_bay_runner")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="EastBayRunner" type="MeshInstance3D" parent="Style_work_bays"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0.006, 0)
+mesh = SubResource("BoxMesh_bay_runner")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="StaggeredConnector" type="MeshInstance3D" parent="Style_work_bays"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.2, 0.006, -3.5)
+mesh = SubResource("BoxMesh_connector")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="Style_boss_court" type="Node3D" parent="."]
+visible = false
+
+[node name="OuterCourtRing" type="MeshInstance3D" parent="Style_boss_court"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.005, -2)
+mesh = SubResource("CylinderMesh_outer_ring")
+surface_material_override/0 = SubResource("StandardMaterial3D_border")
+
+[node name="InnerCourtDais" type="MeshInstance3D" parent="Style_boss_court"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.008, -2)
+mesh = SubResource("CylinderMesh_inner_dais")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="SouthApproach" type="MeshInstance3D" parent="Style_boss_court"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.003, 9.2)
+mesh = SubResource("BoxMesh_south_approach")
+surface_material_override/0 = SubResource("StandardMaterial3D_accent")

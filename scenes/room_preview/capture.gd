@@ -1,9 +1,9 @@
 extends SceneTree
 
-# Bounded private-display render and verification script for Round K (JAM-4).
-# Captures all 4 museum rooms + exit/boss ceremony cues and verifies data/visual/collision agreement.
+# Bounded private-display render and verification script for Round O Wave A (JAM-2).
+# Captures all 4 museum rooms + closed vs open north-wall exit opening and verifies data/visual/collision agreement.
 
-const OUT_DIR := "/home/mattlongname/game-jams/state/old-tech-jam-4/exports/round-k/"
+const OUT_DIR := "/home/mattlongname/game-jams/state/old-tech-jam-2/exports/round-o/"
 const Rooms = preload("res://scenes/prototype/rooms.gd")
 const Cover = preload("res://scenes/prototype/cover.gd")
 
@@ -68,9 +68,9 @@ func _run() -> void:
 	expect(defs.size() == 4, "Rooms.definitions() provides 4 museum rooms")
 
 	var shot_files := [
-		"01-room1-gallery.png",
-		"02-room2-collections.png",
-		"03-room3-restoration.png",
+		"01-room1-gallery-closed-exit.png",
+		"02-room2-collections-open-exit.png",
+		"03-room3-restoration-closed-exit.png",
 		"04-room4-burial-boss-court.png",
 	]
 
@@ -101,37 +101,37 @@ func _run() -> void:
 			"%s Cover.rectangles clipping list matches definition['cover']" % String(room_id)
 		)
 
-		# Position player in central lane so the entire room kit + North/South doorways are framed at gameplay ortho 22, pitch -55
+		# Position player in central lane so the open combat floor, edge cover kit, and North-Wall exit opening are framed at gameplay perspective
 		var cam: Camera3D = arena.player.camera
-		arena.player.position = Vector3(def["player_spawn"].x * 0.35, 0.55, 1.2)
+		arena.player.position = Vector3(def["player_spawn"].x * 0.35, 0.55, -2.5)
 		cam.position = Vector3(0.0, 20.0, 14.0)
 		cam.rotation_degrees = Vector3(-55.0, 0.0, 0.0)
 		cam.size = 22.0
 		arena._update_hud()
 		await _save_shot(shot_files[i])
 
-	# Shot 5: Close inspection of North Exit Doorway open cue & cover kit pieces in Gallery
+	# Shot 5: Close inspection of North-Wall Exit Opening (open with subtle green cue & recessed passage) in Gallery
 	preview.apply_room_by_id(&"gallery")
 	room_env.set_exit_open(true)
 	preview.spawn_preview_cohort_for_room(&"gallery")
 	var cam: Camera3D = arena.player.camera
-	arena.player.position = Vector3(0.0, 0.55, -5.0)
+	arena.player.position = Vector3(0.0, 0.55, -10.5)
 	cam.position = Vector3(0.0, 16.0, 10.5)
 	cam.rotation_degrees = Vector3(-55.0, 0.0, 0.0)
 	cam.size = 16.5
 	arena._update_hud()
-	await _save_shot("05-doorway-exit-open-and-kit.png")
+	await _save_shot("05-north-wall-exit-open-closeup.png")
 
 	var summary := {
 		"status": "passed" if failures.is_empty() else "failed",
 		"checks": checks,
 		"failures": failures,
 		"shots": [
-			OUT_DIR + "01-room1-gallery.png",
-			OUT_DIR + "02-room2-collections.png",
-			OUT_DIR + "03-room3-restoration.png",
+			OUT_DIR + "01-room1-gallery-closed-exit.png",
+			OUT_DIR + "02-room2-collections-open-exit.png",
+			OUT_DIR + "03-room3-restoration-closed-exit.png",
 			OUT_DIR + "04-room4-burial-boss-court.png",
-			OUT_DIR + "05-doorway-exit-open-and-kit.png",
+			OUT_DIR + "05-north-wall-exit-open-closeup.png",
 		],
 	}
 	print(JSON.stringify(summary))

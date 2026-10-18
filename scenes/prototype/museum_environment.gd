@@ -385,6 +385,20 @@ func _build_perimeter_walls_and_columns() -> void:
 		)
 
 
+func set_perimeter_openings(north_gap_x: float, north_gap_width: float, south_gap_x: float = NAN, south_gap_width: float = 0.0) -> void:
+	if walls_root != null and is_instance_valid(walls_root):
+		for child in walls_root.get_children():
+			if child is Node3D:
+				if child.name.begins_with("NorthWall_"):
+					child.visible = is_nan(north_gap_x) or absf(child.position.x - north_gap_x) > (north_gap_width * 0.5 + 1.2)
+				elif child.name.begins_with("SouthCurb_"):
+					child.visible = is_nan(south_gap_x) or absf(child.position.x - south_gap_x) > (south_gap_width * 0.5 + 1.2)
+	if columns_root != null and is_instance_valid(columns_root):
+		for child in columns_root.get_children():
+			if child is Node3D and child.name.begins_with("NorthColumn_"):
+				child.visible = is_nan(north_gap_x) or absf(child.position.x - north_gap_x) > (north_gap_width * 0.5 - 0.4)
+
+
 func _build_cover_decorations() -> void:
 	var col_aabb: AABB = _shared_aabbs["uniColumn"]
 	var wall_aabb: AABB = _shared_aabbs["leftWallSingle"]

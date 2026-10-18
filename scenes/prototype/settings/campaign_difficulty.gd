@@ -24,20 +24,5 @@ static func load_for(difficulty: Variant = &"easy") -> CampaignDifficulty:
 	var key := String(difficulty).strip_edges().to_lower()
 	var path := HARD_PATH if key == "hard" else EASY_PATH
 	var loaded := load(path) as CampaignDifficulty
-	if loaded != null:
-		return loaded
-	var fallback := CampaignDifficulty.new()
-	if key == "hard":
-		fallback.id = &"hard"
-		fallback.title = "Hard"
-		fallback.count_scale = 1.35
-		fallback.count_bonus = 2
-		fallback.burst_bonus = 1
-		fallback.early_max_live = 8
-		fallback.sustained_max_live = 11
-		fallback.interval_scale = 0.82
-		fallback.refill_delay_scale = 0.72
-		fallback.recovery_scale = 0.88
-		fallback.boss_escort_count = 4
-		fallback.mixed_reinforcements = true
-	return fallback
+	assert(loaded != null, "Missing campaign difficulty resource: " + path)
+	return loaded

@@ -110,5 +110,7 @@ func run() -> void:
 	arena.queue_free()
 	await process_frame
 	await create_timer(.1).timeout
+	# Let native compressed playback leave the mixer before process teardown.
+	await create_timer(.3).timeout
 	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures}))
 	quit(0 if failures.is_empty() else 1)

@@ -34,7 +34,6 @@ var _heated := false
 var _slow_used := false
 var _pierced := false
 var _repaired := false
-var _repair_stages_completed := 0
 var _rewound := false
 var _injury_given := false
 var _practice_age := 0.0
@@ -424,9 +423,7 @@ func _physics_process(delta: float) -> void:
 		_practice_age += delta
 		_slow_used = _slow_used or (time_controller != null and time_controller.slow_active) or world_scale < 0.99 or player.world_scale < 0.99
 		_observe_specimens()
-		if lesson == &"repair":
-			_sync_repair_lesson_guidance()
-		elif lesson == &"rewind" and not _injury_given:
+		if lesson == &"rewind" and not _injury_given:
 			_step_rewind_practice(world_delta)
 			if _injury_given:
 				_update_run_hud()
@@ -485,7 +482,6 @@ func _step_rewind_practice(world_delta: float) -> void:
 		if weapons != null and weapons.flash != null:
 			weapons.flash.press()
 			weapons.flash.release(player.position, target_pos, player.position + Vector3(0.0, 0.9, 0.0))
-		feedback.cue(&"beam_tap", player.global_position, 0.7)
 		_rewind_attack_seen = true
 	if not _rewind_projectile_spawned and _rewind_world_age >= 4.8:
 		_rewind_projectile_spawned = true
@@ -518,12 +514,13 @@ func _trigger_teaching_depletion() -> void:
 
 func _on_popup_opened(key: StringName, popup: Node) -> void:
 	super._on_popup_opened(key, popup)
-	if key == &"Repair" and popup != null:
-		if popup.has_signal("stage_changed") and not popup.is_connected("stage_changed", _on_repair_stage_changed):
-			popup.connect("stage_changed", _on_repair_stage_changed)
-		if popup.has_signal("tool_switched") and not popup.is_connected("tool_switched", _on_repair_tool_switched):
-			popup.connect("tool_switched", _on_repair_tool_switched)
-		_sync_repair_lesson_guidance(popup)
+	var repair := popup as WeaponRepair
+	if key == &"Repair" and repair != null:
+		if not repair.stage_changed.is_connected(_on_repair_stage_changed):
+			repair.stage_changed.connect(_on_repair_stage_changed)
+		if not repair.tool_switched.is_connected(_on_repair_tool_switched):
+			repair.tool_switched.connect(_on_repair_tool_switched)
+		_sync_repair_lesson_guidance(repair)
 
 
 func _on_repair_stage_changed(_tool_id: StringName, _stage: int) -> void:
@@ -534,39 +531,29 @@ func _on_repair_tool_switched(_tool_id: StringName) -> void:
 	_sync_repair_lesson_guidance()
 
 
-func _sync_repair_lesson_guidance(repair_popup: Node = null) -> void:
-	if mode != &"practice" or lesson != &"repair" or equipment == null:
+func _sync_repair_lesson_guidance(repair: WeaponRepair = null) -> void:
+	if mode != &"practice" or lesson != &"repair":
 		return
-	var popup: Node = repair_popup if repair_popup != null else SceneManager.get_popup(&"Repair")
-	var total_stages := maxi(1, equipment.repair_steps)
-	var current_stage := clampi(equipment.stage(&"beam"), 0, total_stages)
+	if repair == null:
+		repair = SceneManager.get_popup(&"Repair") as WeaponRepair
+	var total_stages := equipment.repair_steps
+	var current_stage := equipment.stage(&"beam")
 	if equipment.is_full(&"beam"):
 		_repaired = true
-		if is_instance_valid(popup):
-			if popup.has_method("clear_stage_hint"):
-				popup.call("clear_stage_hint")
-			if popup.has_method("show_message"):
-				popup.call("show_message", "Focused Flash restored to 100% — press E to close repair.")
-		run_hint.text = "Focused Flash restored to 100% · press E to close repair."
+		if is_instance_valid(repair): repair.clear_stage_hint()
+		run_hint.text = "Focused Flash restored."
 		return
-	if not is_instance_valid(popup):
-		run_hint.text = "Practice exhibit · press E to open repair and complete all %d stages (%d / %d done) on the yellow flash camera." % [total_stages, current_stage, total_stages]
+	if not is_instance_valid(repair):
+		run_hint.text = "Press E to repair the yellow flash camera (%d / %d sections restored)." % [current_stage, total_stages]
 		return
-	var popup_tool: StringName = StringName(popup.get("tool"))
-	if popup_tool != &"beam":
-		if popup.has_method("show_stage_hint"):
-			popup.call("show_stage_hint", "Press 2 or Tab to select Focused Flash and restore all %d stages." % total_stages)
+	if repair.tool != &"beam":
+		repair.show_stage_hint("Press 2 or Tab to select Focused Flash.")
 		return
-	var op: Dictionary = popup.get("active_op") if "active_op" in popup else {}
-	var part_label := String(op.get("part_label", "Marked Part"))
-	var op_prompt := String(op.get("prompt", "Follow the highlighted repair guide on the model."))
+	var part_label := String(repair.active_op.get("part_label", "Marked Part"))
+	var prompt := String(repair.active_op.get("prompt", "Follow the highlighted guide."))
 	var stage_num := clampi(current_stage + 1, 1, total_stages)
-	var hint_text := "Stage %d / %d (%s): %s" % [stage_num, total_stages, part_label, op_prompt]
-	if popup.has_method("show_stage_hint"):
-		popup.call("show_stage_hint", hint_text)
-	if popup.has_method("show_message"):
-		popup.call("show_message", "Stage %d / %d · %s — %s" % [stage_num, total_stages, part_label, op_prompt])
-	run_hint.text = "Repair Stage %d / %d (%s) · %s" % [stage_num, total_stages, part_label, op_prompt]
+	repair.show_stage_hint("Stage %d / %d (%s): %s" % [stage_num, total_stages, part_label, prompt])
+	run_hint.text = "Repair %d / %d · %s" % [stage_num, total_stages, part_label]
 
 
 func _on_emergency_started(choice_count: int) -> void:
@@ -580,6 +567,8 @@ func _on_emergency_started(choice_count: int) -> void:
 	if time_controller != null:
 		time_controller.slow_requested = false
 	if mode == &"practice" and lesson == &"rewind":
+		# The recovery timeline now carries the instruction; avoid two overlapping cards.
+		tutorial.hide()
 		run_hint.text = "Emergency rewind · scroll mouse wheel down to an earlier safe moment, then click or press Enter."
 		if is_instance_valid(tutorial) and tutorial.practicing:
 			tutorial.state_label.text = "EMERGENCY FROZEN · SCROLL WHEEL DOWN, THEN CLICK OR PRESS ENTER"
@@ -670,7 +659,6 @@ func _spawn_wave() -> void:
 	_slow_used = false
 	_pierced = false
 	_repaired = false
-	_repair_stages_completed = 0
 	_rewound = false
 	_injury_given = false
 	_practice_age = 0.0
@@ -721,8 +709,6 @@ func _spawn_practice() -> void:
 		equipment.restore_tool(&"cone", 1.0)
 		equipment.restore_tool(&"beam", 1.0)
 		equipment.spend(&"beam", equipment.capacity(&"beam"))
-		if time_controller != null:
-			time_controller.meter = maxf(time_controller.meter, float(maxi(1, equipment.repair_steps)) * 12.0)
 		weapons.select_tool(2)
 		return
 	if lesson == &"rewind":
@@ -913,7 +899,6 @@ func _on_resolved_hit(tool: StringName, result: Dictionary, context: Dictionary,
 
 func _on_equipment_repaired(tool: StringName, amount: float) -> void:
 	if tool == &"beam" and amount > 0.0:
-		_repair_stages_completed += 1
 		if equipment.is_full(&"beam"):
 			_repaired = true
 		_sync_repair_lesson_guidance()
@@ -943,11 +928,40 @@ func capture_state() -> Dictionary:
 		"timer": _spawn_timer,
 		"lesson": lesson,
 		"specimen_ids": _specimen_ids.duplicate(),
-		"practice_age": _practice_age,
-		"rewind_world_age": _rewind_world_age,
-		"injury_given": _injury_given,
+		"practice": _capture_practice(),
 	}
 	return data
+
+
+func _capture_practice() -> Dictionary:
+	return {
+		"kills": _kills.duplicate(), "charged_kills": _charged_kills.duplicate(),
+		"opened": _opened, "cut": _cut, "heated": _heated,
+		"slow_used": _slow_used, "pierced": _pierced, "repaired": _repaired,
+		"rewound": _rewound, "injury_given": _injury_given,
+		"age": _practice_age, "rewind_age": _rewind_world_age,
+		"rewind_start": _rewind_start_pos, "moved": _rewind_moved,
+		"attack_seen": _rewind_attack_seen, "projectile_spawned": _rewind_projectile_spawned,
+	}
+
+
+func _restore_practice(state: Dictionary) -> void:
+	_kills = state.get("kills", {}).duplicate()
+	_charged_kills = state.get("charged_kills", {}).duplicate()
+	_opened = bool(state.get("opened", false))
+	_cut = bool(state.get("cut", false))
+	_heated = bool(state.get("heated", false))
+	_slow_used = bool(state.get("slow_used", false))
+	_pierced = bool(state.get("pierced", false))
+	_repaired = bool(state.get("repaired", false))
+	_rewound = bool(state.get("rewound", false))
+	_injury_given = bool(state.get("injury_given", false))
+	_practice_age = float(state.get("age", 0.0))
+	_rewind_world_age = float(state.get("rewind_age", 0.0))
+	_rewind_start_pos = state.get("rewind_start", player.position)
+	_rewind_moved = bool(state.get("moved", false))
+	_rewind_attack_seen = bool(state.get("attack_seen", false))
+	_rewind_projectile_spawned = bool(state.get("projectile_spawned", false))
 
 
 func _restore_base_arena_state(data: Dictionary) -> void:
@@ -962,7 +976,7 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 		var schedule: Dictionary = data.get("campaign_wave", {})
 		if int(schedule.get("room", -1)) == room_index:
 			var snap_wave := int(schedule.get("wave", wave_index))
-			if snap_wave >= 0 and snap_wave < waves.size():
+			if snap_wave >= -1 and snap_wave <= waves.size():
 				wave_index = snap_wave
 			_pending = int(schedule.get("pending", _pending))
 			_spawned = int(schedule.get("spawned", _spawned))
@@ -979,7 +993,16 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 				lesson = snap_lesson if not tutorial.is_learned(snap_lesson) else &""
 				museum.clear_tool_pickup()
 				museum.set_exit_open(mode == &"exit")
+			elif snap_mode == &"title":
+				mode = &"title"
+				timer = float(schedule.get("mode_timer", 0.0))
+				lesson = &""
+				museum.clear_tool_pickup()
+				museum.set_exit_open(false)
 			elif snap_mode == &"practice":
+				museum.clear_tool_pickup()
+				museum.set_exit_open(false)
+				_restore_practice(schedule.get("practice", {}))
 				if snap_lesson == &"rewind" and mode == &"practice" and lesson == &"rewind":
 					mode = &"practice"
 					lesson = &"rewind"
@@ -990,6 +1013,7 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 					lesson = &""
 					_start_pressure()
 			elif snap_mode == &"pickup":
+				museum.set_exit_open(false)
 				var wave_tool := int(waves[wave_index].get("acquire", 0)) if wave_index >= 0 and wave_index < waves.size() else 0
 				if wave_tool > 0 and not (wave_tool in acquired):
 					mode = &"pickup"
@@ -1005,6 +1029,10 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 			if enemy.rewind_id in _specimen_ids:
 				specimens.append(enemy)
 				_make_specimen_safe(enemy)
+		if not preview_only and tutorial.active_id != lesson:
+			tutorial.show_known_lesson(lesson, _targets())
+	elif not preview_only:
+		tutorial.dismiss()
 	weapons.rebuild_visuals(player)
 
 
@@ -1036,5 +1064,8 @@ func _on_emergency_confirmed(age_seconds: float, state: Dictionary) -> void:
 		_apply_campaign_snapshot(state, false)
 	if _emergency_selected_index > 0 or age_seconds > 0.0 or age_seconds == EmergencyRewind.CHECKPOINT_AGE:
 		_rewound = true
+		if mode == &"practice" and lesson == &"rewind":
+			# Completing the recovery is the lesson; do not stage a second depletion.
+			_injury_given = true
 	_emergency_selected_index = 0
 	weapons.require_fresh_press = false

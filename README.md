@@ -6,12 +6,12 @@ Our game for [Ludum Dare 60](https://ldjam.com/events/ludum-dare/60).
 - **Deadline:** Monday, October 19, 2026 at **5:00pm CDT** (America/Chicago; **22:00 UTC**).
 - **Engine:** Godot **4.7.2 Standard**, using the Compatibility renderer.
 
-Open `project.godot`, run the project, and choose **New Game**.
+Open `project.godot`, run the project, and choose **New Game**, then Easy or Hard.
 The campaign crosses four museum areas and three bosses. Find the yellow flash
 camera, orange heat bellows, and blue cutter as you progress.
 
 WASD moves; mouse aims; 1–3 or Tab equips collected weapons. Hold Space to slow
-time. E toggles repair; you can move and switch weapons while repairing.
+time once introduced. E toggles repair; you can move and switch weapons while repairing.
 
 Time replaces player health: hits, slow motion and repair checkpoints spend a
 recharging meter. A depleting hit spends an emergency rewind charge. Scroll down

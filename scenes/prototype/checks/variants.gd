@@ -204,7 +204,7 @@ func run() -> void:
 	arena.director.clear()
 	for index in range(32):
 		arena.director.spawn(&"side_guard", Vector3(index % 8 - 4, 0, -8 - index / 8))
-	for tick in range(100): arena.history.record(0.05, arena.capture_state)
+	for tick in range(100): arena.history.record(arena.history.sample_interval, arena.capture_state)
 	expect(arena.history.snapshot_count == 100 and arena.history.rejected_count == 0,
 		"Full history accepts 32 part-bearing enemies without exceeding snapshot cap")
 	var encoded_bytes := 0

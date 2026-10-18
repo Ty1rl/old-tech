@@ -222,7 +222,7 @@ func run() -> void:
 	var audible := false
 	for voice in feedback._voices: audible = audible or voice.pending
 	expect(audible and feedback._effects[-1].color.r > feedback._effects[-1].color.g * 2, "player damage queues sound and warm red impact ring")
-	expect(feedback.samples.size() == 13 and feedback._effects[-1].life >= .45, "damage cue reuses original sample bank with readable visual duration")
+	expect(feedback.samples.has(&"player_hurt") and feedback.samples[&"player_hurt"] is AudioStreamWAV and feedback._effects[-1].life >= .45, "damage cue uses the baked palette with readable visual duration")
 	feedback.reset_state()
 	feedback.queue_free()
 	director.queue_free()

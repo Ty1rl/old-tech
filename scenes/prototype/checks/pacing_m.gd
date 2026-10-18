@@ -61,11 +61,11 @@ func run() -> void:
 	gear.set_training_protection([])
 	expect(gear.training_protection.is_empty() and is_equal_approx(gear.spend(&"beam", 10.0), 10.0) and is_equal_approx(gear.remaining(&"beam"), 54.0), "Removing protection restores normal beam wear")
 
-	# 3. Updated tutorial copy for E open, three marked stages to 100%, and Space slow
+	# 3. Repair copy describes completion, all gesture kinds, and automatic close
 	var tutorial_script: Script = load("res://scenes/ui/tutorial.gd")
 	var repair_copy: String = String(tutorial_script.LESSONS["repair"][1])
 	var slow_copy: String = String(tutorial_script.LESSONS["slow"][1])
-	expect("press E to open" in repair_copy and "three marked stages" in repair_copy and "100%" in repair_copy, "Repair lesson copy teaches E open and full three-stage restoration to 100%")
+	expect("press E to open" in repair_copy and all_words(repair_copy, ["spin", "connect", "trace", "closes"]) and "100%" in repair_copy, "Repair lesson copy teaches E, every gesture, full restoration and automatic close")
 	expect(not ("hold E" in repair_copy), "Repair lesson copy no longer instructs holding E")
 	expect("Hold Space" in slow_copy, "Slow lesson copy teaches holding Space to slow the world")
 
@@ -223,3 +223,9 @@ func run() -> void:
 	await create_timer(0.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)
+
+
+func all_words(text: String, words: Array) -> bool:
+	for word in words:
+		if not String(word) in text: return false
+	return true

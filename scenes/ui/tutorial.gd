@@ -16,7 +16,7 @@ const LESSONS := {
 	"heat": ["Strip the orange armor", "3 · Aim at the orange covering and hold the mouse until it breaks. Heat also pushes nearby enemies back, helping you make an escape.", "heat"],
 	"shot": ["Aim for yellow", "2 · Aim at the yellow core and click. An exposed core needs only a quick shot.\n\nPurple time is your survival meter and recharges in calm moments. Incoming hits and repairs spend it.", "shot"],
 	"slow": ["Make yourself time", "Your time meter fuels slow-motion, repairs, and survival. Hold Space to slow the world, strike the marked target while time is slowed, then release Space to return to full speed.", "slow"],
-	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and press E to open repair. Complete all three marked stages on the camera—spin the lens ring, connect matching terminals, and trace the bellows seam—until it reaches 100%, then press E to close.", "repair"],
+	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and press E to open repair. Restore every marked section to 100%: spin the lens ring, connect matching terminals, and trace the bellows seam. Repair closes when your owned tools are full.", "repair"],
 	"charge": ["A charged shot goes through", "2 · Hold the mouse until the lens is bright, then release. A full charge pierces enemies in its path. Solid cover stops it.", "charge"],
 	"opening": ["Open it, then shoot", "Cut the blue link OR heat the orange armor. The opening stays. Switch to 2 and shoot the exposed yellow core.", "opening"],
 	"pair": ["A, then B", "2 · Shoot A to open B. Shoot B before its shutter closes. Quick aimed shots work. If you wait, try the pair again.", "pair"],

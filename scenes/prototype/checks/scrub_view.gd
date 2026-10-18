@@ -131,9 +131,14 @@ func run() -> void:
 	view.finish()
 	old = view.capture_pose(arena.player, arena.director, arena.weapons)
 	view.begin(old, arena.player, arena.director, arena.weapons)
+	# Let the native mixer register playback before testing immediate node destruction.
+	await create_timer(.1).timeout
+	arena.feedback.reset_state()
 	arena.free()
 	view.step(ScrubView.DURATION * 0.5)
 	view.finish()
 	expect(not view.active, "Freed arena nodes can be stepped and finished safely")
+	# Let native compressed playback leave the mixer before process teardown.
+	await create_timer(.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

@@ -6,7 +6,7 @@ Use **Godot 4.7.2 Standard / Compatibility**. From the Ubuntu host:
 ~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo
 ```
 
-Restart a running game after updates. Choose **New Game** for the campaign.
+Restart a running game after updates. Choose **New Game**, then **Easy** or **Hard** for the campaign.
 **Encounter select** in the main/pause menu, or F10, jumps to a room, encounter or
 boss phase with the required equipment. `SceneManager.developer_tools` hides the
 shortcuts when false.
@@ -52,7 +52,8 @@ older moments, then click or press Enter. Recovery grants at least 40 time and
 history, a seeded room checkpoint remains available. With no charges left, retry
 the current room with fresh time/charges, preserving learned lessons and equipment.
 
-History stores at most 240 value-only snapshots over 12 world seconds, each at
+History samples 12 times/second over 18 world seconds (normally 216 snapshots,
+with a hard limit of 240), each at
 most 64 KiB, plus a checkpoint and the emergency's current-state copy. No nodes,
 rigs, time balance, charges, learned lessons or acquired loadout enter snapshots.
 Deep validation runs in checks; normal sampling retains size bounds without
@@ -81,11 +82,16 @@ Opening yellow lessons are protected until a deliberate repair lesson.
 
 A burial device beneath the museum assembles bodies from its exhibits. Cross
 Public Galleries, Connected Collections, Restoration Rooms and Burial Exhibition,
-collecting yellow, orange, then blue. Time is available from the start.
+collecting yellow, orange, then blue. The survival meter is visible from the start;
+slow and rewind unlock during their respective lessons.
+
+Easy and Hard share time, damage, and weapon-condition rules. Hard adds concurrent
+threats and faster finite arrivals. Tune the authored `settings/difficulty_*.tres`
+resources; `rooms.gd` contains the per-wave rosters and formations.
 
 New mechanics get an explanation, safe practice and then staged combat. Emergency
 rewind is taught through a real controlled depletion after usable history exists.
-Retries retain completed lessons. Cleared rooms open a green exit doorway.
+Retries retain completed lessons. Cleared rooms open a real north-wall doorway.
 
 | Part | Efficient interaction |
 |---|---|
@@ -135,8 +141,8 @@ python3 check.py --seat jam-1 --suite repair_n
 Other focused suites cover time_core_n, combat_player_n, emergency_mode_n,
 weapon_components_n, weapon_smoothing_n, enemy_time_n, ui_n, and movement_m.
 Retained earlier combat, pattern, room, menu and animation checks use the current
-components. Logs/receipts stay in each seat's state. Combined Round N evidence:
-`state/old-tech-jam-1/exports/round-n/integration/`.
+components. Logs/receipts stay in each seat's state. Combined Round O evidence:
+`state/old-tech-jam-1/exports/round-o/final/`.
 
 The removed manual-clock/four-tool suites were `rewind`, `presentation_j`,
 `controls_l`, `resource_integration`, `space_m`, `repair_m`, `repairs`, `ui_m` and
@@ -145,20 +151,22 @@ new time, repair, recovery, UI and integrated checks cover the replacement rules
 The remaining repair-view check still exercises actual gestures at multiple sizes.
 
 Automated graphical previews must use shared `render.py` on a private display.
-`flow_capture_k` is a graphical capture, not a headless check: frame-post-draw
+`flow_capture_k` and `combat_capture_o` are graphical captures, not headless checks: frame-post-draw
 requires a renderer. Never launch automated previews on Matt's desktop.
 
 Models and sound remain provisional. Human playtesting determines whether the
 resource budgets, repair interruptions and encounter pressure feel right.
 
-## Known limitations from the current review
+## Recovery behavior and remaining limits
 
-Emergency recovery currently rewinds weapon condition with the world. Choosing a
-moment before a repair can undo that completed repair without refunding its time
-cost; choosing a moment before firing can refund weapon wear. The next pass needs
-to settle whether condition should persist through recovery like time and charges.
+Weapon condition intentionally rewinds with the world. Choosing a moment before
+repair undoes its result without refunding time; choosing a moment before firing
+refunds wear. Time, charges, learned lessons, unlocked abilities, and acquired
+tools remain live. Within-room wave timers, pending arrivals, practice results,
+and enemies restore together; actual room-layout boundaries clear the history.
 
-Remaining maintenance work: repair wiring accesses private popup/session fields;
-arena startup overrides authored camera settings; the Space action is registered
-at runtime and the time contract's wiring example needs updating. Historical
-`ui_preview_m` and `ranged_preview/capture_m.gd` scripts still use removed APIs.
+The music/SFX and difficulty values need human listening and playtesting. Fixed
+room props use authored scenes/resources; the combat paths, swarms and HUD arcs
+remain generated. Some older preview scripts (`ui_preview_m` and
+`ranged_preview/capture_m.gd`) still target removed APIs; use the current capture
+scripts referenced by the verification receipt.

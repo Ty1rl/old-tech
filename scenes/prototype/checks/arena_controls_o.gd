@@ -63,6 +63,8 @@ func run() -> void:
 	await check_capabilities(arena, t)
 	await check_emergency_flow(arena, t)
 	await check_scene_exit(arena, t)
+	# Native compressed playback releases on the audio mixer thread.
+	await create_timer(.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)
 

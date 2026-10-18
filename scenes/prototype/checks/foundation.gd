@@ -85,17 +85,24 @@ func run() -> void:
 	var old_fade: float = scenes.fade_duration
 	scenes.fade_duration = 0.0
 	state.pause()
-	var pause_menu: Control = scenes._popups.back().get_child(1)
+	var pause_menu: Control = scenes.get_popup(&"PauseMenu")
 	pause_menu._on_exit_button_pressed()
 	for frame in range(12):
 		await process_frame
 	expect(current_scene.scene_file_path == "res://scenes/main.tscn" and state.is_in_menu(),
 		"Pause-menu exit returns to main menu")
 	current_scene.get_node("MainMenu").get_node("%PlayButton").pressed.emit()
+	var new_game: Control = scenes.get_popup(&"NewGame")
+	expect(new_game != null, "New Game offers difficulty before starting")
+	new_game.get_node("%StartButton").pressed.emit()
 	for frame in range(12):
 		await process_frame
 	expect(current_scene.scene_file_path == "res://scenes/prototype/campaign.tscn" and state.is_playing(),
 		"Main-menu Play launches the taught museum campaign")
 	scenes.fade_duration = old_fade
+	current_scene.feedback.reset_state()
+	current_scene.queue_free()
+	await process_frame
+	await create_timer(.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

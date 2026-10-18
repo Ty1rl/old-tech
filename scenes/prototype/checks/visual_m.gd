@@ -87,10 +87,22 @@ func run() -> void:
 	for def in Rooms.definitions():
 		museum.apply_room(def)
 		expect(museum.get_cover_world_rectangles() == def.cover, "Room trim retains original solid cover footprints")
-		var edges: Array = museum.cover_root.find_children("CoverEdge*", "MeshInstance3D", true, false)
-		expect(edges.size() == def.cover.size() * 4, "Four quiet floor edges outline each solid obstacle")
-		var first_mat: Material = edges[0].material_override
-		for edge: MeshInstance3D in edges: expect(edge.material_override == first_mat, "Room cover edging shares one material")
+		expect(museum.cover_root.get_child_count() == def.cover.size(), "Every solid obstacle has an authored visual kit")
+		var shared: Dictionary = {}
+		for index in range(def.cover.size()):
+			var kit: Node3D = museum.cover_root.get_child(index)
+			var rect: Rect2 = def.cover[index]
+			var scale_root: Node3D = kit.get_node("ScaleRoot")
+			expect(kit.position.is_equal_approx(Vector3(rect.get_center().x, 0, rect.get_center().y)), "Authored kit centers on the solid footprint")
+			expect(scale_root.scale.is_equal_approx(Vector3(rect.size.x, 1, rect.size.y)), "Authored kit scales to the solid footprint")
+			var meshes: Array[Node] = kit.find_children("*", "MeshInstance3D", true, false)
+			expect(not meshes.is_empty(), "Authored cover contains visible meshes")
+			for mesh: MeshInstance3D in meshes:
+				var material := mesh.get_active_material(0)
+				var key := kit.scene_file_path + ":" + String(kit.get_path_to(mesh))
+				if shared.has(key): expect(material == shared[key], "Repeated kit meshes reuse authored materials")
+				else: shared[key] = material
+
 	museum.free()
 	await process_frame
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures, "resources": resources}))

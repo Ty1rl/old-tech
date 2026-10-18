@@ -1,5 +1,7 @@
 extends SceneTree
 
+const Gestures = preload("res://scenes/prototype/repair_gestures.gd")
+
 var checks := 0
 var failures: Array[String] = []
 
@@ -51,6 +53,18 @@ func motion(panel: Control, point: Vector2, direct: bool = false, held: bool = t
 		root.push_input(event, true)
 
 
+func click_point(panel: Control, point: Vector2, direct: bool = false) -> void:
+	button(panel, point, true, direct)
+	button(panel, point, false, direct)
+
+
+func click_connect_pair(panel: Control, pair_index: int, direct: bool = false) -> void:
+	var pairs: Array = panel.active_op["pairs"]
+	var pair: Dictionary = pairs[pair_index]
+	click_point(panel, pair["a"], direct)
+	click_point(panel, pair["b"], direct)
+
+
 func trace(panel: Control, points: Array[Vector2] = [], direct: bool = false) -> void:
 	var path: Array[Vector2] = panel.route.duplicate() if points.is_empty() else points
 	button(panel, path[0], true, direct)
@@ -78,6 +92,21 @@ func has_button_child(node: Node) -> bool:
 
 
 func run() -> void:
+	# 0. Verify pure RepairGestures specifications and tool operation sequences
+	var ring_ops: Array = Gestures.tool_spec(&"ring")["operations"]
+	var beam_ops: Array = Gestures.tool_spec(&"beam")["operations"]
+	var cone_ops: Array = Gestures.tool_spec(&"cone")["operations"]
+	var clock_ops: Array = Gestures.tool_spec(&"clock")["operations"]
+	expect(ring_ops[0]["kind"] == &"spin" and ring_ops[1]["kind"] == &"connect" and ring_ops[2]["kind"] == &"trace",
+		"Blue (ring) repair order is cassette spin -> matching contacts -> blade alignment trace")
+	expect(beam_ops[0]["kind"] == &"spin" and beam_ops[1]["kind"] == &"connect" and beam_ops[2]["kind"] == &"trace",
+		"Yellow (beam/Flash) repair order is lens ring spin -> top ceramic terminals -> bellows trace")
+	expect(cone_ops[0]["kind"] == &"spin" and cone_ops[1]["kind"] == &"trace" and cone_ops[2]["kind"] == &"connect"
+		and bool(Gestures.tool_spec(&"cone").get("open_cover_and_grille", false)),
+		"Orange (cone/Bellows) repair order is fan spin -> leather trace -> heating-coil contacts with open cover/grille")
+	expect(clock_ops[0]["kind"] == &"spin" and clock_ops[1]["kind"] == &"trace" and clock_ops[2]["kind"] == &"connect",
+		"Purple (clock/Time Device) repair order is side-key spin -> pendulum trace -> cassette matching contacts")
+
 	root.size = Vector2i(960, 600)
 	var arena = load("res://scenes/prototype/arena.tscn").instantiate()
 	root.add_child(arena)
@@ -89,11 +118,14 @@ func run() -> void:
 	var scenes := root.get_node("SceneManager")
 	var state := root.get_node("GameState")
 
-	# 1. Compact, offset layout at 960x600 with no Resume button or opaque full-screen dim
+	# 1. Compact, offset layout at 960x600 with tool-matched 3D SubViewport backdrop and no Resume button
 	gear.spend(&"ring", gear.capacity(&"ring"))
 	var panel: Control = await open(scenes, gear, &"ring")
 	expect(not paused and gear.repairing == &"ring", "Setup acquires repair session before ready without pausing world")
 	expect(panel.progress.text.contains("0 / 4") and panel.heading.text.contains("Ring"), "UI identifies item, derived stage and capacity")
+	expect(panel.active_op_index == 0 and panel.active_kind == &"spin", "Depleted ring starts at Operation 1 (cassette Spin)")
+	expect(panel.model_instances["ring"].visible and not panel.model_instances["beam"].visible,
+		"3D SubViewport backdrop matches the selected Ring tool model")
 	expect(not has_button_child(panel), "Repair panel has no Resume/Close button ceremony")
 	var view_rect := Rect2(Vector2.ZERO, Vector2(960, 600))
 	var panel_rect: Rect2 = panel.panel.get_global_rect()
@@ -107,33 +139,44 @@ func run() -> void:
 			holder_dim_alpha = sibling.color.a
 	expect(holder_dim_alpha <= 0.15, "Popup backdrop is translucent rather than a dark full-screen overlay")
 
-	# 2. Empty tool previews full missing path (0 solved) and traces first quarter section
+	# 2. Empty tool previews full missing path (0 solved)
 	var full_len: float = panel.path_length(panel.full_path)
 	var q0_len: float = panel.path_length(panel.route)
 	expect(panel.solved_path.is_empty() and is_equal_approx(panel.path_length(panel.missing_path), full_len),
 		"Empty tool has zero solved path and full missing path")
 
-	# 3. Ordered path validation on first quarter
-	button(panel, Vector2(300, 20), true)
-	button(panel, Vector2(300, 20), false)
-	expect(not panel.dragging and gear.stage(&"ring") == 0, "Starting outside contact 1 does not award repair")
+	# 3. Operation 1 (SPIN — Cassette rotation ONLY on Ring): real angular drag validation
+	button(panel, Vector2(20, 20), true)
+	button(panel, Vector2(20, 20), false)
+	expect(not panel.dragging and gear.stage(&"ring") == 0, "Starting outside spin ring does not start drag or award repair")
 	trace(panel, [panel.route[0]])
-	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Short click at contact 1 fails without free capacity")
-	trace(panel, [panel.route[0], panel.route[-1]])
-	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Sparse diagonal shortcut cannot skip channel bends")
-	trace(panel, [panel.route[0], panel.route[1]])
-	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Releasing early at an intermediate contact fails")
+	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Short click on spin ring fails without free capacity")
+	trace(panel, [panel.route[0], Vector2(360, 220)])
+	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Leaving spin ring annulus fails without free capacity")
+	trace(panel, [panel.route[0], panel.route[1], panel.route[2]])
+	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Releasing early before completing spin angle fails")
+	# Reverse direction mid-spin
+	button(panel, panel.route[0], true)
+	motion(panel, panel.route[1])
+	motion(panel, panel.route[2])
+	motion(panel, panel.route[0])
+	button(panel, panel.route[0], false)
+	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Reversing spin direction mid-drag fails")
+
+	# Valid continuous angular drag around cassette spin ring
 	button(panel, panel.route[0], true)
 	for point in panel.route.slice(1):
 		motion(panel, point)
-	expect(gear.remaining(&"ring") == 0 and panel.dragging, "Finishing motion alone cannot complete a checkpoint")
+	expect(gear.remaining(&"ring") == 0 and panel.dragging, "Finishing spin motion alone waits for release")
 	button(panel, panel.route[-1], false)
 	expect(gear.stage(&"ring") == 1 and is_equal_approx(gear.remaining(&"ring"), gear.capacity(&"ring") / 4.0),
-		"Deliberate valid release at final contact restores first quarter and advances stage to 1")
+		"Valid cassette spin release restores first quarter (25%) and advances stage to 1")
 	button(panel, panel.route[-1], false)
-	expect(gear.stage(&"ring") == 1, "Duplicate release cannot repair the next section")
+	expect(gear.stage(&"ring") == 1, "Duplicate release cannot repair the next operation")
 
 	# 4. Hold-E flow: pressing E does NOT toggle/close; releasing E closes and preserves checkpoint
+	expect(panel.active_op_index == 1 and panel.active_kind == &"connect",
+		"After completing Operation 1 (Spin), panel advances to Operation 2 (Connect)")
 	button(panel, panel.route[0], true)
 	motion(panel, panel.route[1])
 	key(KEY_E, false, true)
@@ -146,20 +189,41 @@ func run() -> void:
 	expect(not scenes.has_popup(&"Repair") and gear.repairing == &"",
 		"Releasing E closes repair panel and releases its session")
 	expect(gear.stage(&"ring") == 1 and gear.remaining(&"ring") == 8,
-		"Releasing E mid-gesture discards only unfinished trace and preserves completed checkpoint")
+		"Releasing E mid-gesture discards only unfinished gesture and preserves completed checkpoint")
 
-	# 5. Reopening resumes from current condition (25% solved, 75% missing, stage 1 route)
+	# 5. Reopening resumes at Operation 2 (Connect) without redoing Operation 1 (Spin)
 	panel = await open(scenes, gear, &"ring")
-	expect(panel.route[1] == panel.ROUTES[1][1] and not panel.dragging,
-		"Reopening at 25% condition starts at quarter 2 route with a fresh gesture")
-	expect(is_equal_approx(panel.path_length(panel.solved_path), full_len * 0.25)
-		and is_equal_approx(panel.path_length(panel.missing_path), full_len * 0.75),
-		"UI previews 25% solved path and 75% missing path")
-	trace(panel)
-	expect(gear.stage(&"ring") == 2 and gear.remaining(&"ring") == 16,
-		"Second checkpoint restores capacity to 50% (16/32)")
+	expect(panel.active_op_index == 1 and panel.active_kind == &"connect" and panel.route[1] == panel.ROUTES[1][1] and not panel.dragging,
+		"Reopening at 25% condition starts at Operation 2 (Connect) with a fresh gesture")
 
-	# 6. WASD movement, PauseMenu interruption, focus loss, and lost button mask
+	# Real click-to-connect validation (shape + label matching ▲A and ■B)
+	var pairs: Array = panel.active_op["pairs"]
+	click_point(panel, Vector2(30, 30))
+	expect(panel.trace_bad and panel.connected_pairs.is_empty(), "Clicking outside terminals fails without connecting")
+	click_point(panel, pairs[0]["a"])
+	expect(not panel.selected_terminal.is_empty() and String(panel.selected_terminal["label"]) == "A",
+		"Clicking first ▲A terminal selects it")
+	click_point(panel, pairs[0]["a"])
+	expect(panel.connected_pairs.is_empty(), "Clicking the same terminal twice does not connect the pair")
+	# Click mismatched shape/label terminal (■B instead of ▲A)
+	click_point(panel, pairs[1]["a"])
+	expect(panel.trace_bad and panel.selected_terminal.is_empty() and panel.connected_pairs.is_empty(),
+		"Clicking mismatched terminal (▲A -> ■B) is rejected and clears selection")
+	# Connect Pair A (▲A -> ▲A)
+	click_connect_pair(panel, 0)
+	expect(0 in panel.connected_pairs and gear.stage(&"ring") == 1,
+		"Clicking matching ▲A terminals connects Pair A")
+	# Miss while trying to connect Pair B preserves already-connected Pair A
+	click_point(panel, pairs[1]["a"])
+	click_point(panel, Vector2(30, 30))
+	expect(panel.trace_bad and (0 in panel.connected_pairs) and gear.stage(&"ring") == 1,
+		"Missing second terminal preserves already-connected Pair A")
+	# Connect Pair B (■B -> ■B) to complete Operation 2
+	click_connect_pair(panel, 1)
+	expect(gear.stage(&"ring") == 2 and gear.remaining(&"ring") == 16 and panel.active_op_index == 2 and panel.active_kind == &"trace",
+		"Connecting matching ■B terminals completes Operation 2 (50% capacity) and advances to Operation 3 (Trace)")
+
+	# 6. WASD movement, PauseMenu interruption, focus loss, and lost button mask during Operation 3 (Trace)
 	var player: CharacterBody3D = arena.player
 	var origin: Vector3 = player.position
 	Input.action_press("move_right")
@@ -179,9 +243,12 @@ func run() -> void:
 		"Even direct synthetic board events cannot progress a paused repair")
 	state.resume()
 	await frames()
-	trace(panel)
+
+	# Midpoint trace release at stage 2 saves Checkpoint 3 (75%, 24/32)
+	var mid_path: Array[Vector2] = [panel.route[0], panel.route[1], panel.route[2]]
+	trace(panel, mid_path)
 	expect(gear.stage(&"ring") == 3 and gear.remaining(&"ring") == 24,
-		"Fresh trace works after pause resume and reaches 75% (24/32)")
+		"Releasing at midpoint of Operation 3 trace saves Checkpoint 3 (75%, 24/32)")
 
 	scenes.push_popup(&"PauseMenu")
 	await frames()
@@ -212,54 +279,89 @@ func run() -> void:
 	expect(not scenes.has_popup() and not paused and state.is_playing() and gear.remaining(&"ring") == 24,
 		"Escape cancels unfinished trace and closes Repair without opening PauseMenu")
 
-	# 8. Finishing full automatically closes Repair panel
+	# 8. Finishing remaining short trace at stage 3 reaches full capacity and automatically closes Repair
 	panel = await open(scenes, gear, &"ring")
+	expect(panel.active_op_index == 2 and panel.active_kind == &"trace",
+		"Reopening at 75% starts on the remaining tail of Operation 3 (Trace)")
 	trace(panel)
 	await frames()
 	expect(gear.remaining(&"ring") == gear.capacity(&"ring") and gear.stage(&"ring") == 0
 		and gear.repairing == &"" and not scenes.has_popup(&"Repair"),
-		"Completing the final checkpoint reaches full capacity, resets stage to 0, and closes Repair")
+		"Completing the remaining tail reaches full capacity, resets stage to 0, and closes Repair")
 
-	# 9. Light wear vs heavy wear vs mid-quarter partial segment
+	# 9. Tiny / light wear vs heavy wear vs partial segment: never forces all 3 operations for small damage
 	gear.reset_state()
-	gear.spend(&"ring", 2.0) # 30/32 remaining (93.75% condition, light wear in quarter 4)
+	gear.spend(&"ring", 2.0) # 30/32 remaining (93.75% condition, tiny damage)
 	panel = await open(scenes, gear, &"ring")
 	var light_missing_len: float = panel.path_length(panel.missing_path)
 	var light_route_len: float = panel.path_length(panel.route)
-	expect(gear.stage(&"ring") == 3 and light_missing_len < full_len * 0.15 and light_route_len < q0_len * 0.5,
-		"Nearly-full tool previews mostly solved path and a short missing trace section")
+	expect(gear.stage(&"ring") == 3 and panel.active_op_index == 2 and light_missing_len < full_len * 0.15 and light_route_len < q0_len * 0.5,
+		"Lightly worn ring skips Operations 1 & 2 and requires only a short tail trace in Operation 3")
 	trace(panel)
 	await frames()
 	expect(gear.remaining(&"ring") == 32.0 and not scenes.has_popup(&"Repair") and gear.repairing == &"",
-		"Tracing short missing section on lightly worn tool restores to full and closes panel")
+		"Tracing short missing section on lightly worn ring restores to full and closes panel")
 
+	# Tiny damage on Orange (cone) at >75% condition: skips Spin & Trace, and Pair A is already connected; only Pair B needed!
 	gear.reset_state()
-	gear.spend(&"ring", 28.0) # 4/32 remaining (12.5% condition, heavy wear in quarter 1)
+	gear.spend(&"cone", 5.0) # 40/45 remaining (88.9% condition, stage 3)
+	panel = await open(scenes, gear, &"cone")
+	expect(gear.stage(&"cone") == 3 and panel.active_op_index == 2 and panel.active_kind == &"connect"
+		and (0 in panel.connected_pairs) and not (1 in panel.connected_pairs),
+		"Lightly worn Orange bellows skips Spin & Trace and starts with Pair A already connected")
+	click_connect_pair(panel, 1)
+	await frames()
+	expect(is_equal_approx(gear.remaining(&"cone"), 45.0) and not scenes.has_popup(&"Repair") and gear.repairing == &"",
+		"Clicking only the single remaining coil pair on lightly worn Orange bellows restores to full and closes")
+
+	# Partial wear within Quarter 1 (4/32 = 12.5% condition) scales down Spin arc length to 50%
+	gear.reset_state()
+	gear.spend(&"ring", 28.0) # 4/32 remaining (12.5% condition)
 	panel = await open(scenes, gear, &"ring")
 	var heavy_missing_len: float = panel.path_length(panel.missing_path)
 	var partial_q0_len: float = panel.path_length(panel.route)
 	expect(gear.stage(&"ring") == 0 and heavy_missing_len > full_len * 0.80 and is_equal_approx(partial_q0_len, q0_len * 0.5),
-		"Heavily worn tool at 12.5% has 87.5% missing path and traces only the missing half of quarter 1")
+		"Partially worn Quarter 1 (12.5%) requires only the missing half of the Spin arc")
 	trace(panel)
 	expect(gear.remaining(&"ring") == 8.0 and gear.stage(&"ring") == 1 and scenes.has_popup(&"Repair"),
-		"Completing partial first quarter restores to 25% boundary (8/32) and keeps panel open for quarter 2")
+		"Completing partial first quarter Spin restores to 25% boundary (8/32) and advances to Operation 2")
 	scenes.close_popup(&"Repair")
 	await frames()
 
-	# 10. All four gear types (ring, beam/Flash, cone, clock) repair across all checkpoints and close on full
+	# 10. All four tools (ring, beam/Flash, cone, clock) complete full repair from 0% to 100% in 3 tool-specific operations!
 	for tool: StringName in [&"ring", &"beam", &"cone", &"clock"]:
 		gear.reset_state()
 		gear.spend(tool, gear.capacity(tool))
 		panel = await open(scenes, gear, tool)
 		if tool == &"beam":
 			expect(panel.heading.text.contains("Flash"), "Beam equipment ID is labeled Flash in repair UI")
-		for stage in range(4):
+		expect(panel.model_instances[String(tool)].visible, "Backdrop SubViewport displays %s 3D model" % String(tool))
+		# Operation 1: Spin (0% -> 25%)
+		expect(panel.active_op_index == 0 and panel.active_kind == &"spin", "%s Op 1 is Spin" % String(tool))
+		trace(panel)
+		expect(is_equal_approx(gear.remaining(tool), gear.capacity(tool) * 0.25) and gear.stage(tool) == 1,
+			"%s Op 1 (Spin) restores to 25%%" % String(tool))
+		# Operation 2: Connect on ring/beam, Trace on cone/clock (25% -> 50%)
+		expect(panel.active_op_index == 1, "%s advances to Op 2" % String(tool))
+		if panel.active_kind == &"connect":
+			click_connect_pair(panel, 0)
+			click_connect_pair(panel, 1)
+		else:
 			trace(panel)
-			expect(is_equal_approx(gear.remaining(tool), gear.capacity(tool) * float(stage + 1) / 4.0),
-				"Shared puzzle repairs %s checkpoint %d" % [tool, stage + 1])
+		expect(is_equal_approx(gear.remaining(tool), gear.capacity(tool) * 0.50) and gear.stage(tool) == 2,
+			"%s Op 2 (%s) restores to 50%%" % [String(tool), String(panel.active_kind)])
+		# Operation 3: Trace on ring/beam, Connect on cone/clock (50% -> 100% Full)
+		expect(panel.active_op_index == 2, "%s advances to Op 3" % String(tool))
+		if panel.active_kind == &"connect":
+			click_connect_pair(panel, 0)
+			expect(is_equal_approx(gear.remaining(tool), gear.capacity(tool) * 0.75) and gear.stage(tool) == 3,
+				"%s Op 3 first contact pair restores Checkpoint 3 (75%%)" % String(tool))
+			click_connect_pair(panel, 1)
+		else:
+			trace(panel)
 		await frames()
 		expect(gear.is_full(tool) and not scenes.has_popup(&"Repair") and gear.repairing == &"",
-			"Finishing full on %s automatically closes panel and unlocks tool" % tool)
+			"Completing 3 tool-specific operations on %s reaches 100%% Full and auto-closes panel" % String(tool))
 
 	# Clock cannot power itself while repairing clock, but can slow time while repairing another tool
 	gear.reset_state()
@@ -294,7 +396,7 @@ func run() -> void:
 	trace(panel) # clock -> 6 (stage 1)
 	panel.setup({"equipment": gear, "tool": &"ring"})
 	expect(gear.stage(&"clock") == 1 and gear.remaining(&"clock") == 6 and panel.route[1] == panel.ROUTES[1][1],
-		"Switching back to ring resumes ring at quarter 2 route")
+		"Switching back to ring resumes ring at stage 1 route")
 
 	var old_panel: Control = panel
 	var newer: Control = await open(scenes, gear, &"clock")
@@ -310,7 +412,7 @@ func run() -> void:
 	scenes.close_popup(&"Repair")
 	await frames()
 
-	# Restore while panel is mid-trace invalidates session and emits no completion effects
+	# Restore while panel is mid-gesture invalidates session and emits no completion effects
 	gear.reset_state()
 	gear.spend(&"ring", 24) # 8 remaining (stage 1)
 	var snap_at_8: Dictionary = gear.capture_state()

@@ -1,3 +1,4 @@
+class_name CampaignRooms
 extends RefCounted
 
 # Full-game room route. The campaign owns scheduling and acquisition state.
@@ -104,8 +105,8 @@ static func definitions() -> Array[Dictionary]:
 		_make_wave(&"", &"mixed", [&"orange", &"yellow", &"ranged"], 12, 2.5, {"interval": 4.5}),
 	]
 
-	# Room 2: Connected Collections (blue and purple, mixed enemies, Loop Curator)
-	# Blue cutting and guard openings lead into purple slow/rewind, then loops and their boss.
+	# Room 2: Connected Collections (blue cutter, time slow and emergency rewind, mixed enemies, Loop Curator)
+	# Blue cutting and guard openings lead into time slow and emergency rewind, then loops and their boss.
 	var collections_cover: Array[Rect2] = [
 		Rect2(-10.0, -4.0, 5.5, 2.2),
 		Rect2(3.5, -6.5, 6.0, 3.0),
@@ -122,7 +123,7 @@ static func definitions() -> Array[Dictionary]:
 	var collections_waves: Array[Dictionary] = [
 		_make_wave(&"cut", &"curve", [&"blue", &"yellow", &"orange"], 9, 2.5, {"acquire": 1, "interval": 4.5}),
 		_make_wave(&"opening", &"mixed", [&"side_guard", &"front_guard", &"yellow"], 9, 2.5, {"interval": 4.5}),
-		_make_wave(&"slow", &"curve", [&"blue", &"orange", &"ranged"], 8, 2.5, {"acquire": 4, "interval": 4.5}),
+		_make_wave(&"slow", &"curve", [&"blue", &"orange", &"ranged"], 8, 2.5, {"interval": 4.5}),
 		_make_wave(&"rewind", &"line", [&"yellow", &"blue", &"side_guard"], 7, 2.5, {"interval": 4.5}),
 		_make_wave(&"loop", &"curve", [&"loop", &"blue", &"yellow"], 6, 3.2, {"burst": 2, "max_live": 4, "interval": 4.5}),
 		_make_wave(&"", &"cluster", [&"loop_boss"], 1, 3.0, {"boss": true, "burst": 1}),

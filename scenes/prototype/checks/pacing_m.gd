@@ -61,13 +61,13 @@ func run() -> void:
 	gear.set_training_protection([])
 	expect(gear.training_protection.is_empty() and is_equal_approx(gear.spend(&"beam", 10.0), 10.0) and is_equal_approx(gear.remaining(&"beam"), 54.0), "Removing protection restores normal beam wear")
 
-	# 3. Updated tutorial copy for E toggle, matching-shape contacts, and manual Space slow
+	# 3. Updated tutorial copy for E toggle, matching-shape contacts, and Space slow
 	var tutorial_script: Script = load("res://scenes/ui/tutorial.gd")
 	var repair_copy: String = String(tutorial_script.LESSONS["repair"][1])
 	var slow_copy: String = String(tutorial_script.LESSONS["slow"][1])
-	expect("press E to toggle" in repair_copy and "matching-shape contacts" in repair_copy, "Repair lesson copy teaches E toggle and matching-shape contacts")
+	expect("press E to toggle" in repair_copy and "matching-shape contacts" in repair_copy and "1–3" in repair_copy, "Repair lesson copy teaches E toggle, matching-shape contacts, and 1–3 tools")
 	expect(not ("hold E" in repair_copy), "Repair lesson copy no longer instructs holding E")
-	expect("hold Space manually" in slow_copy, "Slow lesson copy teaches manual Space slow")
+	expect("hold Space" in slow_copy, "Slow lesson copy teaches holding Space to slow the world")
 
 	# 4. Sandbox arena is completely unaffected by training_protection
 	var sandbox: Node3D = load("res://scenes/prototype/arena.tscn").instantiate()
@@ -164,7 +164,7 @@ func run() -> void:
 	expect(is_equal_approx(arena.equipment.remaining(&"beam"), 58.0), "Normal combat after repair lesson spends yellow capacity normally")
 
 	# 6. Anti-bypass: rewind snapshot, retry_room, and debug_start respect permanent teaching progress
-	arena._restore_world(protected_snapshot, arena.equipment.capacity(&"clock"))
+	arena.restore_campaign_state(protected_snapshot)
 	expect(arena.equipment.training_protection.is_empty(), "Restoring an early rewind snapshot after repair is learned does not re-enable protection")
 	var rem_before: float = arena.equipment.remaining(&"beam")
 	arena.equipment.spend(&"beam", 4.0)
@@ -180,26 +180,24 @@ func run() -> void:
 	arena.debug_start(1, 0)
 	expect(arena.equipment.training_protection.is_empty(), "Debug jump to Room 1 disables protection")
 
-	# 7. Verify health recovery scales with world_scale under time slow and tutorial layout avoids per-frame reset
+	# 7. Verify TimeController slow drain and tutorial layout caching
 	arena.debug_start(1, 2)
 	arena.director.clear()
 	arena._pending = 0
 	arena.mode = &"pressure"
 	arena.weapons.select_tool(1)
-	arena.player.take_damage(20.0)
-	expect(is_equal_approx(arena.player.health, 80.0) and is_equal_approx(arena.recovery.recoverable, 20.0), "Player wound recorded for slow-regen check")
-	var space_up := InputEventKey.new()
-	space_up.physical_keycode = KEY_SPACE
-	space_up.pressed = false
-	arena._input(space_up)
-	tick(0.01)
+	arena.time_controller.apply_hit(20.0)
+	expect(is_equal_approx(arena.time_controller.meter, 80.0), "Hit spends time from TimeController meter")
 	var space_down := InputEventKey.new()
 	space_down.physical_keycode = KEY_SPACE
 	space_down.pressed = true
 	arena._input(space_down)
 	tick(2.0)
-	expect(arena.player.world_scale < 0.3 and is_equal_approx(arena.player.health, 80.0) and arena.recovery.quiet < 0.6,
-		"Under time slow, 2.0 real seconds advances recovery quiet timer in slowed world time (< 0.6s), not real time")
+	expect(arena.time_controller.world_scale < 0.3 and arena.time_controller.meter < 80.0,
+		"Under time slow, holding Space drains TimeController meter and slows world_scale")
+	var space_up := InputEventKey.new()
+	space_up.physical_keycode = KEY_SPACE
+	space_up.pressed = false
 	arena._input(space_up)
 
 	arena.tutorial.reset_run()

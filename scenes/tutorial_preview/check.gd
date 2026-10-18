@@ -140,7 +140,9 @@ func run() -> void:
 	expect(tutorial.offscreen[0], "Behind-camera targets are marked offscreen")
 	expect(tutorial.projected[0].y >= tutorial.size.y - 37, "Directly behind target uses viewport edge indicator")
 	tutorial.world_points = targets
+	expect(tutorial.card.mouse_filter == Control.MOUSE_FILTER_STOP, "Blocking explanation card captures mouse clicks")
 	tutorial.request_practice()
+	expect(tutorial.card.mouse_filter == Control.MOUSE_FILTER_IGNORE and tutorial.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Practice card immediately ignores mouse input so first click reaches combat")
 	tutorial.request_practice()
 	expect(not tutorial.blocking and tutorial.practicing and resume_count == 1, "Practice resumes once and keeps success gate pending")
 	expect(not tutorial.is_learned(&"cut"), "Crowd gate remains closed through practice")
@@ -161,7 +163,7 @@ func run() -> void:
 		expect(tutorial.blocking and tutorial.body_label.text.length() > 20 and not tutorial.ghost.is_empty(), "Ready-to-use copy and gesture: " + id)
 		tutorial.reset_run()
 	tutorial.show_known_lesson(&"rewind", targets)
-	expect("injury" in tutorial.body_label.text and "Escape" in tutorial.body_label.text, "Rewind teaches injury recovery and cancellation")
+	expect("emergency charge" in tutorial.body_label.text and "wheel" in tutorial.body_label.text, "Rewind teaches emergency charge recovery and wheel scrub")
 	state.set_setting("tutorial", false)
 	expect(not tutorial.blocking and not tutorial.visible and tutorial.is_learned(&"loop"), "Disabling tutorials releases active gate safely")
 	state.set_setting("tutorial", true)

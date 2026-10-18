@@ -154,7 +154,7 @@ func run() -> void:
 				if String(kind).ends_with("_boss"): bosses.append(kind)
 				if kind==&"loop_boss": expect(taught.has(&"loop"),"Loop boss follows loop teaching")
 				if kind==&"sequence_boss": expect(taught.has(&"pair"),"Sequence boss follows paired-shot teaching")
-	expect(acquired==[2,3,1,4],"Equipment is found in yellow orange blue purple order")
+	expect(acquired==[2,3,1],"Equipment is found in yellow orange blue order with no fourth weapon pickup")
 	expect(bosses==[&"loop_boss",&"sequence_boss",&"final_boss"],"Complete arc has three ordered bosses")
 	expect(defs[0].waves[0].enemies==[&"yellow"],"Opening encounter uses the initial yellow tool")
 

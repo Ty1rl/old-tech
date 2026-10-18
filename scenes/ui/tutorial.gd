@@ -15,14 +15,14 @@ const LESSONS := {
 	"cut": ["Cut the blue connection", "1 · Hold the mouse, draw across the blue link, then release. The cutter follows your line. A bare blue link dismantles its host; armored hosts may need a yellow finisher.", "cut"],
 	"heat": ["Strip the orange armor", "3 · Aim at the orange covering and hold the mouse until it breaks. Heat also pushes nearby enemies back, helping you make an escape.", "heat"],
 	"shot": ["Aim for yellow", "2 · Aim at the yellow core and click. An exposed core needs only a quick shot.", "shot"],
-	"slow": ["Make yourself time", "Your purple device lends time to every weapon and repair. Keep 1 selected and hold Space manually to slow the world. Draw across the blue link and release the mouse while time is slow. Release Space to return to full speed.", "slow"],
-	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and press E to toggle repair open. Follow the matching-shape contacts to spin or trace the marked circuit and restore one section. Press E again to close (or Tab / 1–4 to switch tools); completed repairs stay fixed.", "repair"],
+	"slow": ["Make yourself time", "Your time meter fuels slow-motion, repairs, and survival. Keep 1 selected and hold Space to slow the world. Draw across the blue link and release the mouse while time is slow. Release Space to return to full speed.", "slow"],
+	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and press E to toggle repair open. Follow the matching-shape contacts to spin or trace the marked circuit and restore one section. Press E again to close (or Tab / 1–3 to switch tools); completed repairs stay fixed.", "repair"],
 	"charge": ["A charged shot goes through", "2 · Hold the mouse until the lens is bright, then release. A full charge pierces enemies in its path. Solid cover stops it.", "charge"],
 	"opening": ["Open it, then shoot", "Cut the blue link OR heat the orange armor. The opening stays. Switch to 2 and shoot the exposed yellow core.", "opening"],
 	"pair": ["A, then B", "2 · Shoot A to open B. Shoot B before its shutter closes. Quick aimed shots work. If you wait, try the pair again.", "pair"],
 	"loop": ["Cut every support", "1 · Draw around the creature through every blue support before the links reconnect. A finished loop leaves the yellow core open. Switch to 2, hold to charge, then release at the core.", "loop"],
 	"zigzag": ["Follow the blue spans", "1 · Bend your line across each blue span before they reconnect. Keep your turns deliberate. Finish the pattern, then use a charged shot from 2 on yellow.", "zigzag"],
-	"rewind": ["Take back a bad moment", "Try safely: begin practice and wait for a small injury. Choose 4, hold Space, and scroll down to before the injury. Release Space to return there. Escape keeps the present.", "rewind"],
+	"rewind": ["Take back a bad moment", "When a hit empties your time meter, one emergency charge is spent and the world freezes. Begin practice, wait for the forced depletion, scroll the mouse wheel down to an earlier safe moment, then click or press Enter to recover there.", "rewind"],
 	"final": ["Dismantle the burial device", "Shoot A then B. Cut the zigzag, then the loop of supports. Each completed opening stays. Finish with the yellow core.", "final"],
 }
 var blocking := false
@@ -51,6 +51,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	theme = UI.skin()
 	card = PanelContainer.new()
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("111c22")
 	style.border_color = Color("697376")
@@ -60,6 +61,7 @@ func _ready() -> void:
 	card.add_theme_stylebox_override("panel", style)
 	add_child(card)
 	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_theme_constant_override("separation", 8)
 	card.add_child(column)
 	state_label = UI.label(column, "WORLD HELD · LOOK AT THE MARKED TARGET", 13)
@@ -94,11 +96,12 @@ func show_lesson(id: StringName, title: String, text: String, targets: Array[Vec
 	accent = ORANGE if id == &"heat" else YELLOW if id in [&"shot", &"charge", &"pair"] else VIOLET if id in [&"slow", &"rewind"] else BLUE
 	state_label.modulate = accent
 	state_label.text = "WORLD HELD · LOOK AT THE MARKED TARGET"
+	practice_button.focus_mode = Control.FOCUS_ALL
+	practice_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	practice_button.show()
 	practicing = false
 	age = 0
 	_set_blocking(true)
-	mouse_filter = Control.MOUSE_FILTER_STOP
 	show()
 	_layout(true)
 	practice_button.grab_focus.call_deferred()
@@ -106,12 +109,13 @@ func show_lesson(id: StringName, title: String, text: String, targets: Array[Vec
 func request_practice() -> void:
 	if active_id.is_empty() or not blocking or SceneManager.has_popup():
 		return
-	_set_blocking(false)
 	practicing = true
+	practice_button.release_focus()
+	practice_button.focus_mode = Control.FOCUS_NONE
+	practice_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	practice_button.hide()
 	state_label.text = "SAFE PRACTICE · COMPLETE THE ACTION"
-	practice_button.release_focus()
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_set_blocking(false)
 	resume_requested.emit(active_id)
 	_layout(true)
 
@@ -122,10 +126,10 @@ func complete_lesson(id: StringName) -> void:
 	learned[id] = true
 	active_id = &""
 	practicing = false
+	_set_blocking(false)
 	world_points.clear()
 	projected.clear()
 	hide()
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lesson_completed.emit(id)
 
 func is_learned(id: StringName) -> bool:
@@ -138,7 +142,6 @@ func dismiss() -> void:
 	world_points.clear()
 	projected.clear()
 	hide()
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func reset_run() -> void:
 	learned.clear()
@@ -148,9 +151,12 @@ func reset_run() -> void:
 	world_points.clear()
 	projected.clear()
 	hide()
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _set_blocking(value: bool) -> void:
+	var filter := Control.MOUSE_FILTER_STOP if value else Control.MOUSE_FILTER_IGNORE
+	mouse_filter = filter
+	if is_instance_valid(card):
+		card.mouse_filter = filter
 	if blocking != value:
 		blocking = value
 		blocking_changed.emit(value)
@@ -187,14 +193,18 @@ func _layout(force: bool = true) -> void:
 func _process(delta: float) -> void:
 	if not visible:
 		return
-	# Pause/settings cover this card and stop its practice controls.
-	var covered := SceneManager.has_popup() or not GameState.is_playing()
+	# Pause/settings cover this card and stop its practice controls; emergency mode stays uncovered.
+	var in_emergency: bool = GameState.has_method("is_in_emergency") and bool(GameState.call("is_in_emergency")) and not GameState.is_paused()
+	var covered: bool = SceneManager.has_popup() or (not GameState.is_playing() and not in_emergency)
 	card.visible = not covered
 	if covered:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		queue_redraw()
 		return
-	mouse_filter = Control.MOUSE_FILTER_STOP if blocking else Control.MOUSE_FILTER_IGNORE
+	var filter := Control.MOUSE_FILTER_STOP if blocking else Control.MOUSE_FILTER_IGNORE
+	mouse_filter = filter
+	card.mouse_filter = filter
 	age += delta
 	projected.clear()
 	offscreen.clear()

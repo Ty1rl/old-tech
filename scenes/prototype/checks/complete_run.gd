@@ -37,10 +37,11 @@ func practice() -> void:
 		arena.equipment.complete_step(&"beam",session)
 		arena.equipment.end_repair(session)
 	elif lesson==&"rewind":
-		for tick in range(40):arena._physics_process(.05)
-		expect(arena.player.health==80,"Rewind lesson creates a safe recoverable injury")
-		arena.weapons.select_tool(4);arena._begin_inspection();arena._seek_inspection(1.0);arena._finish_inspection(true)
-		expect(arena.player.health==100,"Rewind actually restores pre-injury health")
+		for tick in range(45):arena._physics_process(.05)
+		expect(arena.is_emergency_active() and arena.time_controller.charges_remaining==2,"Rewind lesson triggers a safe emergency depletion spending one charge")
+		arena.emergency_rewind.step_selection(1)
+		arena.emergency_rewind.confirm()
+		expect(not arena.is_emergency_active() and arena.time_controller.meter>=arena.time_controller.settings.recovery_floor,"Confirming emergency rewind restores time to recovery floor")
 	elif lesson==&"charge":
 		arena.weapons.select_tool(2)
 		var aim:Vector3=arena.specimens[0].position

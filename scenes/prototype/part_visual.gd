@@ -15,8 +15,8 @@ static func cable_points(layout: StringName, radius: float) -> Array[Vector3]:
 		_: return [Vector3(-0.4, 0.85, 0), Vector3(0.4, 0.85, 0)]
 
 
-static func core_point(radius: float) -> Vector3:
-	return Vector3(0, 0.82, -radius * 0.7)
+static func core_point(_radius: float) -> Vector3:
+	return Vector3(0, 1.75, 0)
 
 
 func material(color: Color, glow: bool = false) -> StandardMaterial3D:
@@ -77,12 +77,21 @@ func build(mode: StringName, layout: StringName, radius: float, body: Material) 
 			pipe(self, Vector3(side * radius * 0.65, 0.25, -0.25), Vector3(side * radius * 0.65, 0.25, 0.3), 0.22, dark)
 	if mode in [&"cut", &"open"]:
 		var points := cable_points(layout, radius)
-		cable = pipe(self, points[0], points[1], 0.13, blue)
+		cable = pipe(self, points[0], points[1], 0.19, blue)
 		if layout == &"side":
 			box(self, Vector3(0.35, 0.9, 0.75), Vector3(radius + 0.45, 0.8, 0), metal)
 	if mode in [&"shot", &"open"]:
 		var point := core_point(radius)
-		core = pipe(self, point, point + Vector3(0, 0.02, -0.08), 0.24, material(Style.BEAM, true))
+		core = MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.3
+		sphere.height = 0.6
+		sphere.radial_segments = 24
+		sphere.rings = 12
+		core.mesh = sphere
+		core.material_override = material(Style.BEAM, true)
+		core.position = point
+		add_child(core)
 	if mode in [&"heat", &"open"]:
 		plate = Node3D.new()
 		plate.position = Vector3(0, 0.12, -radius - 0.25)
@@ -100,5 +109,5 @@ func sync(cut: bool, exposed: bool, broken: bool, heat_ratio: float) -> void:
 		halves[index].rotation.z = (0.3 if index == 0 else -0.3) if cut else 0.0
 	if is_instance_valid(cable): cable.visible = not cut
 	if is_instance_valid(core): core.visible = exposed and not broken
-	if is_instance_valid(plate): plate.rotation.x = -1.45 if exposed else 0.0
+	if is_instance_valid(plate): plate.visible = not exposed
 	heat_material.albedo_color = Style.CONE.lerp(Color("fff0ad"), clampf(heat_ratio, 0.0, 1.0))

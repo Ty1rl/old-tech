@@ -2,6 +2,8 @@ extends RefCounted
 
 # Distances are world units; durations are real seconds unless stated otherwise.
 const PLAYER = {"speed": 6.0, "health": 100.0, "visual_scale": 1.3}
+const VIEW = {"camera_size": 22.0, "showcase_size": 18.0, "blue_assist_pixels": 22.0,
+	"yellow_assist_pixels": 20.0}
 const SLOW = {"scale": 0.18, "drain": 1.0}
 const RING = {"range": 14.0, "length": 22.0, "minimum_length": 0.6,
 	"sample_spacing": 0.18, "outbound_speed": 24.0, "stroke_speed": 38.0,
@@ -22,7 +24,7 @@ const ENEMIES = {
 	"front_guard": {"health": 500.0, "speed": 1.6, "radius": 0.8, "damage": 10.0, "mechanism": "open", "layout": "front"},
 }
 const MATCHUPS = {"body_damage": 0.12, "heat_seconds": 0.9, "heat_decay": 0.15,
-	"cut_radius": 0.16, "core_radius": 0.32, "attack_windup": 0.5, "attack_recovery": 1.7,
+	"cut_radius": 0.28, "core_radius": 0.38, "attack_windup": 0.5, "attack_recovery": 1.7,
 	"push_light": 1.25, "push_heavy": 0.15, "stagger_scale": 2.4}
 # Slots follow a shrinking arc around the player; 0 strength restores direct chase.
 const PACK = {"size": 5, "neighbor_range": 14.0, "spacing": 1.8,

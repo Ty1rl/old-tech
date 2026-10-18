@@ -62,8 +62,8 @@ func run() -> void:
 	expect(model is MeshInstance3D and (model as MeshInstance3D).mesh == null and arrow != null and not arrow.visible,
 		"Original cylinder mesh and red prism arrow are hidden in the prototype")
 	expect(collision.shape is CylinderShape3D and is_equal_approx((collision.shape as CylinderShape3D).height, 1.0)
-		and player.camera.projection == Camera3D.PROJECTION_ORTHOGONAL and is_equal_approx(player.camera.size, 30.0),
-		"Player collision shape and orthographic camera setup remain unchanged")
+		and player.camera.projection == Camera3D.PROJECTION_ORTHOGONAL and is_equal_approx(player.camera.size, 22.0),
+		"Player collision stays unchanged and closer orthographic camera is active")
 
 	var visual: Node3D = player.visual
 	expect(is_instance_valid(visual) and visual.get_parent() == model,

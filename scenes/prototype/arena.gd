@@ -8,6 +8,7 @@ const Enemies = preload("res://scenes/prototype/enemies.gd")
 const Equipment = preload("res://scenes/prototype/equipment.gd")
 const Cover = preload("res://scenes/prototype/cover.gd")
 const CombatFeedback = preload("res://scenes/prototype/combat_feedback.gd")
+const AimAssist = preload("res://scenes/prototype/aim_assist.gd")
 const ScrubView = preload("res://scenes/prototype/scrub_view.gd")
 const History = preload("res://scenes/prototype/history.gd")
 const StatusHud = preload("res://scenes/prototype/status_hud.gd")
@@ -47,7 +48,7 @@ func _ready() -> void:
 	player.camera.position = Vector3(0, 20, 14)
 	player.camera.rotation_degrees = Vector3(-55, 0, 0)
 	player.camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	player.camera.size = 30
+	player.camera.size = float(Tuning.VIEW.camera_size)
 	player.camera.current = true
 	weapons = Weapons.new()
 	weapons.equipment = equipment
@@ -142,7 +143,13 @@ func floor_aim(screen_position: Vector2) -> Vector3:
 	var hit: Variant = Plane(Vector3.UP, 0).intersects_ray(
 		camera.project_ray_origin(screen_position), camera.project_ray_normal(screen_position))
 	aim_valid = hit != null
-	return hit if aim_valid else aim
+	if not aim_valid:
+		return aim
+	if is_instance_valid(director) and is_instance_valid(weapons):
+		var target: Variant = AimAssist.target(screen_position, camera, director.enemies, weapons.selected_tool, player.global_position)
+		if target != null:
+			return target
+	return hit
 
 
 func _process(delta: float) -> void:
@@ -241,6 +248,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_hud()
 			return
 		match code:
+			KEY_EQUAL, KEY_PLUS:
+				player.camera.size = maxf(16, player.camera.size - 2)
+				return
+			KEY_MINUS:
+				player.camera.size = minf(32, player.camera.size + 2)
+				return
 			KEY_F7:
 				status_hud.cycle_readout()
 				_update_hud()
@@ -275,7 +288,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_F9:
 				reset_arena()
 				director.clear()
-				player.camera.size = 22
+				player.camera.size = float(Tuning.VIEW.showcase_size)
 				director.spawn(&"front_guard", Vector3(0, 0, -7))
 				_update_hud()
 				return
@@ -304,7 +317,7 @@ func reset_arena() -> void:
 	equipment.reset_state()
 	weapons.reset_state()
 	player.reset_state()
-	player.camera.size = 30
+	player.camera.size = float(Tuning.VIEW.camera_size)
 	director.reset_state()
 	time_feedback = ""
 	_update_hud()
@@ -461,7 +474,7 @@ func _update_hud() -> void:
 	hud.visible = alpha > 0.0
 	slow_bar.modulate.a = alpha
 	slow_bar.visible = alpha > 0.0
-	hud.text = "WASD move | 1/2/3/4 or Tab equip | LMB draw / charge / hold | Space slow / clock inspect | Esc pause\n"
+	hud.text = "WASD move | 1/2/3/4 or Tab equip | +/- zoom | LMB draw / charge / hold | Space slow / clock inspect | Esc pause\n"
 	hud.text += "Hold E repair selected | Wheel scrub clock | R reset | F1 target / F2 blue / F3 yellow / F4 orange | F5 pack | F6 encounter | F8 side / F9 front guard | M sound | Backspace clear\n"
 	hud.text += "HP %.0f | Enemies %d | World %.2fx\n" % [player.health, director.enemies.size(), player.world_scale]
 	hud.text += player.status_text() + "\n" + weapons.status_text()

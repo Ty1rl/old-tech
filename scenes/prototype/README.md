@@ -13,6 +13,7 @@ The partner's original menu/game scenes and popup managers remain intact.
 
 - WASD moves; mouse aims. 1/2/3/4 equip ring/flash/cone/clock.
   Tab cycles forward; Shift+Tab cycles backward.
+- +/- zooms the view; R restores the default closer camera.
 - Ring: hold left mouse to draw a floor path, release to launch.
 - Flash: hold left mouse to charge, release to fire. Quick taps are weaker.
 - Cone: hold left mouse for continuous heat and repeating shove/stun pulses.
@@ -45,6 +46,12 @@ health and take 12% ordinary body damage: a blue enemy takes about 30 fully char
 body shots versus one cable cut. This spends existing equipment condition; there
 is no extra ammunition system. Correct part hits are decisive, not immunity rules.
 These initial values need playtesting.
+
+Blue connectors are thicker and accept nearby cursor strokes at their visible
+height, rather than targeting the floor behind them. Yellow cores sit above
+the hull and remain readable from every facing. Removed orange panels disappear.
+Cursor assistance only resolves nearby visible blue/yellow targets; actual
+attacks still collide with enemies and cover.
 
 Blue connectors and guards approach in small cohorts that seek spaced slots on
 a shrinking arc around the player. They release formation close to contact, so
@@ -148,7 +155,7 @@ python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 
 Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
 resource_integration, integration, parts, feedback, scrub_view, presentation,
-player_visual, variants.
+player_visual, variants, readability.
 Use import after script/scene changes.
 The shared lab runner bounds execution and saves full logs in seat state.
 On another machine: `timeout 60s godot --headless --path . --script

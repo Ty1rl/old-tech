@@ -99,7 +99,8 @@ func build(p_kind: StringName) -> void:
 	_flash.albedo_color = Color(1, 1, 1, .45)
 	for mesh: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		if mesh not in [cable, core, plate, shield_rim]: _meshes.append(mesh)
-		if kind == &"blue" and String(mesh.name).begins_with("B_"): split_companion.append(mesh)
+		if (kind == &"blue" and String(mesh.name).begins_with("B_")) or (kind == &"side_guard" and String(mesh.name) in ["Companion", "ConduitCouplings"]):
+			split_companion.append(mesh)
 	_build_readable_parts()
 	set_process(false)
 	set_physics_process(false)
@@ -215,7 +216,7 @@ func _resolve_attack_phase(motion_state: Variant) -> StringName:
 func step_visual(world_delta: float, speed: float, staggered: bool, hit_flash: bool, motion_state: Variant = null) -> void:
 	if world_delta <= 0: return
 	attack_phase = _resolve_attack_phase(motion_state)
-	var held_in_action := staggered or attack_phase in [&"windup", &"recover", &"recovery", &"stun", &"stagger", &"hold"]
+	var held_in_action := staggered or attack_phase in [&"windup", &"commit", &"recover", &"recovery", &"stun", &"stagger", &"hold"]
 	leg_cycling = speed > 0.1 and not held_in_action
 	var clip := "Walk" if leg_cycling else "Idle"
 	if animation.current_animation != clip:

@@ -4,6 +4,12 @@ const BLUE := Color("168eff")
 const ORANGE := Color("f58024")
 const YELLOW := Color("ffe538")
 const STONE := Color("92918b")
+# Built-in primitive resources are immutable after creation and shared between
+# instances/phases. Only the actor's transforms/visibility change during play.
+static var _materials: Dictionary = {}
+static var _boxes: Dictionary = {}
+static var _balls: Dictionary = {}
+static var _rods: Dictionary = {}
 var lit_valve: StandardMaterial3D
 var dim_valve: StandardMaterial3D
 var links: Array[MeshInstance3D] = []
@@ -36,6 +42,17 @@ static func spans(mode: StringName, stage := 0) -> Array:
 			[Vector3(-2.0, 0.7, 0.75), Vector3(-1.2, 0.7, 1.25)]]
 	return []
 
+# Spawn reservation derives from the actual link endpoints and pod half-diagonal.
+# Bosses reserve later phases too, so dismantling never grows into nearby cover.
+static func silhouette_radius(identity: StringName) -> float:
+	var extent := 2.65 if String(identity).ends_with("_boss") else 1.35
+	var modes := [&"loop", &"zigzag"] if identity == &"final_boss" else [&"loop" if identity == &"loop_boss" else identity]
+	for mode: StringName in modes:
+		for span: Array in spans(mode):
+			for point: Vector3 in span:
+				extent = maxf(extent, Vector2(point.x, point.z).length() + 0.54)
+	return extent
+
 static func core_anchor(is_boss := false) -> Vector3:
 	return Vector3(0, 2.0 if is_boss else 1.85, -1.3 if is_boss else -0.95)
 
@@ -43,43 +60,55 @@ static func valve_anchor(index: int, is_boss := false) -> Vector3:
 	return Vector3(-0.8 if index == 0 else 0.8, 2.2 if is_boss else 1.95, -1.4 if is_boss else -0.95)
 
 func mat(color: Color, unlit := false) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.roughness = 0.85
-	if unlit: m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	return m
+	var key := color.to_html() + ("_unlit" if unlit else "_lit")
+	if not _materials.has(key):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = color
+		m.roughness = 0.85
+		if unlit: m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		# Both yellow targets must remain readable through their own torso.
+		m.no_depth_test = unlit and color == YELLOW
+		_materials[key] = m
+	return _materials[key]
 
 func box(parent: Node3D, center: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
+	if not _boxes.has(size):
+		var mesh := BoxMesh.new()
+		mesh.size = size
+		_boxes[size] = mesh
 	var node := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	node.mesh = mesh
+	node.mesh = _boxes[size]
 	node.position = center
 	node.material_override = mat(color)
 	parent.add_child(node)
 	return node
 
 func ball(parent: Node3D, center: Vector3, size: float, color: Color) -> MeshInstance3D:
+	if not _balls.has(size):
+		var mesh := SphereMesh.new()
+		mesh.radius = size
+		mesh.height = size * 2
+		mesh.radial_segments = 12
+		mesh.rings = 6
+		_balls[size] = mesh
 	var node := MeshInstance3D.new()
-	var mesh := SphereMesh.new()
-	mesh.radius = size
-	mesh.height = size * 2
-	mesh.radial_segments = 12
-	mesh.rings = 6
-	node.mesh = mesh
+	node.mesh = _balls[size]
 	node.position = center
 	node.material_override = mat(color, true)
 	parent.add_child(node)
 	return node
 
 func rod(parent: Node3D, a: Vector3, b: Vector3, thickness: float, color: Color) -> MeshInstance3D:
+	var key := Vector2(thickness, a.distance_to(b))
+	if not _rods.has(key):
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = thickness
+		mesh.bottom_radius = thickness
+		mesh.height = key.y
+		mesh.radial_segments = 10
+		_rods[key] = mesh
 	var node := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = thickness
-	mesh.bottom_radius = thickness
-	mesh.height = a.distance_to(b)
-	mesh.radial_segments = 10
-	node.mesh = mesh
+	node.mesh = _rods[key]
 	node.material_override = mat(color, true)
 	parent.add_child(node)
 	node.position = (a + b) * 0.5
@@ -102,7 +131,6 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 		plates.append(box(self, Vector3(x, 1.15, -0.4), Vector3(0.48, 0.5, 0.5), ORANGE))
 	plates.append(box(self, core_anchor(boss), Vector3(1.1, 0.82, 0.18), ORANGE))
 	core = ball(self, core_anchor(boss), 0.4 if boss else .34, YELLOW)
-	core.material_override.no_depth_test = true
 	for i in range(2):
 		valves.append(ball(self, valve_anchor(i, boss), 0.36, YELLOW))
 		var letter := Label3D.new()
@@ -196,7 +224,6 @@ func sync(mask: int, opened: bool, bare: bool, progress: int, timer: float, phas
 	for i in range(valves.size()):
 		valves[i].visible = pattern == &"pair" and alive and not opened
 		valves[i].material_override = lit_valve if i == progress else dim_valve
-		valves[i].material_override.no_depth_test = true
 		valve_labels[i].visible = valves[i].visible
 	if pattern == &"pair" and opened: core.visible = alive
 	for i in range(sections.size()): sections[i].visible = i >= phase and alive

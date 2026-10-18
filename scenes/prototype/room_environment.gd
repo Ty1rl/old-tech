@@ -14,6 +14,7 @@ signal boss_activated(room_id: StringName)
 const GATE_CLOSE_DURATION := 0.60
 const BOSS_PAUSE_DURATION := 0.50
 
+var _cover_edge_material: StandardMaterial3D
 var floor_accents_root: Node3D
 var doors_root: Node3D
 var ceremony_root: Node3D
@@ -366,6 +367,15 @@ func _rebuild_room_cover(def: Dictionary) -> void:
 		var kind: StringName = piece_info.get("kind", &"display_island")
 		var height: float = float(piece_info.get("height", 1.5))
 		_build_cover_kit_piece(i + 1, rect, kind, height)
+		# Neutral stone edging makes solid cover footprints readable on the warm
+		# floor without borrowing a weapon/weakpoint color or changing collision.
+		if _cover_edge_material == null:
+			_cover_edge_material = StandardMaterial3D.new()
+			_cover_edge_material.albedo_color = Color("8a8479")
+			_cover_edge_material.roughness = 0.95
+		for edge in [-1, 1]:
+			_add_box_mesh(cover_root, "CoverEdgeX_%d_%d" % [i, edge], Vector3(0.06, 0.02, rect.size.y), Vector3(rect.get_center().x + edge * rect.size.x * .5, .015, rect.get_center().y), _cover_edge_material)
+			_add_box_mesh(cover_root, "CoverEdgeZ_%d_%d" % [i, edge], Vector3(rect.size.x, 0.02, 0.06), Vector3(rect.get_center().x, .015, rect.get_center().y + edge * rect.size.y * .5), _cover_edge_material)
 
 
 func _build_cover_kit_piece(index: int, rect: Rect2, kind: StringName, height: float) -> MeshInstance3D:
@@ -840,3 +850,8 @@ func _add_cylinder_mesh(parent: Node3D, node_name: String, top_r: float, bottom_
 	inst.position = pos
 	parent.add_child(inst)
 	return inst
+
+
+func get_cover_world_rectangles() -> Array[Rect2]:
+	# Edging and trim are visual details, not additional cover obstacles.
+	return active_cover_rectangles.duplicate()

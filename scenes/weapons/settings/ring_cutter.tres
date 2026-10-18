@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="RingCutterSettings" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/weapons/settings/ring_cutter_settings.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+range = 14.0
+length = 22.0
+minimum_length = 0.6
+sample_spacing = 0.18
+outbound_speed = 24.0
+stroke_speed = 38.0
+return_speed = 28.0
+radius = 0.4
+damage = 36.0
+arc_height = 3.2
+max_samples = 256
+display_smoothing = true

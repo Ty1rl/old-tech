@@ -1,17 +1,14 @@
 extends RefCounted
 
 # Distances are world units; durations are real seconds unless stated otherwise.
-const PLAYER = {"speed": 6.0, "health": 100.0, "visual_scale": 1.3, "tool_scale": 1.25}
+const PLAYER = {"speed": 6.0, "visual_scale": 1.3, "tool_scale": 1.25}
 const MOVEMENT = {"acceleration": 48.0, "braking": 80.0, "reversal": 72.0}
 const VIEW = {"fov": 52.0, "camera_size": 22.0, "showcase_size": 18.0, "blue_assist_pixels": 22.0,
 	"yellow_assist_pixels": 20.0}
-const SLOW = {"scale": 0.18, "drain": 1.0}
-const RING = {"range": 14.0, "length": 22.0, "minimum_length": 0.6,
-	"sample_spacing": 0.18, "outbound_speed": 24.0, "stroke_speed": 38.0,
-	"return_speed": 28.0, "radius": 0.4, "damage": 36.0, "arc_height": 3.2}
-const BEAM = {"range": 35.0, "radius": 0.35, "min_damage": 30.0, "max_damage": 100.0,
-	"charge_time": 0.9, "speed": 42.0, "cooldown": 0.25, "max_pulses": 8}
-const CONE = {"range": 5.0, "half_angle": 0.65, "damage_per_second": 16.0}
+# Actual inspector resources, also read by world geometry and aim helpers.
+const RING = preload("res://scenes/weapons/settings/ring_cutter.tres")
+const BEAM = preload("res://scenes/weapons/settings/focused_flash.tres")
+const CONE = preload("res://scenes/weapons/settings/heat_bellows.tres")
 const ENEMIES = {
 	"ranged": {"health": 110.0, "speed": 1.35, "radius": 0.65, "damage": 10.0},
 	"loop_boss": {"health": 840.0, "speed": 0.85, "radius": 1.45, "damage": 22.0, "mechanism": "pattern"},
@@ -50,21 +47,9 @@ const ARMOR = {"front_multiplier": 0.25, "front_half_angle": 1.05}
 const CONTACT_COOLDOWN = 1.0 # World seconds: time slow delays enemy attacks too.
 const ARENA_HALF_SIZE = 20.0
 
-# Service intervals measured in actual use, not wall time.
-# Use-to-repair budget: each full tool supports roughly 1.5–2.5 combat waves of
-# normal mixed play before needing a 4-step service pass (6 launches/step for
-# ring, 16 shots/step for beam, 6s/step for cone, 4.5s/step for clock), keeping
-# scarcity meaningful without forcing constant mid-wave clock or weapon repairs.
-const GEAR = {
-	"ring": {"capacity": 24.0, "unit": "launches"},
-	"beam": {"capacity": 64.0, "unit": "shots"},
-	"cone": {"capacity": 24.0, "unit": "seconds"},
-	"clock": {"capacity": 18.0, "unit": "seconds"},
-}
-const REPAIR_STEPS = 4
-const CONTROL = {"pulse_interval": 1.2, "pulse_cost": 1.5, "pulse_impulse": 22.0,
-	"pulse_stagger": 0.85, "stagger": 0.85, "sustained_push": 5.0, "drag": 4.0,
+# Weapon condition uses three tools only. Time tuning is scripts/time/time_settings.tres.
+const GEAR = preload("res://scenes/weapons/settings/weapon_condition.tres")
+# Enemy knockback resistance/drag; bellows pulse behavior is in its own resource.
+const CONTROL = {"stagger": 0.85, "drag": 4.0,
 	"brute_resistance": 0.4, "brute_stagger_resistance": 0.8}
-# Costs use real elapsed inspection time and actual seconds rewound.
-const REWIND = {"browse_drain": 0.2, "jump_cost": 1.0, "scroll_step": 0.25}
 const ENCOUNTER = {"duration": 75.0, "interval": 12.0, "max_enemies": 8}

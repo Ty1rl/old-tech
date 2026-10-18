@@ -1,0 +1,24 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scenes/prototype/weapons.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/ring_cutter.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/focused_flash.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/heat_bellows.tscn" id="4"]
+[ext_resource type="Script" path="res://scenes/prototype/weapon_presentation.gd" id="5"]
+[ext_resource type="Shader" path="res://scenes/weapons/light_and_air.gdshader" id="6"]
+[ext_resource type="Resource" path="res://scenes/weapons/settings/weapon_condition.tres" id="7"]
+
+[sub_resource type="ShaderMaterial" id="LightAndAir"]
+shader = ExtResource("6")
+
+[node name="Weapons" type="Node3D"]
+script = ExtResource("1")
+condition_settings = ExtResource("7")
+
+[node name="RingCutter" parent="." instance=ExtResource("2")]
+[node name="FocusedFlash" parent="." instance=ExtResource("3")]
+[node name="HeatBellows" parent="." instance=ExtResource("4")]
+
+[node name="Presentation" type="MeshInstance3D" parent="."]
+script = ExtResource("5")
+material_override = SubResource("LightAndAir")

@@ -1,8 +1,13 @@
+class_name WeaponEquipment
 extends RefCounted
 
 signal repaired(tool: StringName, restored: float)
 
-const Tuning = preload("res://scenes/prototype/tuning.gd")
+const DEFAULT_SETTINGS: WeaponConditionSettings = preload("res://scenes/weapons/settings/weapon_condition.tres")
+const TOOLS: Array[StringName] = [&"ring", &"beam", &"cone"]
+var settings: WeaponConditionSettings
+var repair_steps: int:
+	get: return clampi(settings.repair_steps, 1, 8)
 const EPS := 0.000001
 
 var repairing: StringName = &""
@@ -11,14 +16,16 @@ var _remaining: Dictionary = {}
 var _repair_session: int = 0
 
 
-func _init() -> void:
+func _init(p_settings: WeaponConditionSettings = DEFAULT_SETTINGS) -> void:
+	settings = p_settings if p_settings != null else DEFAULT_SETTINGS
 	reset_state()
 
 
 func reset_state() -> void:
 	_repair_session += 1
 	repairing = &""
-	for tool in Tuning.GEAR:
+	_remaining.clear()
+	for tool in TOOLS:
 		_remaining[String(tool)] = capacity(StringName(tool))
 
 
@@ -26,7 +33,7 @@ func set_training_protection(tools: Array) -> void:
 	training_protection.clear()
 	for item in tools:
 		var tool := StringName(item)
-		if Tuning.GEAR.has(String(tool)) and not (tool in training_protection):
+		if tool in TOOLS and not (tool in training_protection):
 			training_protection.append(tool)
 
 
@@ -36,37 +43,41 @@ func is_training_protected(tool: StringName) -> bool:
 
 func restore_tool(tool: StringName, fraction: float = 1.0) -> void:
 	var key := String(tool)
-	if not Tuning.GEAR.has(key):
+	if not tool in TOOLS:
 		return
 	_remaining[key] = maxf(remaining(tool), capacity(tool) * clampf(fraction, 0.0, 1.0))
 
 
 func capacity(tool: StringName) -> float:
-	return float(Tuning.GEAR[String(tool)].capacity)
+	match tool:
+		&"ring": return maxf(0.001, settings.ring_capacity)
+		&"beam": return maxf(0.001, settings.beam_capacity)
+		&"cone": return maxf(0.001, settings.cone_capacity)
+	return 0.0
 
 
 func remaining(tool: StringName) -> float:
-	return float(_remaining[String(tool)])
+	return float(_remaining.get(String(tool), 0.0))
 
 
 func condition(tool: StringName) -> float:
 	var cap := capacity(tool)
-	return clampf(remaining(tool) / cap, 0.0, 1.0) if cap > 0.0 else 1.0
+	return clampf(remaining(tool) / cap, 0.0, 1.0) if cap > 0.0 else 0.0
 
 
 func is_full(tool: StringName) -> bool:
-	return remaining(tool) >= capacity(tool) - EPS
+	return tool in TOOLS and remaining(tool) >= capacity(tool) - EPS
 
 
 func can_use(tool: StringName, amount: float = EPS) -> bool:
-	return repairing != tool and amount > 0.0 and remaining(tool) > 0.0 and remaining(tool) + EPS >= amount
+	return tool in TOOLS and repairing != tool and amount > 0.0 and remaining(tool) > 0.0 and remaining(tool) + EPS >= amount
 
 
 # Returns actual capacity spent. Discrete shots must first call can_use(tool, 1).
 # Continuous tools use the returned fraction for damage/time on their final tick.
 # Tools listed in training_protection accept positive spend without reducing remaining.
 func spend(tool: StringName, amount: float) -> float:
-	if repairing == tool or amount <= 0.0:
+	if tool not in TOOLS or repairing == tool or amount <= 0.0:
 		return 0.0
 	var spent := minf(remaining(tool), amount)
 	if not (tool in training_protection):
@@ -75,6 +86,7 @@ func spend(tool: StringName, amount: float) -> float:
 
 
 func begin_repair(tool: StringName) -> int:
+	if tool not in TOOLS: return -1
 	_repair_session += 1
 	repairing = tool
 	return _repair_session
@@ -97,16 +109,16 @@ func is_session_active(session: int, tool: StringName = &"") -> bool:
 func stage(tool: StringName) -> int:
 	if is_full(tool):
 		return 0
-	var step_size := capacity(tool) / float(Tuning.REPAIR_STEPS)
+	var step_size := capacity(tool) / float(repair_steps)
 	if step_size <= 0.0:
 		return 0
-	return clampi(int(floor((remaining(tool) + EPS) / step_size)), 0, Tuning.REPAIR_STEPS - 1)
+	return clampi(int(floor((remaining(tool) + EPS) / step_size)), 0, repair_steps - 1)
 
 
 func next_checkpoint_capacity(tool: StringName) -> float:
 	if is_full(tool):
 		return capacity(tool)
-	return capacity(tool) * float(stage(tool) + 1) / float(Tuning.REPAIR_STEPS)
+	return capacity(tool) * float(stage(tool) + 1) / float(repair_steps)
 
 
 # One completed section restores capacity up to the next quarter boundary.
@@ -129,7 +141,7 @@ func complete_step(tool: StringName, session: int = -1) -> float:
 
 func capture_state() -> Dictionary:
 	var saved := {}
-	for tool in Tuning.GEAR:
+	for tool in TOOLS:
 		var key := String(tool)
 		saved[key] = remaining(StringName(key))
 	return {"remaining": saved}
@@ -139,7 +151,7 @@ func restore_state(data: Dictionary) -> void:
 	_repair_session += 1
 	repairing = &""
 	var source: Dictionary = data.get("remaining", data) if data.get("remaining") is Dictionary else data
-	for tool in Tuning.GEAR:
+	for tool in TOOLS:
 		var key := String(tool)
 		var cap := capacity(StringName(key))
 		var raw: Variant = source.get(key, source.get(StringName(key), data.get(key, data.get(StringName(key), cap))))
@@ -147,5 +159,4 @@ func restore_state(data: Dictionary) -> void:
 
 
 func status_text() -> String:
-	return "Service: ring %.0f launches | flash %.0f shots | cone %.1fs | clock %.1fs" % [
-		remaining(&"ring"), remaining(&"beam"), remaining(&"cone"), remaining(&"clock")]
+	return "Service: ring %.0f launches | flash %.0f shots | bellows %.1fs" % [remaining(&"ring"), remaining(&"beam"), remaining(&"cone")]

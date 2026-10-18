@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="FocusedFlashSettings" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/weapons/settings/focused_flash_settings.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+range = 35.0
+radius = 0.35
+min_damage = 30.0
+max_damage = 100.0
+charge_time = 0.9
+speed = 42.0
+cooldown = 0.25
+max_pulses = 8
+pierce_threshold = 0.9

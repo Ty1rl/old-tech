@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="HeatBellowsSettings" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/weapons/settings/heat_bellows_settings.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+range = 5.0
+half_angle = 0.65
+damage_per_second = 16.0
+pulse_interval = 1.2
+pulse_cost = 1.5
+pulse_impulse = 22.0
+pulse_stagger = 0.85
+sustained_push = 5.0

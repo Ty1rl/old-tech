@@ -1,0 +1,17 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scenes/weapons/ring_cutter.gd" id="1"]
+[ext_resource type="Resource" path="res://scenes/weapons/settings/ring_cutter.tres" id="2"]
+
+[sub_resource type="StandardMaterial3D" id="StrokeMaterial"]
+shading_mode = 0
+vertex_color_use_as_albedo = true
+transparency = 1
+cull_mode = 2
+
+[node name="RingCutter" type="Node3D"]
+script = ExtResource("1")
+settings = ExtResource("2")
+
+[node name="Stroke" type="MeshInstance3D" parent="."]
+material_override = SubResource("StrokeMaterial")

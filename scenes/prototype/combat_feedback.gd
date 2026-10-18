@@ -1,33 +1,32 @@
+class_name CombatFeedback
 extends Node3D
+## One feedback owner; the arena supplies time and real semantic events. No replay
+## snapshot, process clock, or runtime sample synthesis lives in this node.
 
 class PlaybackShutdown extends Node:
-	var players: Array[AudioStreamPlayer] = []
-
+	var players: Array[Node] = []
 	func _exit_tree() -> void:
-		# Children exit in reverse insertion order. This last child stops its
-		# player siblings while they are still in-tree; a parent _exit_tree runs
-		# after the players have exited and is too late for pending WAV playback.
+		# Last child exits first, while sibling native players are still in-tree.
 		for player in players:
 			player.stop()
 			player.stream = null
 		players.clear()
 
-# Deliberately small synthesized placeholders. Arena owns every clock; this node
-# has no process callback and never infers attacks from restored weapon state.
-const SAMPLE_RATE := 22050
-const MAX_VOICES := 8
+const DEFAULT_LIBRARY: CombatAudioLibrary = preload("res://audio/combat/palette.tres")
+const MAX_VOICES := 16 # six loops, one music slot, nine bounded transient players
 const MAX_EFFECTS := 24
-const CUE_COOLDOWN := 0.08
+const RESERVED_IMPORTANT := 2
 const SETTINGS_PATH := "user://combat-audio.cfg"
-const LOOP_KINDS: Array[StringName] = [&"ring_loop", &"charge_loop", &"cone_loop", &"clock_loop"]
-const CUE_KINDS: Array[StringName] = [&"ring_launch", &"ring_return", &"flash_fire", &"cone_pulse", &"hit", &"cable_cut", &"vent", &"core_break", &"repair_step"]
-# Semantic hostile cues reuse the existing small synthesized bank.
-const HOSTILE_CUES := {&"hostile_warning": &"ring_return", &"hostile_fire": &"flash_fire", &"player_hurt": &"core_break"}
+const LOOP_KINDS: Array[StringName] = [&"ring_loop", &"charge_loop", &"cone_loop", &"clock_loop", &"scrub_older", &"scrub_newer"]
+const CUE_KINDS: Array[StringName] = [&"ring_launch", &"ring_return", &"flash_fire", &"flash_charged", &"flash_ready", &"pierce_hit", &"cone_pulse", &"hit", &"cable_cut", &"vent", &"core_break", &"repair_step", &"repair_full", &"room_open", &"player_hurt", &"recovery_confirm", &"ui_click"]
+const HOSTILE_CUES := {&"hostile_warning": &"hostile_warning", &"hostile_fire": &"hostile_fire", &"player_hurt": &"player_hurt"}
 const RING := Color("60dbde")
 const BEAM := Color("f0d77b")
 const CONE := Color("ed9966")
 const CLOCK := Color("ba9ce9")
 
+@export var cue_library: CombatAudioLibrary = DEFAULT_LIBRARY
+@export var music_enabled := false
 var muted := false
 var world_pitch := 1.0
 var world_pitch_target := 1.0
@@ -36,6 +35,7 @@ var clock_pitch_target := 1.0
 var accepted_cues := 0
 var dropped_cues := 0
 var samples: Dictionary = {}
+var _cues: Dictionary[StringName, CombatAudioCue] = {}
 var _loops: Dictionary = {}
 var _voices: Array[Dictionary] = []
 var _effects: Array[Dictionary] = []
@@ -44,25 +44,44 @@ var _inspecting := false
 var _audio_flush_pending := false
 var _mesh := ImmediateMesh.new()
 var _visual: MeshInstance3D
-
+var _music: AudioStreamPlayer
+var _music_gain := 0.0
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	var config := ConfigFile.new()
 	if config.load(SETTINGS_PATH) == OK:
 		muted = bool(config.get_value("audio", "muted", false))
-	for kind in CUE_KINDS + LOOP_KINDS:
-		samples[kind] = _synthesize(kind, kind in LOOP_KINDS)
+	for entry in cue_library.cues:
+		_cues[entry.id] = entry
+		samples[entry.id] = entry.stream
 	for kind in LOOP_KINDS:
 		var player := AudioStreamPlayer.new()
-		player.stream = samples[kind]
+		player.name = String(kind).to_pascal_case()
+		player.stream = _cues[kind].stream
+		player.bus = &"Time" if _cues[kind].responsive else &"World"
+		player.process_mode = Node.PROCESS_MODE_ALWAYS if _cues[kind].responsive else Node.PROCESS_MODE_PAUSABLE
 		player.volume_db = -80.0
 		add_child(player)
 		_loops[kind] = {"player": player, "gain": 0.0, "target": 0.0, "pitch": 1.0}
-	for index in range(MAX_VOICES - LOOP_KINDS.size()):
-		var player := AudioStreamPlayer.new()
+	for index in range(MAX_VOICES - LOOP_KINDS.size() - 1):
+		var player := AudioStreamPlayer3D.new()
+		player.name = "Cue%d" % index
 		player.volume_db = -80.0
+		# Top-down camera is above the action: generous falloff, restrained pan.
+		player.unit_size = 16.0
+		player.max_distance = 64.0
+		player.panning_strength = 0.45
 		add_child(player)
-		_voices.append({"player": player, "remaining": 0.0, "gain": 0.0, "strength": 1.0, "responsive": false, "pending": false})
+		_voices.append({"player": player, "remaining": 0.0, "gain": 0.0, "strength": 1.0,
+			"responsive": false, "pending": false, "priority": 0, "cue": &"", "base_pitch": 1.0, "volume_db": -12.0})
+	_music = AudioStreamPlayer.new()
+	_music.name = "Music"
+	_music.stream = cue_library.music
+	_music.bus = &"Music"
+	_music.process_mode = Node.PROCESS_MODE_PAUSABLE
+	_music.volume_db = -80.0
+	add_child(_music)
 	_visual = MeshInstance3D.new()
 	_visual.mesh = _mesh
 	var material := StandardMaterial3D.new()
@@ -74,278 +93,239 @@ func _ready() -> void:
 	_visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_visual)
 	var shutdown := PlaybackShutdown.new()
-	for loop in _loops.values():
-		shutdown.players.append(loop.player)
-	for voice in _voices:
-		shutdown.players.append(voice.player)
+	for loop in _loops.values(): shutdown.players.append(loop.player)
+	for voice in _voices: shutdown.players.append(voice.player)
+	shutdown.players.append(_music)
 	add_child(shutdown)
 
-
 func _exit_tree() -> void:
-	# Release the generated sample bank when leaving the arena, including on
-	# Dummy audio runs where no output device advances the continuous loops.
-	for loop in _loops.values():
-		loop.player.stop()
-		loop.player.stream = null
-	for voice in _voices:
-		voice.player.stop()
-		voice.player.stream = null
 	_loops.clear()
 	_voices.clear()
+	_cues.clear()
 	samples.clear()
 
-
 func cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:
-	if kind not in CUE_KINDS and kind not in HOSTILE_CUES: return
-	var sample_kind: StringName = HOSTILE_CUES.get(kind, kind)
-	if not samples.has(sample_kind):
-		return
-	# Repair feedback stays responsive during world slow/inspection. Other cues
-	# must originate in actual gameplay; browsing itself cannot create them.
-	if _inspecting and kind != &"repair_step":
-		return
+	# The weapon's actual piercing-launch flag upgrades its queued quick shot
+	# before native playback. No inferred charge threshold or second launch bang.
+	var upgraded_launch := false
+	if kind == &"flash_pierce":
+		kind = &"flash_charged"
+		for voice in _voices:
+			if voice.pending and voice.cue == &"flash_fire" and not voice.player.playing:
+				voice.pending = false
+				voice.remaining = 0.0
+				upgraded_launch = true
+				break
+	if kind == &"link_cut": kind = &"cable_cut"
+	if kind == &"valve_b": kind = &"flash_ready"
+	if not _cues.has(kind): return
+	var entry: CombatAudioCue = _cues[kind]
+	if entry.looping or (_inspecting and not entry.responsive): return
 	if float(_cooldowns.get(kind, 0.0)) > 0.0:
-		# A multi-cut must show each broken part even when its sound is coalesced.
-		if not _inspecting and kind in [&"cable_cut", &"vent", &"core_break"]:
-			_add_effect(kind, point, clampf(strength, 0.15, 1.5))
+		if not _inspecting and entry.effect in [&"cable_cut", &"vent", &"core_break"]:
+			_add_effect(entry.effect, point, clampf(strength, 0.15, 1.5))
 		dropped_cues += 1
 		return
-	_cooldowns[kind] = CUE_COOLDOWN
+	_cooldowns[kind] = entry.cooldown
 	accepted_cues += 1
 	strength = clampf(strength, 0.15, 1.5)
-	if not _inspecting:
-		_add_effect(kind, point, strength)
-	if muted:
-		return
+	if not _inspecting and not upgraded_launch and not entry.effect.is_empty(): _add_effect(entry.effect, point, strength)
+	if muted: return
+	var free: Array[Dictionary] = []
 	for voice in _voices:
-		if float(voice.remaining) > 0.0 or voice.player.playing:
-			continue
-		var player: AudioStreamPlayer = voice.player
-		player.stream = samples[sample_kind]
-		voice.responsive = kind == &"repair_step"
-		voice.strength = strength
-		voice.gain = 0.0
-		voice.remaining = player.stream.get_length()
-		player.pitch_scale = 1.0 if bool(voice.responsive) else world_pitch
-		player.volume_db = -80.0
-		voice.pending = true
-		_queue_audio_flush()
+		if float(voice.remaining) <= 0 and not voice.player.playing: free.append(voice)
+	var chosen: Dictionary = {}
+	if not free.is_empty() and (entry.priority >= 4 or free.size() > RESERVED_IMPORTANT):
+		chosen = free[0]
+	else:
+		# Only cancel a lower-priority command that has NOT reached native
+		# playback. Never chop/steal a playing waveform to fit another bark.
+		for voice in _voices:
+			if voice.pending and not voice.player.playing and int(voice.priority) < entry.priority:
+				chosen = voice
+				break
+	if chosen.is_empty():
+		dropped_cues += 1
 		return
-	# Drop rather than abruptly stealing a playing waveform.
-	dropped_cues += 1
+	var player: AudioStreamPlayer3D = chosen.player
+	player.stream = entry.stream
+	player.global_position = point
+	player.bus = &"Responsive" if entry.responsive else &"World"
+	player.process_mode = Node.PROCESS_MODE_ALWAYS if entry.responsive else Node.PROCESS_MODE_PAUSABLE
+	player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED if entry.responsive else AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	player.panning_strength = 0.0 if entry.responsive else 0.45
+	player.max_distance = 0.0 if entry.responsive else 64.0
+	chosen.responsive = entry.responsive
+	chosen.strength = strength
+	chosen.gain = 1.0
+	chosen.remaining = entry.stream.get_length() / entry.pitch
+	chosen.base_pitch = entry.pitch
+	chosen.volume_db = entry.volume_db
+	chosen.priority = entry.priority
+	chosen.cue = kind
+	player.pitch_scale = entry.pitch * (1.0 if entry.responsive else world_pitch)
+	player.volume_db = _volume(strength, entry.volume_db)
+	chosen.pending = true
+	_queue_audio_flush()
 
+func enemy_cue(enemy_kind: StringName, event: StringName, point: Vector3, strength: float = 1.0) -> void:
+	# Semantic events only, never inferred by polling a restored enemy's pose.
+	cue(StringName("enemy_%s_%s" % [enemy_kind, event]), point, strength)
+
+func set_music_playing(playing: bool) -> void:
+	music_enabled = playing
 
 func step(real_delta: float, world_delta: float, world_scale: float, inspecting: bool, scrub_speed: float, weapons: Node3D, _equipment: RefCounted) -> void:
 	var dt := maxf(0.0, real_delta)
-	_inspecting = inspecting
+	var frozen := inspecting or world_scale <= 0.0
+	if frozen and not _inspecting:
+		# Discard pending and already heard WORLD transients at the boundary.
+		# Responsive confirmations survive; unfreezing never replays a bark/hit.
+		for voice in _voices:
+			if not voice.responsive:
+				voice.pending = false
+				voice.remaining = 0.0
+				voice.gain = 0.0
+				voice.player.volume_db = -80.0
+	_inspecting = frozen
 	var scale_target := clampf(world_scale, 0.02, 1.0)
 	world_pitch_target = pow(scale_target, 0.45)
-	clock_pitch_target = clampf(0.24 + absf(scrub_speed) * 0.32, 0.24, 2.6) if inspecting else pow(scale_target, 0.65)
-	# Continuous mechanical pitch slews over roughly a third of a second, so
-	# entering slow winds down and resuming spins up instead of swapping beeps.
+	clock_pitch_target = clampf(0.45 + absf(scrub_speed) * 0.32, 0.45, 2.6) if frozen else pow(scale_target, 0.65)
 	world_pitch = lerpf(world_pitch, world_pitch_target, 1.0 - exp(-dt / 0.22))
 	clock_pitch = lerpf(clock_pitch, clock_pitch_target, 1.0 - exp(-dt / 0.30))
-	for kind in _cooldowns.keys():
-		_cooldowns[kind] = maxf(0.0, float(_cooldowns[kind]) - dt)
+	for kind in _cooldowns: _cooldowns[kind] = maxf(0.0, float(_cooldowns[kind]) - dt)
 	var ring_active := false
 	var charge_active := false
 	var cone_active := false
 	var charge := 0.0
-	if weapons != null and not inspecting:
+	if weapons != null and not frozen:
 		ring_active = weapons.ring.flight_phase != "idle"
 		charge_active = weapons.flash.charging
 		cone_active = weapons.bellows.active
 		charge = clampf(weapons.flash.charge, 0.0, 1.0)
-	_set_loop(&"ring_loop", 0.8 if ring_active else 0.0, world_pitch, dt)
-	_set_loop(&"charge_loop", 0.55 + charge * 0.45 if charge_active else 0.0, (0.72 + charge * 0.65) * world_pitch, dt)
-	_set_loop(&"cone_loop", 0.65 if cone_active else 0.0, world_pitch, dt)
-	# The clock runs during time manipulation and while spinning back up. It
-	# becomes silent at rest rather than starting permanent ambient playback.
-	var clock_gain := 0.45 if inspecting or scale_target < 0.99 else 0.32 * clampf((1.0 - clock_pitch) / 0.10, 0.0, 1.0)
-	_set_loop(&"clock_loop", clock_gain, clock_pitch, dt)
+	var bed_gain := 1.0
 	for voice in _voices:
-		if float(voice.remaining) <= 0.0:
-			continue
-		var player: AudioStreamPlayer = voice.player
-		var pitch := 1.0 if bool(voice.responsive) else world_pitch
-		player.pitch_scale = pitch
-		voice.remaining = maxf(0.0, float(voice.remaining) - dt * pitch)
+		if float(voice.remaining) > 0 and int(voice.priority) >= 4:
+			bed_gain = 0.35
+			break
+	_set_loop(&"ring_loop", 0.8 * bed_gain if ring_active else 0.0, world_pitch, dt)
+	_set_loop(&"charge_loop", (0.55 + charge * 0.45) * bed_gain if charge_active else 0.0, (0.72 + charge * 0.65) * world_pitch, dt)
+	_set_loop(&"cone_loop", 0.65 * bed_gain if cone_active else 0.0, world_pitch, dt)
+	var clock_gain := 0.45 if frozen or scale_target < 0.99 else 0.32 * clampf((1.0 - clock_pitch) / 0.10, 0.0, 1.0)
+	_set_loop(&"clock_loop", clock_gain, clock_pitch, dt)
+	var scrub_gain := clampf(absf(scrub_speed) * 0.3, 0, 0.7) if frozen else 0.0
+	_set_loop(&"scrub_older", scrub_gain if scrub_speed > 0 else 0.0, clock_pitch, dt)
+	_set_loop(&"scrub_newer", scrub_gain if scrub_speed < 0 else 0.0, clock_pitch, dt)
+	var music_target := bed_gain if music_enabled and not frozen and cue_library.music != null else 0.0
+	_music_gain = lerpf(_music_gain, music_target, 1.0 - exp(-dt / 0.20))
+	_music.pitch_scale = world_pitch # World policy applied ONCE here, never on a bus.
+	_music.volume_db = _volume(_music_gain, cue_library.music_volume_db)
+	if music_target > 0 and not _music.playing: _queue_audio_flush()
+	elif music_target == 0 and _music_gain < 0.001 and _music.playing: _music.stop()
+	for voice in _voices:
+		if float(voice.remaining) <= 0: continue
+		var player: AudioStreamPlayer3D = voice.player
+		var rate := 1.0 if voice.responsive else world_pitch
+		player.pitch_scale = float(voice.base_pitch) * rate
+		voice.remaining = maxf(0.0, float(voice.remaining) - dt * rate)
 		var target := minf(1.0, float(voice.remaining) / 0.025)
-		if inspecting and not bool(voice.responsive):
-			target = 0.0
 		voice.gain = move_toward(float(voice.gain), target, dt * 60.0)
-		player.volume_db = _volume(float(voice.gain) * float(voice.strength), -22.0)
-		if float(voice.remaining) <= 0.0:
+		player.volume_db = _volume(float(voice.gain) * float(voice.strength), float(voice.volume_db))
+		if float(voice.remaining) <= 0:
 			voice.pending = false
 			player.volume_db = -80.0
-	if not inspecting:
+	if not frozen:
 		for index in range(_effects.size() - 1, -1, -1):
 			_effects[index].age = float(_effects[index].age) + maxf(0.0, world_delta)
-			if float(_effects[index].age) >= float(_effects[index].life):
-				_effects.remove_at(index)
+			if float(_effects[index].age) >= float(_effects[index].life): _effects.remove_at(index)
 	_rebuild_effects()
 
-
 func _set_loop(kind: StringName, target: float, pitch: float, dt: float) -> void:
-	if not _loops.has(kind):
-		return
 	var loop: Dictionary = _loops[kind]
 	loop.target = target
 	loop.gain = lerpf(float(loop.gain), target, 1.0 - exp(-dt / 0.045))
 	loop.pitch = pitch
 	var player: AudioStreamPlayer = loop.player
 	player.pitch_scale = clampf(pitch, 0.05, 4.0)
-	player.volume_db = _volume(float(loop.gain), -30.0)
-	if not muted and float(loop.gain) > 0.001 and not player.playing:
-		_queue_audio_flush()
-
+	player.volume_db = _volume(float(loop.gain), _cues[kind].volume_db)
+	if not muted and float(loop.gain) > 0.001 and not player.playing: _queue_audio_flush()
 
 func _queue_audio_flush() -> void:
 	if not _audio_flush_pending:
 		_audio_flush_pending = true
 		call_deferred("_flush_audio")
 
-
 func _flush_audio() -> void:
 	_audio_flush_pending = false
-	# Coalesce all commands from one gameplay update before starting native
-	# playback. Starting then stopping WAV playback before the audio thread's
-	# first mix leaks native playback references in Godot 4.7's Dummy driver.
 	var ancestor: Node = self
 	while ancestor != null:
-		if ancestor.is_queued_for_deletion():
-			return
+		if ancestor.is_queued_for_deletion(): return
 		ancestor = ancestor.get_parent()
-	if muted or not is_inside_tree():
-		return
+	if muted or not is_inside_tree(): return
 	for loop in _loops.values():
-		if float(loop.gain) > 0.001 and not loop.player.playing:
-			loop.player.play()
+		if float(loop.gain) > 0.001 and not loop.player.playing: loop.player.play()
 	for voice in _voices:
-		if bool(voice.pending) and float(voice.remaining) > 0.0:
+		if voice.pending and float(voice.remaining) > 0:
 			voice.pending = false
 			voice.player.play()
-
+	if music_enabled and _music.stream != null and _music_gain > 0.001 and not _music.playing: _music.play()
 
 func _volume(gain: float, base_db: float) -> float:
 	return -80.0 if muted or gain <= 0.0001 else maxf(-80.0, base_db + linear_to_db(gain))
-
 
 func toggle_mute() -> void:
 	muted = not muted
 	var config := ConfigFile.new()
 	config.set_value("audio", "muted", muted)
 	config.save(SETTINGS_PATH)
-	# Immediate silence also covers a paused arena, where step may not run.
 	if muted:
-		for loop in _loops.values():
-			loop.player.volume_db = -80.0
+		for loop in _loops.values(): loop.player.volume_db = -80.0
 		for voice in _voices:
 			voice.player.volume_db = -80.0
-
+			voice.pending = false
+			voice.remaining = 0.0
+		_music.volume_db = -80.0
 
 func clear_effects() -> void:
 	_effects.clear()
 	_mesh.clear_surfaces()
-	# Historical snapshots carry no audio. Stop old transients at the explicit
-	# inspection/reset boundary; continuous loops are smoothly faded by step.
 	for voice in _voices:
-		# A cancelled pending cue never reaches the audio server. Already mixed
-		# one-shots finish silently instead of being stolen/restarted mid-wave.
 		voice.pending = false
 		voice.player.volume_db = -80.0
 		voice.remaining = 0.0
 		voice.gain = 0.0
-
 
 func reset_state() -> void:
 	clear_effects()
 	for loop in _loops.values():
 		loop.gain = 0.0
 		loop.target = 0.0
+		loop.player.volume_db = -80.0
 		loop.player.stop()
+	_music.stop()
+	_music_gain = 0.0
+	_music.volume_db = -80.0
 	_cooldowns.clear()
 	_inspecting = false
+	world_pitch = 1.0
+	clock_pitch = 1.0
 	accepted_cues = 0
 	dropped_cues = 0
-
 
 func metrics() -> Dictionary:
 	var active := 0
 	for voice in _voices:
-		if float(voice.remaining) > 0.0:
-			active += 1
-	for loop in _loops.values():
-		if float(loop.gain) > 0.001:
-			active += 1
-	var loop_metrics: Dictionary = {}
+		if float(voice.remaining) > 0: active += 1
+	var loop_metrics := {}
 	for kind in _loops:
 		var loop: Dictionary = _loops[kind]
+		if float(loop.gain) > 0.001: active += 1
 		loop_metrics[kind] = {"gain": loop.gain, "target": loop.target, "pitch": loop.pitch}
+	if _music_gain > 0.001: active += 1
 	return {"voices": active, "voice_cap": MAX_VOICES, "effects": _effects.size(), "effect_cap": MAX_EFFECTS,
 		"world_pitch": world_pitch, "world_pitch_target": world_pitch_target,
 		"clock_pitch": clock_pitch, "clock_pitch_target": clock_pitch_target,
 		"accepted_cues": accepted_cues, "dropped_cues": dropped_cues, "loops": loop_metrics}
-
-
-func _synthesize(kind: StringName, looping: bool) -> AudioStreamWAV:
-	var duration := 1.0 if looping else (0.42 if kind == &"core_break" else 0.16)
-	var frames := int(float(SAMPLE_RATE) * duration)
-	var pcm := PackedByteArray()
-	pcm.resize(frames * 2)
-	var random := RandomNumberGenerator.new()
-	random.seed = 719 + CUE_KINDS.find(kind) * 83 + LOOP_KINDS.find(kind) * 151
-	var phase := 0.0
-	var filtered_noise := 0.0
-	for index in range(frames):
-		var time := float(index) / SAMPLE_RATE
-		var fraction := float(index) / maxf(1.0, frames - 1.0)
-		filtered_noise = lerpf(filtered_noise, random.randf_range(-1.0, 1.0), 0.22)
-		var frequency := 220.0
-		var signal_value := 0.0
-		match kind:
-			&"ring_loop":
-				signal_value = sin(TAU * 132.0 * time) * 0.38 + sin(TAU * 396.0 * time) * 0.15
-				signal_value *= 0.7 + 0.3 * sin(TAU * 8.0 * time)
-			&"charge_loop":
-				signal_value = sin(TAU * 176.0 * time) * 0.30 + sin(TAU * 352.0 * time) * 0.18 + filtered_noise * 0.12
-			&"cone_loop":
-				signal_value = filtered_noise * 0.65 + sin(TAU * 66.0 * time) * 0.22
-			&"clock_loop":
-				var tick_age := fmod(time, 0.125)
-				var tick := exp(-tick_age * 125.0)
-				signal_value = (sin(TAU * 880.0 * time) * 0.4 + filtered_noise * 0.5) * tick
-				signal_value += sin(TAU * 48.0 * time) * 0.10 + sin(TAU * 144.0 * time) * 0.035
-			_:
-				match kind:
-					&"ring_launch": frequency = lerpf(320.0, 680.0, fraction)
-					&"ring_return": frequency = lerpf(650.0, 240.0, fraction)
-					&"flash_fire": frequency = lerpf(540.0, 95.0, fraction)
-					&"cone_pulse": frequency = lerpf(150.0, 55.0, fraction)
-					&"hit": frequency = lerpf(280.0, 80.0, fraction)
-					&"cable_cut": frequency = lerpf(1250.0, 360.0, fraction)
-					&"vent": frequency = lerpf(110.0, 65.0, fraction)
-					&"core_break": frequency = lerpf(165.0, 36.0, fraction)
-					&"repair_step": frequency = 660.0 if fraction < 0.45 else 880.0
-				phase += TAU * frequency / SAMPLE_RATE
-				var noise_weight := 0.12 if kind in [&"ring_launch", &"ring_return", &"repair_step"] else 0.65
-				signal_value = sin(phase) * (0.6 - noise_weight * 0.35) + filtered_noise * noise_weight
-				signal_value *= pow(1.0 - fraction, 1.2)
-		# Fade sample edges as well as player gains to prevent loop/voice clicks.
-		var envelope := minf(1.0, minf(time / 0.004, (duration - time - 1.0 / SAMPLE_RATE) / 0.012))
-		var value := int(clampf(signal_value * maxf(0.0, envelope), -0.85, 0.85) * 32767.0)
-		pcm.encode_s16(index * 2, value)
-	var sample := AudioStreamWAV.new()
-	sample.format = AudioStreamWAV.FORMAT_16_BITS
-	sample.mix_rate = SAMPLE_RATE
-	sample.stereo = false
-	sample.data = pcm
-	if looping:
-		sample.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		sample.loop_begin = 0
-		sample.loop_end = frames
-	return sample
-
 
 func _add_effect(kind: StringName, point: Vector3, strength: float) -> void:
 	if _effects.size() >= MAX_EFFECTS:

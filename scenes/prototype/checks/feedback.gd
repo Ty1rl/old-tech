@@ -36,24 +36,29 @@ func run() -> void:
 	for voice in feedback._voices:
 		cancelled_silent = cancelled_silent and not voice.player.playing and not bool(voice.pending)
 	expect(cancelled_silent, "A same-update reset cancels queued native playback without starting or leaking it")
-	expect(feedback.samples.size() == 13, "All nine cues and four continuous loops are synthesized")
+	expect(feedback.samples.size() == feedback.cue_library.cues.size(), "All inspector cues reference the baked stream bank")
 	var total_bytes := 0
+	var unique_streams := {}
 	for kind in feedback.samples:
 		var sample: AudioStreamWAV = feedback.samples[kind]
 		var data := sample.data
-		total_bytes += data.size()
+		if not unique_streams.has(sample.resource_path):
+			unique_streams[sample.resource_path] = true
+			total_bytes += data.size()
 		var peak := 0
 		for offset in range(0, data.size(), 2):
 			peak = maxi(peak, absi(data.decode_s16(offset)))
 		expect(sample.mix_rate == 22050 and not sample.stereo and data.size() % 2 == 0, "%s has valid mono PCM data" % kind)
 		expect(peak > 1000 and peak < 28000, "%s has audible signal and bounded headroom" % kind)
-		expect(data.decode_s16(0) == 0 and absi(data.decode_s16(data.size() - 2)) <= 2, "%s has silent edges" % kind)
 		if kind in Feedback.LOOP_KINDS:
-			expect(sample.loop_mode == AudioStreamWAV.LOOP_FORWARD and sample.loop_end * 2 == data.size(), "%s has bounded looping region" % kind)
-	expect(total_bytes < 300000, "Generated PCM bank remains below 300 KB")
+			expect(absi(data.decode_s16(0) - data.decode_s16(data.size() - 2)) < 6500, "%s has a continuous periodic seam" % kind)
+			expect(sample.loop_mode == AudioStreamWAV.LOOP_FORWARD and sample.loop_end <= data.size() / 2 and sample.loop_end > sample.loop_begin, "%s has bounded looping region" % kind)
+		else:
+			expect(data.decode_s16(0) == 0 and absi(data.decode_s16(data.size() - 2)) <= 2, "%s has silent transient edges" % kind)
+	expect(total_bytes < 1200000 and unique_streams.size() == 51, "Baked PCM bank stays near 1 MB and aliases share native resources")
 	var duplicate := Feedback.new()
 	root.add_child(duplicate)
-	expect(duplicate.samples[&"hit"].data == feedback.samples[&"hit"].data, "Noise and harmonics are deterministic")
+	expect(duplicate.samples[&"hit"].data == feedback.samples[&"hit"].data, "Instances share the same baked content without synthesizing samples")
 	duplicate.free()
 
 	feedback.step(0.02, 0.0036, 0.18, false, 0.0, weapons, null)

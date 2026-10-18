@@ -30,7 +30,7 @@ func run() -> void:
 	var visual: Node3D = player.visual
 	var collider: CollisionShape3D = player.get_node("CollisionShape3D")
 	expect(collider.shape is CylinderShape3D and is_equal_approx(collider.shape.height, 1), "Imported art preserves gameplay collider")
-	expect(player.model.mesh == null and not player.model.get_node("MeshInstance3D2").visible, "Prototype hides old primitive body and facing arrow")
+	expect(not player.model is MeshInstance3D and player.model.get_node_or_null("MeshInstance3D2") == null, "Prototype hides old primitive body and facing arrow")
 	expect(visual.get_parent() == player.model and visual.skeleton.get_bone_count() == 20, "Skinned protagonist follows existing facing root")
 	expect(not visual.is_processing() and not visual.is_physics_processing()
 		and visual.animation.callback_mode_process == AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL,
@@ -38,7 +38,7 @@ func run() -> void:
 	expect(absf(visual.global_position.y-player.global_position.y) < .01 and visual.scale.is_equal_approx(Vector3.ONE * 1.3), "Feet align with collider bottom and model retains readability scale")
 	for clip in ["Idle", "Walk", "Run", "BackWalk", "RingHold", "FlashHold", "ConeHold", "ClockHold"]:
 		expect(visual.animation.has_animation(clip), "Imported clip exists: " + clip)
-	for index in range(1,5):
+	for index in range(1,4):
 		player.set_visual_tool(index)
 		expect(visual.tool_index == index and visual.tool_id == visual.TOOL_IDS[index-1], "Tool selection is reflected in imported art")
 		for id: StringName in visual.tool_attachments:
@@ -52,7 +52,7 @@ func run() -> void:
 	player.set_visual_tool(0)
 	expect(visual.tool_index == 1, "Low selection clamps to ring")
 	player.set_visual_tool(9)
-	expect(visual.tool_index == 4, "High selection clamps to clock")
+	expect(visual.tool_index == 3, "High selection clamps to bellows")
 	player.reset_state()
 	expect(visual.tool_index == 1 and is_equal_approx(visual.walk_phase,0), "Reset restores ring and initial pose")
 	var before := bone_pose(visual,"shin.L")
@@ -67,13 +67,15 @@ func run() -> void:
 	expect(not bone_pose(visual,"shin.L").is_equal_approx(before) and visual.walk_phase > phase, "Real-time step drives skinned leg movement")
 	expect(visual.grip_error("L") < .025 and player.model.position.is_equal_approx(Vector3(0,.5,0)), "Animated limbs never move gameplay root")
 	var knee: Transform3D = bone_pose(visual,"shin.R")
-	player.step(.01, player.global_position + Vector3(10,0,0), false)
-	player.step(.05, player.global_position + Vector3(10,0,0), true)
+	player.step(.01, player.global_position + Vector3(10,0,0))
+	arena.time_controller.slow_requested = true
+	arena.time_controller.advance(.05)
+	player.step(.05, player.global_position + Vector3(10,0,0))
 	expect(visual.held_tool.global_position.x > player.global_position.x, "Facing +X carries real equipment forward")
 	expect(player.world_scale < 1 and visual.animation.current_animation in ["Idle","Walk","Run","BackWalk"], "World slow leaves real-time art animation enabled")
 
 	var snap: Dictionary = player.capture_state()
-	expect(snap.size() == 4 and snap.has("position") and snap.has("velocity") and snap.has("health") and snap.has("facing"), "History schema still excludes rig/mesh/animation state")
+	expect(snap.size() == 3 and snap.has("position") and snap.has("velocity") and snap.has("facing"), "History schema still excludes rig/mesh/animation state")
 	var scrub := ScrubView.new()
 	var from: Dictionary = scrub.capture_pose(player,arena.director,arena.weapons)
 	player.position += Vector3(4,0,-2)

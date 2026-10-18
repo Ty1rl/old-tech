@@ -1,9 +1,9 @@
-extends "res://scenes/prototype/arena.gd"
+class_name MuseumCampaign
+extends CombatArena
 
 const Rooms = preload("res://scenes/prototype/rooms.gd")
 const RoomEnvironment = preload("res://scenes/prototype/room_environment.gd")
 const Tutorial = preload("res://scenes/ui/tutorial.gd")
-const TimeCoreScene = preload("res://scenes/time/time_core.tscn")
 
 @onready var overlay: CanvasLayer = get_node_or_null("Overlay") as CanvasLayer
 @onready var tutorial: Control = get_node_or_null("Overlay/Tutorial") as Control
@@ -39,38 +39,7 @@ var _spawned := 0
 var _spawn_timer := 0.0
 var _debug_boss_phase := -1
 var _result_shown := false
-var _time_controller: TimeController
-var _emergency_rewind: EmergencyRewind
-var _owns_standalone_time_core := false
-var _slow_key_held := false
-var _physics_tick_frame := -1
 var _emergency_selected_index := 0
-
-
-class StandaloneReplayHistory extends ReplayHistory:
-	var inspecting := false
-	var selected_seconds_ago := 0.0
-	var available_seconds: float:
-		get:
-			return age_of(0) if snapshot_count > 0 else 0.0
-
-
-func _get(property: StringName) -> Variant:
-	if property == &"time_controller":
-		return _time_controller
-	if property == &"emergency_rewind":
-		return _emergency_rewind
-	return null
-
-
-func _set(property: StringName, value: Variant) -> bool:
-	if property == &"time_controller" and (value == null or value is TimeController):
-		_time_controller = value
-		return true
-	if property == &"emergency_rewind" and (value == null or value is EmergencyRewind):
-		_emergency_rewind = value
-		return true
-	return false
 
 
 func create_museum() -> Node3D:
@@ -79,8 +48,6 @@ func create_museum() -> Node3D:
 
 func _ready() -> void:
 	super._ready()
-	_ensure_overlay()
-	_bind_time_core()
 	tutorial.setup(player.camera)
 	if not tutorial.blocking_changed.is_connected(_on_teaching_block):
 		tutorial.blocking_changed.connect(_on_teaching_block)
@@ -105,95 +72,12 @@ func _ready() -> void:
 	GameState.apply_preferences(feedback, status_hud)
 
 
-func _ensure_overlay() -> void:
-	if overlay == null:
-		overlay = CanvasLayer.new()
-		overlay.name = "Overlay"
-		overlay.layer = 60
-		add_child(overlay)
-	if tutorial == null:
-		tutorial = Tutorial.new()
-		tutorial.name = "Tutorial"
-		overlay.add_child(tutorial)
-	if title == null:
-		title = Label.new()
-		title.name = "TitleLabel"
-		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title.add_theme_color_override("font_shadow_color", Color.BLACK)
-		title.add_theme_constant_override("shadow_offset_x", 1)
-		title.add_theme_constant_override("shadow_offset_y", 1)
-		title.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-		title.offset_left = -360
-		title.offset_right = 360
-		title.offset_top = 32
-		title.offset_bottom = 180
-		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		title.add_theme_font_size_override("font_size", 26)
-		overlay.add_child(title)
-	if run_hint == null:
-		run_hint = Label.new()
-		run_hint.name = "RunHintLabel"
-		run_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		run_hint.add_theme_color_override("font_shadow_color", Color.BLACK)
-		run_hint.add_theme_constant_override("shadow_offset_x", 1)
-		run_hint.add_theme_constant_override("shadow_offset_y", 1)
-		run_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-		run_hint.offset_left = 18
-		run_hint.offset_right = -18
-		run_hint.offset_top = -88
-		run_hint.offset_bottom = -60
-		run_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		run_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		run_hint.add_theme_font_size_override("font_size", 16)
-		overlay.add_child(run_hint)
-
-
-func _bind_time_core() -> void:
-	var existing_tc: Variant = get("time_controller")
-	var existing_er: Variant = get("emergency_rewind")
-	if existing_tc is TimeController and existing_er is EmergencyRewind:
-		_time_controller = existing_tc
-		_emergency_rewind = existing_er
-		_owns_standalone_time_core = false
-	else:
-		var core_node := get_node_or_null("TimeCore")
-		if core_node == null:
-			core_node = TimeCoreScene.instantiate()
-			add_child(core_node)
-		_time_controller = core_node.get_node("TimeController") as TimeController
-		_emergency_rewind = core_node.get_node("EmergencyRewind") as EmergencyRewind
-		_owns_standalone_time_core = true
-		if "time_controller" in player:
-			player.set("time_controller", _time_controller)
-		if GameState.has_method("bind_emergency"):
-			GameState.call("bind_emergency", _emergency_rewind)
-	if not (history is ReplayHistory):
-		var ts: TimeSettings = _time_controller.settings
-		if _owns_standalone_time_core:
-			history = StandaloneReplayHistory.new(ts.history_seconds, ts.history_sample_rate, ts.history_max_snapshots)
-		else:
-			history = ReplayHistory.from_settings(ts)
-	_emergency_rewind.history = history as ReplayHistory
-	_emergency_rewind.capture_present = capture_state
-	if not _time_controller.emergency_started.is_connected(_on_emergency_started):
-		_time_controller.emergency_started.connect(_on_emergency_started)
-	if not _time_controller.attempt_exhausted.is_connected(_on_attempt_exhausted):
-		_time_controller.attempt_exhausted.connect(_on_attempt_exhausted)
-	if not _emergency_rewind.selection_changed.is_connected(_on_emergency_selection_changed):
-		_emergency_rewind.selection_changed.connect(_on_emergency_selection_changed)
-	if not _emergency_rewind.confirmed.is_connected(_on_emergency_confirmed):
-		_emergency_rewind.confirmed.connect(_on_emergency_confirmed)
-
-
 func is_emergency_active() -> bool:
-	return (_time_controller != null and _time_controller.emergency_active) or (_emergency_rewind != null and _emergency_rewind.active)
+	return time_controller.emergency_active
 
 
 func _world_scale() -> float:
-	if _time_controller != null:
-		return _time_controller.world_scale
-	return player.world_scale
+	return time_controller.world_scale
 
 
 func _preferred_tool(preferred: int = 2) -> int:
@@ -236,8 +120,6 @@ func enter_room(index: int) -> void:
 	museum.set_exit_open(false)
 	player.position = room.player_spawn
 	player.reset_physics_interpolation()
-	if "health" in player:
-		player.set("health", 100.0)
 	wave_index = -1
 	specimens.clear()
 	_specimen_ids.clear()
@@ -250,11 +132,10 @@ func enter_room(index: int) -> void:
 	title.text = "%d / 4 · %s" % [room_index + 1, room.title]
 	run_hint.text = "WASD move · mouse aim · collect the lit equipment exhibit."
 	_result_shown = false
-	_slow_key_held = false
 	_sync_training_protection()
-	if _time_controller != null:
-		_time_controller.slow_requested = false
-		_time_controller.begin_attempt()
+	if time_controller != null:
+		time_controller.slow_requested = false
+		time_controller.begin_attempt()
 	_seed_room_checkpoint()
 	_update_run_hud()
 
@@ -322,107 +203,33 @@ func _sync_training_protection() -> void:
 		equipment.restore_tool(&"beam", 1.0)
 
 
-func _is_slow_input_held() -> bool:
-	if _slow_key_held or Input.is_physical_key_pressed(KEY_SPACE):
-		return true
-	if InputMap.has_action(&"time_slow") and Input.is_action_pressed(&"time_slow"):
-		return true
-	if "_space_held" in self and bool(get("_space_held")):
-		return true
-	return false
-
-
-func _clear_input_release_locks() -> void:
-	if "_space_release_required" in self:
-		set("_space_release_required", false)
-	if is_instance_valid(player) and "_slow_release_required" in player:
-		player.set("_slow_release_required", false)
-	if is_instance_valid(weapons) and "require_fresh_press" in weapons:
-		weapons.set("require_fresh_press", false)
+func _is_slow_held() -> bool:
+	return super._is_slow_held() and not tutorial.blocking and mode in [&"pickup", &"practice", &"pressure", &"recovery", &"exit"]
 
 
 func _on_teaching_block(blocked: bool) -> void:
+	weapons.cancel_input()
+	weapons.mouse_held = false
+	player.reset_input()
 	if blocked:
-		weapons.cancel_input()
-		weapons.mouse_held = false
-		player.reset_input()
-		_slow_key_held = false
-		if "_space_held" in self:
-			set("_space_held", false)
-		if "_space_release_required" in self:
-			set("_space_release_required", true)
-		if _time_controller != null:
-			_time_controller.slow_requested = false
+		time_controller.slow_requested = false
 		_close_repair()
-		return
-	# Transitioning from explanation to practice: immediately arm controls without requiring extra key/mouse release.
-	_clear_input_release_locks()
-	_slow_key_held = Input.is_physical_key_pressed(KEY_SPACE) or (InputMap.has_action(&"time_slow") and Input.is_action_pressed(&"time_slow"))
-	if "_space_held" in self:
-		set("_space_held", _slow_key_held)
-	if _time_controller != null:
-		_time_controller.slow_requested = _slow_key_held
-	if get_viewport() != null and is_instance_valid(player) and is_instance_valid(player.camera):
+	else:
+		# The explanation's click has been consumed; the next attack needs no re-arm.
+		weapons.require_fresh_press = false
+		time_controller.slow_requested = _is_slow_held()
 		aim = floor_aim(get_viewport().get_mouse_position())
 
 
 func _input(event: InputEvent) -> void:
-	var key_event := event as InputEventKey
-	if key_event != null and key_event.pressed and key_event.physical_keycode == KEY_F10:
-		super._input(event)
-		return
 	if _campaign_ready and (tutorial.blocking or mode in [&"title", &"ceremony", &"won"]):
-		# Block new actions, but never swallow release cleanup during a transition.
-		if key_event != null and not key_event.pressed:
-			var release_code: int = key_event.physical_keycode if key_event.physical_keycode else key_event.keycode
-			if release_code == KEY_SPACE:
-				_slow_key_held = false
-				if _time_controller != null:
-					_time_controller.slow_requested = false
-			if release_code in [KEY_SPACE, KEY_E]:
-				super._input(event)
-		elif event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		# Keep explanation GUI usable and clean up held releases without starting actions.
+		if event is InputEventKey and (not event.pressed or event.physical_keycode == KEY_F10):
+			super._input(event)
+		elif event is InputEventMouseButton and not event.pressed:
 			weapons.cancel_input()
 			weapons.mouse_held = false
 		return
-	if _campaign_ready and is_emergency_active():
-		if not GameState.is_paused() and not _has_non_repair_popup():
-			if _owns_standalone_time_core:
-				if event is InputEventMouseButton and event.pressed:
-					if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-						_emergency_rewind.step_selection(1)
-						get_viewport().set_input_as_handled()
-						return
-					elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
-						_emergency_rewind.step_selection(-1)
-						get_viewport().set_input_as_handled()
-						return
-					elif event.button_index == MOUSE_BUTTON_LEFT:
-						_emergency_rewind.confirm()
-						get_viewport().set_input_as_handled()
-						return
-				elif key_event != null and key_event.pressed and not key_event.echo:
-					var code: int = key_event.physical_keycode if key_event.physical_keycode else key_event.keycode
-					if code in [KEY_ENTER, KEY_KP_ENTER]:
-						_emergency_rewind.confirm()
-						get_viewport().set_input_as_handled()
-						return
-					elif code == KEY_R:
-						retry_room()
-						get_viewport().set_input_as_handled()
-						return
-				return
-		super._input(event)
-		return
-	if _campaign_ready and key_event != null and not key_event.echo:
-		var code: int = key_event.physical_keycode if key_event.physical_keycode else key_event.keycode
-		if code == KEY_4:
-			get_viewport().set_input_as_handled()
-			return
-		if code == KEY_SPACE:
-			_slow_key_held = key_event.pressed
-			if _time_controller != null:
-				_time_controller.slow_requested = _slow_key_held and not SceneManager.has_popup()
 	super._input(event)
 
 
@@ -441,23 +248,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			if code in [KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F8, KEY_F9, KEY_BACKSPACE]:
 				return
-		if is_emergency_active() and _owns_standalone_time_core:
-			return
 	super._unhandled_input(event)
-
-
-func _step_time_core_if_needed(delta: float) -> void:
-	if _time_controller == null:
-		return
-	var can_slow: bool = _campaign_ready and not bool(tutorial.blocking) and mode in [&"pickup", &"practice", &"pressure", &"recovery", &"exit"] and not is_emergency_active() and not SceneManager.has_popup()
-	_time_controller.slow_requested = can_slow and _is_slow_input_held()
-	var frame := Engine.get_physics_frames()
-	var tree_advanced := Engine.is_in_physics_frame() and _time_controller.is_physics_processing() and _physics_tick_frame != frame
-	_physics_tick_frame = frame
-	if not tree_advanced:
-		_time_controller.advance(delta)
-	if _owns_standalone_time_core and is_instance_valid(player):
-		player.world_scale = _time_controller.world_scale
 
 
 func _physics_process(delta: float) -> void:
@@ -465,7 +256,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_damage_flash = maxf(0.0, _damage_flash - delta)
 	_update_run_hud()
-	var in_emergency: bool = GameState.has_method("is_in_emergency") and bool(GameState.call("is_in_emergency")) and not GameState.is_paused()
+	var in_emergency: bool = GameState.is_in_emergency() and not GameState.is_paused()
 	if (not GameState.is_playing() and not in_emergency) or SceneManager.has_popup(&"Developer") or SceneManager.has_popup(&"Settings"):
 		return
 	if bool(tutorial.blocking) or mode == &"won":
@@ -481,7 +272,7 @@ func _physics_process(delta: float) -> void:
 		if museum.is_boss_active():
 			_spawn_wave()
 		return
-	if _time_controller != null and _time_controller.exhausted:
+	if time_controller != null and time_controller.exhausted:
 		retry_room()
 		return
 	if mode == &"practice" and lesson == &"rewind" and not tutorial.is_learned(lesson) and not _injury_given and not is_emergency_active():
@@ -491,15 +282,9 @@ func _physics_process(delta: float) -> void:
 			_trigger_teaching_depletion()
 			_update_run_hud()
 			return
-	_step_time_core_if_needed(delta)
 	var emergency_before := is_emergency_active()
-	if not (_owns_standalone_time_core and emergency_before):
-		super._physics_process(delta)
-	if _owns_standalone_time_core and is_instance_valid(player) and _time_controller != null:
-		player.world_scale = _time_controller.world_scale
-		if "health" in player and float(player.get("health")) <= 0.0:
-			player.set("health", 100.0)
-	if _time_controller != null and _time_controller.exhausted:
+	super._physics_process(delta)
+	if time_controller != null and time_controller.exhausted:
 		retry_room()
 		return
 	if emergency_before or is_emergency_active():
@@ -524,7 +309,7 @@ func _physics_process(delta: float) -> void:
 			_start_pressure()
 			return
 		_practice_age += delta
-		_slow_used = _slow_used or (_time_controller != null and _time_controller.slow_active) or world_scale < 0.99 or player.world_scale < 0.99
+		_slow_used = _slow_used or (time_controller != null and time_controller.slow_active) or world_scale < 0.99 or player.world_scale < 0.99
 		_observe_specimens()
 		if lesson == &"rewind" and not _injury_given and _practice_age >= 2.0 and history.snapshot_count >= 2:
 			_injury_given = true
@@ -567,30 +352,26 @@ func _physics_process(delta: float) -> void:
 
 
 func _trigger_teaching_depletion() -> void:
-	if _time_controller == null or _time_controller.emergency_active or _time_controller.exhausted:
-		return
-	if _time_controller.has_method("force_depletion"):
-		_time_controller.call("force_depletion")
-	else:
-		_time_controller.apply_hit(maxf(_time_controller.meter, _time_controller.capacity) + 100.0)
+	if not time_controller.emergency_active and not time_controller.exhausted:
+		time_controller.force_depletion()
 
 
-func _on_emergency_started(_charges_remaining: int) -> void:
+func _on_emergency_started(choice_count: int) -> void:
+	super._on_emergency_started(choice_count)
 	_emergency_selected_index = 0
 	if SceneManager.has_popup(&"Repair"):
 		_close_repair()
 	weapons.cancel_input()
 	weapons.mouse_held = false
 	player.reset_input()
-	_slow_key_held = false
-	if _time_controller != null:
-		_time_controller.slow_requested = false
+	if time_controller != null:
+		time_controller.slow_requested = false
 	if mode == &"practice" and lesson == &"rewind":
 		run_hint.text = "Emergency rewind · scroll mouse wheel down to an earlier safe moment, then click or press Enter."
 		if is_instance_valid(tutorial) and tutorial.practicing:
 			tutorial.state_label.text = "EMERGENCY FROZEN · SCROLL WHEEL DOWN, THEN CLICK OR ENTER"
 	else:
-		run_hint.text = "Emergency rewind (%d left) · scroll wheel to choose a moment, then click or press Enter." % _charges_remaining
+		run_hint.text = "Emergency rewind (%d left) · scroll wheel to choose a moment, then click or press Enter." % time_controller.charges_remaining
 
 
 func _on_attempt_exhausted() -> void:
@@ -633,13 +414,7 @@ func _begin_wave() -> void:
 		weapons.cancel_input()
 		weapons.mouse_held = false
 		player.reset_input()
-		_slow_key_held = false
-		if "_space_held" in self:
-			set("_space_held", false)
-		if "_space_release_required" in self:
-			set("_space_release_required", true)
-		if _time_controller != null:
-			_time_controller.slow_requested = false
+		time_controller.slow_requested = false
 		mode = &"ceremony"
 		title.text = {
 			&"loop_boss": "The Loop Curator",
@@ -881,27 +656,17 @@ func _on_equipment_repaired(tool: StringName, amount: float) -> void:
 
 
 func _on_wounded(amount: float) -> void:
-	if _owns_standalone_time_core:
-		if "health" in player:
-			player.set("health", 100.0)
-		if _time_controller != null:
-			var spent := _time_controller.apply_hit(amount)
-			if spent <= 0.0:
-				return
 	_damage_flash = 0.5
-	feedback.cue(&"hit", player.position, minf(1.0, amount / 20.0))
 
 
 func _update_run_hud() -> void:
 	if run_hint == null:
 		return
-	run_hint.visible = (not tutorial.visible or is_emergency_active()) and equipment.repairing == &""
+	run_hint.visible = not tutorial.visible and not is_emergency_active() and equipment.repairing == &""
 
 
 func capture_state() -> Dictionary:
 	var data := super.capture_state()
-	if data.has("player") and data["player"] is Dictionary:
-		(data["player"] as Dictionary).erase("health")
 	# Reinforcement debt rewinds with the roster. Learned controls, tools, and time/charges do not.
 	data["campaign_wave"] = {
 		"room": room_index,
@@ -914,24 +679,13 @@ func capture_state() -> Dictionary:
 
 
 func _restore_base_arena_state(data: Dictionary) -> void:
-	scrub_view.finish()
-	_close_repair()
-	if data.has("equipment"):
-		equipment.restore_state((data["equipment"] as Dictionary).duplicate(true))
-	if data.has("player"):
-		var player_data: Dictionary = (data["player"] as Dictionary).duplicate(true)
-		if "health" in player and not player_data.has("health"):
-			player_data["health"] = 100.0
-		player.restore_state(player_data)
-	if data.has("director"):
-		director.restore_state(data["director"])
-	if data.has("weapons"):
-		weapons.restore_state(data["weapons"])
+	_restore_world(data)
 
 
 func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> void:
-	var preferred := int(data.get("weapons", {}).get("selected", weapons.selected_tool))
-	weapons.set_loadout(acquired, _preferred_tool(preferred))
+	var preferred := int(data.get("weapons", {}).get("selected_tool", weapons.selected_tool))
+	weapons.available_tools.assign(acquired)
+	weapons.selected_tool = _preferred_tool(preferred)
 	if not preview_only:
 		var schedule: Dictionary = data.get("campaign_wave", {})
 		if int(schedule.get("room", -1)) == room_index and int(schedule.get("wave", -2)) == wave_index:
@@ -945,7 +699,7 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 			if enemy.rewind_id in _specimen_ids:
 				specimens.append(enemy)
 				_make_specimen_safe(enemy)
-	weapons._rebuild_visuals(player, aim)
+	weapons.rebuild_visuals(player)
 
 
 func restore_campaign_state(data: Dictionary) -> void:
@@ -953,22 +707,20 @@ func restore_campaign_state(data: Dictionary) -> void:
 	_apply_campaign_snapshot(data, false)
 
 
-func _on_emergency_selection_changed(index: int, _age_seconds: float, state: Dictionary) -> void:
+func _on_emergency_selection_changed(index: int, age_seconds: float, state: Dictionary) -> void:
+	super._on_emergency_selection_changed(index, age_seconds, state)
 	_emergency_selected_index = index
 	if state.is_empty():
 		return
-	if _owns_standalone_time_core:
-		_restore_base_arena_state(state)
 	_apply_campaign_snapshot(state, true)
 
 
 func _on_emergency_confirmed(age_seconds: float, state: Dictionary) -> void:
+	super._on_emergency_confirmed(age_seconds, state)
 	if not state.is_empty():
-		if _owns_standalone_time_core:
-			_restore_base_arena_state(state)
 		_apply_campaign_snapshot(state, false)
 	if _emergency_selected_index > 0 or age_seconds != 0.0:
 		_rewound = true
 	_emergency_selected_index = 0
-	_clear_input_release_locks()
+	weapons.require_fresh_press = false
 

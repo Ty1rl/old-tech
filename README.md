@@ -7,14 +7,18 @@ Our game for [Ludum Dare 60](https://ldjam.com/events/ludum-dare/60).
 - **Engine:** Godot **4.7.2 Standard**, using the Compatibility renderer.
 
 Open `project.godot`, run the project, and choose **New Game**.
-The campaign crosses four museum areas and three bosses. Equipment is found in
-order: yellow flash camera, orange heat bellows, blue cutter, purple time device.
+The campaign crosses four museum areas and three bosses. Find the yellow flash
+camera, orange heat bellows, and blue cutter as you progress.
 
-WASD moves; mouse aims; 1–4 or Tab equips collected tools. Hold Space to slow;
-with the clock equipped, scroll down to rewind and release Space to commit.
-Press E to toggle repair; Tab/1–4 switches items inside repair and WASD still moves. R retries the room; Escape pauses.
+WASD moves; mouse aims; 1–3 or Tab equips collected weapons. Hold Space to slow
+time. E toggles repair; you can move and switch weapons while repairing.
+
+Time replaces player health: hits, slow motion and repair checkpoints spend a
+recharging meter. A depleting hit spends an emergency rewind charge. Scroll down
+to choose an earlier moment, then click or press Enter to recover. No charges left
+means retrying the room, keeping your equipment and learned tutorials.
 
 **Testing shortcuts:** Encounter select on the menu/pause screen, or F10 in play.
 Choose an area, encounter and optional boss phase. Required equipment is supplied.
-Set `SceneManager.developer_tools` to `false` to hide the testing entrypoints.
-See [mechanics and controls](scenes/prototype/README.md) for the details.
+Set `SceneManager.developer_tools` to `false` to hide these entrypoints.
+See [mechanics, source layout and checks](scenes/prototype/README.md).

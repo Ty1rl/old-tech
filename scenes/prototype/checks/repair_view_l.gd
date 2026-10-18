@@ -3,7 +3,7 @@ extends SceneTree
 const Equipment = preload("res://scenes/prototype/equipment.gd")
 const RepairScene = preload("res://scenes/prototype/repair.tscn")
 const Gestures = preload("res://scenes/prototype/repair_gestures.gd")
-const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-3/exports/repair-view-l"
+var OUT := OS.get_environment("XDG_DATA_HOME").get_base_dir() + "/exports/round-n/integration/repair_view_l/"
 var checks := 0
 var failures: Array[String] = []
 
@@ -56,11 +56,11 @@ func run() -> void:
 	arena.set_physics_process(false)
 	var gear = arena.equipment
 	var scenes := root.get_node("SceneManager")
-	for tool: StringName in [&"ring", &"beam", &"cone", &"clock"]:
+	for tool: StringName in [&"ring", &"beam", &"cone"]:
 		gear.reset_state()
 		gear.spend(tool, gear.capacity(tool))
 		arena.player.position = Vector3.ZERO
-		var panel: Control = scenes.push_popup(&"Repair", {"equipment": gear, "tool": tool})
+		var panel: Control = scenes.push_popup(&"Repair", {"equipment": gear, "tool": tool, "arena": arena, "time_controller": arena.time_controller})
 		await frames()
 		expect(not paused, "%s leaves world simulation unpaused" % tool)
 		var before: Vector3 = arena.player.position
@@ -102,7 +102,7 @@ func run() -> void:
 		root.push_input(toggle_close, true)
 		await frames()
 		expect(not scenes.has_popup(&"Repair") and gear.stage(tool) == 1, "%s pressing E toggles repair closed and retains checkpoint" % tool)
-		panel = scenes.push_popup(&"Repair", {"equipment": gear, "tool": tool})
+		panel = scenes.push_popup(&"Repair", {"equipment": gear, "tool": tool, "arena": arena, "time_controller": arena.time_controller})
 		await frames()
 		expect(panel.active_op_index == 1, "%s resumes next operation" % tool)
 		if panel.active_kind == &"connect":
@@ -118,7 +118,7 @@ func run() -> void:
 		else:
 			gesture(panel)
 		await frames()
-		expect(gear.is_full(tool) and gear.repairing == &"" and scenes.has_popup(&"Repair") and panel.progress.text.contains("Ready"), "%s full GUI gesture sequence completes to Ready state" % tool)
+		expect(gear.is_full(tool) and gear.repairing == &"" and not scenes.has_popup(&"Repair"), "%s full GUI gesture sequence automatically closes repair" % tool)
 		scenes.close_popup(&"Repair")
 		await frames()
 	arena.queue_free()

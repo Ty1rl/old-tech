@@ -70,7 +70,7 @@ func fire(charge: float, aim: Vector3 = Vector3(0, 0, -30)) -> void:
 	arena.weapons.select_tool(2)
 	arena.player.set_visual_tool(2)
 	arena.weapons.handle_event(button(true), arena.player, aim)
-	arena.weapons.step(charge * arena.weapons._beam_charge_duration(), arena.player, aim, [], 0)
+	arena.weapons.step(charge * arena.weapons.flash.settings.charge_time, arena.player, aim, [], 0)
 	arena.weapons.handle_event(button(false), arena.player, aim)
 
 
@@ -103,12 +103,12 @@ func run() -> void:
 	var far := fake(3, Vector3(0, 0, -12))
 	var off_line := fake(4, Vector3(2.1, 0, -6))
 	fire(1)
-	expect(arena.weapons.beam_pulses[0].piercing, "full charge marks pulse piercing at release")
+	expect(arena.weapons.flash.pulses[0].piercing, "full charge marks pulse piercing at release")
 	tick(0.35, [far, off_line, middle, near])
 	expect(hit_order == [1, 2, 3], "charged pulse hits actual intersected targets in geometric order")
 	expect(near.calls == 1 and middle.calls == 1 and far.calls == 1 and off_line.calls == 0, "no chain, bounce or off-line target hits")
 	expect(is_equal_approx(middle.health, 988), "armor keeps reduced ordinary body damage")
-	var pulse: Dictionary = arena.weapons.beam_pulses[0]
+	var pulse: Dictionary = arena.weapons.flash.pulses[0]
 	expect(pulse.hit_ids == [1, 2, 3] and pulse.pos.z < -14, "piercing keeps traveling and records stable hit IDs")
 	# Re-enter the same body's volume on subsequent ticks, including after rewind.
 	near.position = Vector3(0, 0, -14.9)
@@ -119,15 +119,15 @@ func run() -> void:
 	arena.weapons.restore_state(snapshot)
 	tick(0.01, [near])
 	expect(near.calls == 1, "rewind restores hit ledger before resuming flight")
-	expect(snapshot.beam_pulses[0].hit_ids == [1, 2, 3], "snapshot hit ledger does not alias live pulse state")
+	expect(snapshot.flash.pulses[0].hit_ids == [1, 2, 3], "snapshot hit ledger does not alias live pulse state")
 	tick(2, [near, middle, far])
-	expect(arena.weapons.beam_pulses.is_empty() and is_equal_approx(arena.weapons.beam_end.z, -35), "piercing stops at range")
+	expect(arena.weapons.flash.pulses.is_empty() and is_equal_approx(arena.weapons.flash.end_point.z, -35), "piercing stops at range")
 	fresh()
 	near = fake(7, Vector3(0, 0, -4))
 	far = fake(8, Vector3(0, 0, -8))
 	fire(1)
 	tick(.15, [near, far])
-	arena.weapons.beam_cooldown = 0
+	arena.weapons.flash.cooldown = 0
 	fire(1)
 	tick(.3, [near, far])
 	expect(near.calls == 2 and far.calls == 2, "simultaneous pulses each hit each enemy once with separate hit ledgers")
@@ -137,32 +137,32 @@ func run() -> void:
 		far = fake(12, Vector3(0, 0, -8))
 		fire(charge)
 		tick(0.5, [far, near])
-		expect(near.calls == 1 and far.calls == 0 and arena.weapons.beam_pulses.is_empty(), "tap/sub-threshold shot stops at first body %.2f" % charge)
+		expect(near.calls == 1 and far.calls == 0 and arena.weapons.flash.pulses.is_empty(), "tap/sub-threshold shot stops at first body %.2f" % charge)
 	fresh()
-	arena.weapons.beam_pierce_threshold = 0.8
+	arena.weapons.flash.settings.pierce_threshold = 0.8
 	near = fake(21, Vector3(0, 0, -4))
 	far = fake(22, Vector3(0, 0, -8))
 	fire(0.81)
 	tick(0.3, [near, far])
 	expect(near.calls == 1 and far.calls == 1, "local pierce threshold is configurable")
-	arena.weapons.beam_pierce_threshold = 0.9
+	arena.weapons.flash.settings.pierce_threshold = 0.9
 	fresh()
 	arena.player.position = Vector3(-5, .55, -1)
 	near = fake(31, Vector3(-5, 0, -2))
 	far = fake(32, Vector3(-5, 0, -8))
 	fire(1, Vector3(-5, 0, -15))
 	tick(0.5, [near, far])
-	expect(near.calls == 1 and far.calls == 0 and arena.weapons.beam_pulses.is_empty(), "pierce hits before cover and stops without reaching behind wall")
-	expect(is_equal_approx(arena.weapons.beam_end.z, -3), "pulse ends at actual solid cover")
+	expect(near.calls == 1 and far.calls == 0 and arena.weapons.flash.pulses.is_empty(), "pierce hits before cover and stops without reaching behind wall")
+	expect(is_equal_approx(arena.weapons.flash.end_point.z, -3), "pulse ends at actual solid cover")
 	expect(is_equal_approx(near.contexts[0].segment_end.z, -3), "mechanism segment is clipped to wall, never raw end beyond cover")
 	fresh()
 	near = fake(41, Vector3(0, 0, -6))
 	fire(1)
-	var start: Vector3 = arena.weapons.beam_pulses[0].pos
+	var start: Vector3 = arena.weapons.flash.pulses[0].pos
 	tick(1, [near], 0)
-	expect(arena.weapons.beam_pulses[0].pos == start and near.calls == 0, "inspection freeze stops piercing flight/actions")
+	expect(arena.weapons.flash.pulses[0].pos == start and near.calls == 0, "inspection freeze stops piercing flight/actions")
 	tick(0.5, [near], .5 * .18)
-	expect(is_equal_approx(arena.weapons.beam_pulses[0].pos.z, -3.78), "charged flight still follows slowed world delta")
+	expect(is_equal_approx(arena.weapons.flash.pulses[0].pos.z, -3.78), "charged flight still follows slowed world delta")
 	fresh()
 	var yellow1: Node3D = arena.director.spawn(&"yellow", Vector3(0, 0, -4))
 	var yellow2: Node3D = arena.director.spawn(&"yellow", Vector3(0, 0, -8))
@@ -183,7 +183,7 @@ func run() -> void:
 	tick(.9 * .9 + .001, [], 0)
 	tick(.1, [], 0)
 	expect(cues.count(&"flash_ready") == 1 and arena.weapons.presentation.pierce_ready, "ready cue fires once and aperture locks on")
-	expect(arena.weapons.beam_pulses.is_empty() and arena.weapons.presentation.mesh.get_aabb().size.length() < .9, "ready feedback remains on aperture with no forward beam")
+	expect(arena.weapons.flash.pulses.is_empty() and arena.weapons.presentation.mesh.get_aabb().size.length() < .9, "ready feedback remains on aperture with no forward beam")
 	arena.weapons.handle_event(button(false), arena.player, Vector3(0, 0, -12))
 	expect(cues.count(&"flash_pierce") == 1 and cues.count(&"flash_fire") == 1, "charged release has semantic fire and pierce feedback")
 	# Display smoothing preserves raw data, endpoints, turns and cover stops.
@@ -203,15 +203,16 @@ func run() -> void:
 	for smooth in [false, true]:
 		fresh()
 		var blue: Node3D = arena.director.spawn(&"blue", Vector3(0, 0, -7))
-		arena.weapons.cutter_display_smoothing = smooth
+		arena.weapons.ring.settings = arena.weapons.ring.settings.duplicate()
+		arena.weapons.ring.settings.display_smoothing = smooth
 		arena.weapons.select_tool(1)
 		arena.weapons.handle_event(button(true), arena.player, Vector3(-2, 0, -7))
 		for point in [Vector3(-1, 0, -6.98), Vector3(0, 0, -7.03), Vector3(1, 0, -7)]:
 			var motion := InputEventMouseMotion.new()
 			arena.weapons.handle_event(motion, arena.player, point)
-		var sampled: Array[Vector3] = arena.weapons.preview_points.duplicate()
-		arena.weapons._rebuild_visuals(arena.player, Vector3(1, 0, -7))
-		expect(sampled == arena.weapons.preview_points, "render does not mutate raw sampled cutter path")
+		var sampled: Array[Vector3] = arena.weapons.ring.preview_points.duplicate()
+		arena.weapons.rebuild_visuals(arena.player)
+		expect(sampled == arena.weapons.ring.preview_points, "render does not mutate raw sampled cutter path")
 		arena.weapons.handle_event(button(false), arena.player, Vector3(2, 0, -7))
 		tick(.8, [blue])
 		outcomes.append([blue.health, blue.cable_cut])
@@ -219,8 +220,8 @@ func run() -> void:
 	fresh()
 	var custom := fake(51, Vector3(0, 0, -4))
 	custom.pattern = true
-	arena.weapons._sweep_ring_segment(Vector3(-1, 0, -4), Vector3(1, 0, -4), [custom])
-	arena.weapons._sweep_ring_segment(Vector3(1, 0, -4), Vector3(-1, 0, -4), [custom])
+	arena.weapons.ring._sweep_segment(Vector3(-1, 0, -4), Vector3(1, 0, -4), [custom])
+	arena.weapons.ring._sweep_segment(Vector3(1, 0, -4), Vector3(-1, 0, -4), [custom])
 	expect(custom.progress == 2 and custom.health == 964 and custom.contexts[1].already_hit, "custom pattern receives later ring segments without duplicate body damage")
 	fresh()
 	arena.feedback.reset_state()

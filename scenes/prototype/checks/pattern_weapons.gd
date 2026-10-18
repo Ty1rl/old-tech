@@ -1,5 +1,4 @@
 extends SceneTree
-const Preview = preload("res://scenes/pattern_preview/main.gd")
 var checks := 0
 var failures: Array[String] = []
 var scene: Node3D
@@ -15,9 +14,9 @@ func mouse(down: bool) -> InputEventMouseButton:
 func reset(index: int) -> void:
 	scene.chosen = index
 	scene.reset_enemy()
-	scene.weapons.ring_phase = "idle"
-	scene.weapons.beam_pulses.clear()
-	scene.weapons.beam_cooldown = 0
+	scene.weapons.ring.flight_phase = "idle"
+	scene.weapons.flash.pulses.clear()
+	scene.weapons.flash.cooldown = 0
 func real_shot(charge: bool, dt: float) -> void:
 	var aim: Vector3 = scene.enemy.core_world_position()
 	var w: Node3D = scene.weapons
@@ -39,7 +38,7 @@ func launch(path: Array[Vector3]) -> void:
 		w.step(1.0 / 60, scene.player, path[-1], [scene.enemy], 1.0 / 60)
 		scene.enemy.step_enemy(1.0 / 60, null)
 func run() -> void:
-	scene = Preview.new()
+	scene = load("res://scenes/pattern_preview/main.gd").new()
 	root.add_child(scene)
 	scene.set_physics_process(false)
 	await physics_frame
@@ -72,19 +71,19 @@ func run() -> void:
 	# Warning → commitment → recovery; no contact damage during warning/freeze.
 	reset(0)
 	scene.player.position = Vector3(0, 0, 1.4)
-	var hp: float = scene.player.health
+	var hp: float = scene.time_controller.meter
 	scene.enemy.step_enemy(0.01, scene.player)
-	expect(scene.enemy.attack_phase == &"windup" and scene.player.health == hp, "Contact warns before damage")
+	expect(scene.enemy.attack_phase == &"windup" and scene.time_controller.meter == hp, "Contact warns before damage")
 	var winding: Dictionary = scene.enemy.capture_state()
 	scene.enemy.step_enemy(0, scene.player)
 	expect(scene.enemy.attack_timer == winding.attack_timer, "Frozen world stops attack timer")
 	scene.enemy.step_enemy(0.81, scene.player)
-	expect(scene.enemy.attack_phase == &"commit" and scene.player.health == hp, "Windup leads to visible commitment")
+	expect(scene.enemy.attack_phase == &"commit" and scene.time_controller.meter == hp, "Windup leads to visible commitment")
 	scene.enemy.step_enemy(0.19, scene.player)
-	expect(scene.enemy.attack_phase == &"recover" and scene.player.health < hp, "Committed attack hits once then recovers")
-	hp = scene.player.health
+	expect(scene.enemy.attack_phase == &"recover" and scene.time_controller.meter < hp, "Committed attack hits once then recovers")
+	hp = scene.time_controller.meter
 	scene.enemy.step_enemy(1, scene.player)
-	expect(scene.enemy.attack_phase == &"recover" and scene.player.health == hp, "Long recovery leaves an action window")
+	expect(scene.enemy.attack_phase == &"recover" and scene.time_controller.meter == hp, "Long recovery leaves an action window")
 	scene.enemy.restore_state(winding)
 	expect(scene.enemy.attack_phase == &"windup" and scene.enemy.attack_timer == winding.attack_timer, "Rewind restores attack warning")
 	var position_before: Vector3 = scene.player.position

@@ -68,7 +68,7 @@ func run() -> void:
 	weapons.charge = 0
 	# Real baseline repair panel is only a display fixture; jam-3 owns its migration.
 	equipment.begin_repair(&"beam")
-	var repair = load("res://scenes/prototype/repair.gd").new()
+	var repair = load("res://scenes/prototype/repair.tscn").instantiate()
 	repair.setup({"equipment": equipment, "tool": &"beam", "available_tools": [1,2,3]})
 	layer.add_child(repair)
 	hud.update_status(player, weapons, equipment); await snap("09-repair-meter")

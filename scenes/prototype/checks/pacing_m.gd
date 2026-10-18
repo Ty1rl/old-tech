@@ -37,7 +37,7 @@ func run() -> void:
 	expect(is_equal_approx(gear.capacity(&"ring"), 24.0), "Ring capacity increased moderately to 24 launches")
 	expect(is_equal_approx(gear.capacity(&"beam"), 64.0), "Beam capacity increased moderately to 64 shots")
 	expect(is_equal_approx(gear.capacity(&"cone"), 24.0), "Cone capacity increased moderately to 24 seconds")
-	expect(is_equal_approx(gear.capacity(&"clock"), 18.0), "Clock capacity increased moderately to 18 seconds")
+	expect(gear.capacity(&"clock") == 0.0, "Time is not repairable weapon equipment")
 
 	# 2. Equipment.training_protection policy and anti-bypass guarantees
 	expect(gear.training_protection.is_empty(), "Equipment starts with empty training_protection by default")

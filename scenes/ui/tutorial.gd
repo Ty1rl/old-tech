@@ -14,7 +14,7 @@ const VIOLET := Color("ba9ce9")
 const LESSONS := {
 	"cut": ["Cut the blue connection", "1 · Hold the mouse, draw across the blue link, then release. The cutter follows your line. A bare blue link dismantles its host; armored hosts may need a yellow finisher.", "cut"],
 	"heat": ["Strip the orange armor", "3 · Aim at the orange covering and hold the mouse until it breaks. Heat also pushes nearby enemies back, helping you make an escape.", "heat"],
-	"shot": ["Aim for yellow", "2 · Aim at the yellow core and click. An exposed core needs only a quick shot.", "shot"],
+	"shot": ["Aim for yellow", "2 · Aim at the yellow core and click. An exposed core needs only a quick shot.\n\nPurple time recharges. Hits, slow motion and repairs spend it. If a hit empties it, an emergency rewind charge saves you.", "shot"],
 	"slow": ["Make yourself time", "Your time meter fuels slow-motion, repairs, and survival. Keep 1 selected and hold Space to slow the world. Draw across the blue link and release the mouse while time is slow. Release Space to return to full speed.", "slow"],
 	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and press E to toggle repair open. Follow the matching-shape contacts to spin or trace the marked circuit and restore one section. Press E again to close (or Tab / 1–3 to switch tools); completed repairs stay fixed.", "repair"],
 	"charge": ["A charged shot goes through", "2 · Hold the mouse until the lens is bright, then release. A full charge pierces enemies in its path. Solid cover stops it.", "charge"],
@@ -22,7 +22,7 @@ const LESSONS := {
 	"pair": ["A, then B", "2 · Shoot A to open B. Shoot B before its shutter closes. Quick aimed shots work. If you wait, try the pair again.", "pair"],
 	"loop": ["Cut every support", "1 · Draw around the creature through every blue support before the links reconnect. A finished loop leaves the yellow core open. Switch to 2, hold to charge, then release at the core.", "loop"],
 	"zigzag": ["Follow the blue spans", "1 · Bend your line across each blue span before they reconnect. Keep your turns deliberate. Finish the pattern, then use a charged shot from 2 on yellow.", "zigzag"],
-	"rewind": ["Take back a bad moment", "When a hit empties your time meter, one emergency charge is spent and the world freezes. Begin practice, wait for the forced depletion, scroll the mouse wheel down to an earlier safe moment, then click or press Enter to recover there.", "rewind"],
+	"rewind": ["Take back a bad moment", "When a hit empties your time meter, one emergency charge is spent and the world freezes. Begin practice, wait for the forced depletion, scroll the mouse wheel down to an earlier safe moment, then click or press Enter to recover there. Recovery restores time, not the spent charge. No charges left means retrying this room; learned tutorials stay learned.", "rewind"],
 	"final": ["Dismantle the burial device", "Shoot A then B. Cut the zigzag, then the loop of supports. Each completed opening stays. Finish with the yellow core.", "final"],
 }
 var blocking := false

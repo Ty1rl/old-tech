@@ -35,7 +35,7 @@ func run()->void:
 	if arena.has_method("debug_start"):
 		expect(arena.room_index==3 and arena.mode==&"pressure","Selected boss checkpoint starts without replaying tutorials")
 		expect(arena.director.enemies.size()==1 and arena.director.enemies[0].phase==2,"Selected phase reaches a live boss")
-		expect(arena.weapons.available_tools==[2,3,1,4],"Late encounter includes required equipment")
+		expect(arena.weapons.available_tools==[2,3,1],"Late encounter includes required equipment")
 		scenes.push_popup(&"Developer")
 		var before:Dictionary=arena.capture_state()
 		arena._physics_process(.5)

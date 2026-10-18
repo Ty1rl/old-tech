@@ -1,3 +1,4 @@
+class_name ScrubView
 extends RefCounted
 
 # A temporary display pose in the frozen inspection world. Call finish() before
@@ -13,10 +14,10 @@ var _tracks: Array[Dictionary] = []
 var _from: Dictionary = {}
 var _target: Dictionary = {}
 var _player: Node3D
-var _weapons: Node3D
+var _weapons: WeaponController
 
 
-func capture_pose(player: Node3D, director: Node3D, weapons: Node3D) -> Dictionary:
+func capture_pose(player: Node3D, director: Node3D, weapons: WeaponController) -> Dictionary:
 	var pose := {"enemies": {}, "pulses": []}
 	if is_instance_valid(player):
 		pose["player"] = player.transform
@@ -37,16 +38,16 @@ func capture_pose(player: Node3D, director: Node3D, weapons: Node3D) -> Dictiona
 			pose.enemies[int(enemy.combat_id())] = entry
 			count += 1
 	if is_instance_valid(weapons):
-		pose["ring"] = weapons.get("ring_pos")
-		pose["ring_visible"] = weapons.get("ring_phase") != "idle"
-		for pulse in weapons.get("beam_pulses"):
+		pose["ring"] = weapons.ring.head
+		pose["ring_visible"] = weapons.ring.flight_phase != "idle"
+		for pulse in weapons.flash.pulses:
 			if pose.pulses.size() >= MAX_PULSES:
 				break
 			pose.pulses.append(pulse["pos"])
 	return pose
 
 
-func begin(from_pose: Dictionary, player: Node3D, director: Node3D, weapons: Node3D) -> void:
+func begin(from_pose: Dictionary, player: Node3D, director: Node3D, weapons: WeaponController) -> void:
 	finish()
 	_from = from_pose.duplicate(true)
 	_target = capture_pose(player, director, weapons)
@@ -132,12 +133,12 @@ func _apply(weight: float) -> void:
 	var ring: Vector3 = _target.get("ring", Vector3.ZERO)
 	if weight < 1.0 and _from.get("ring_visible", false) and _target.get("ring_visible", false):
 		ring = (_from.get("ring", ring) as Vector3).lerp(ring, weight)
-	_weapons.set("ring_pos", ring)
-	var pulses: Array = _weapons.get("beam_pulses")
+	_weapons.ring.head = ring
+	var pulses: Array = _weapons.flash.pulses
 	var old_pulses: Array = _from.get("pulses", [])
 	var target_pulses: Array = _target.get("pulses", [])
 	for index in range(mini(pulses.size(), target_pulses.size())):
 		var target_position: Vector3 = target_pulses[index]
 		pulses[index]["pos"] = target_position if weight >= 1.0 or index >= old_pulses.size() else (old_pulses[index] as Vector3).lerp(target_position, weight)
 	var player: Node3D = _player if is_instance_valid(_player) else null
-	_weapons.call("_rebuild_visuals", player, _weapons.get("last_aim"))
+	_weapons.rebuild_visuals(player)

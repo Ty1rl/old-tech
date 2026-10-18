@@ -49,7 +49,7 @@ func draw_ring(start: Vector3, finish: Vector3) -> void:
 
 func repair_tool(tool: StringName) -> void:
 	var session: int = arena.equipment.begin_repair(tool)
-	for section in range(Tuning.REPAIR_STEPS):
+	for section in range(arena.equipment.repair_steps):
 		arena.equipment.complete_step(tool)
 	arena.equipment.end_repair(session)
 
@@ -123,28 +123,28 @@ func run() -> void:
 	draw_ring(Vector3(-2, 0, -3), Vector3(2, 0, -3))
 	var state = root.get_node("GameState")
 	state.pause()
-	expect(arena.weapons.ring_phase == "outbound", "Pause cancels held input but preserves launched ring")
+	expect(arena.weapons.ring.flight_phase == "outbound", "Pause cancels held input but preserves launched ring")
 	state.resume()
 	await process_frame
 	arena.player.position.x = 4
 	weapon_tick(2, target.position)
-	expect(arena.weapons.ring_phase == "idle" and arena.weapons.ring_pos.x == 4,
+	expect(arena.weapons.ring.flight_phase == "idle" and arena.weapons.ring.head.x == 4,
 		"Resumed ring returns to moved player")
 
 	fresh_enemy(&"swarmer", Vector3(0, 0, -8))
 	var swarmer: Node3D = arena.director.enemies[0]
-	arena.player._step_slow(0.5, false)
-	arena.player._step_slow(0.5, true)
+	arena.time_controller.slow_requested = true
+	arena.time_controller.advance(0.5)
 	var start: Vector3 = swarmer.position
 	arena.director.step(0.5 * arena.player.world_scale, arena.player)
-	expect(is_equal_approx(swarmer.position.distance_to(start), Tuning.ENEMIES.swarmer.speed * 0.5 * Tuning.SLOW.scale),
+	expect(is_equal_approx(swarmer.position.distance_to(start), Tuning.ENEMIES.swarmer.speed * 0.5 * arena.time_controller.settings.slow_scale),
 		"Arena timing policy slows real enemy movement")
-	expect(is_equal_approx(arena.player.slow_charge, arena.equipment.capacity(&"clock") - 0.5 * Tuning.SLOW.drain), "Slow resource drains in real time")
+	expect(is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity - 0.5 * arena.time_controller.settings.slow_drain_per_second), "Slow resource drains in real time")
 
 	arena.weapons.select_tool(3)
 	arena.weapons.handle_event(mouse(true), arena.player, swarmer.position)
 	arena._unhandled_input(key(KEY_R))
-	expect(not arena.weapons.cone_active and arena.weapons.ring_phase == "idle" and arena.player.world_scale == 1,
+	expect(not arena.weapons.bellows.active and arena.weapons.ring.flight_phase == "idle" and arena.player.world_scale == 1,
 		"Reset key clears active attacks and restores world time")
 	expect(arena.director.enemies.size() == 1 and arena.director.enemies[0].kind == &"target", "Reset key restores target encounter")
 	arena._unhandled_input(key(KEY_F5))
@@ -160,13 +160,13 @@ func run() -> void:
 		"Actual cone burst staggers and displaces actual swarmer")
 	var before_push: Vector3 = pushed.position
 	arena.director.step(0.1, arena.player)
-	expect(pushed.position.z < before_push.z and arena.player.health == Tuning.PLAYER.health,
+	expect(pushed.position.z < before_push.z and arena.time_controller.meter == arena.time_controller.capacity,
 		"Burst buys space while suppressing contact attacks")
 
 	arena._unhandled_input(key(KEY_F6))
-	expect(arena.equipment.remaining(&"clock") == arena.equipment.capacity(&"clock") and arena.director.encounter_active,
+	expect(arena.time_controller.meter == arena.time_controller.capacity and arena.director.encounter_active,
 		"Encounter key resets equipment and starts bounded sequence")
-	expect(arena.slow_bar.max_value == arena.equipment.capacity(&"clock"), "HUD meter matches shared clock capacity")
+	expect(arena.slow_bar.max_value == arena.time_controller.capacity, "HUD meter matches shared clock capacity")
 
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

@@ -109,12 +109,12 @@ func run() -> void:
 	click_down.button_index = MOUSE_BUTTON_LEFT
 	click_down.pressed = true
 	arena.weapons.handle_event(click_down, arena.player, shot_aim)
-	expect(arena.weapons.beam_charging, "First mouse press after explanation immediately starts charging/arming beam")
+	expect(arena.weapons.flash.charging, "First mouse press after explanation immediately starts charging/arming beam")
 	var click_up := InputEventMouseButton.new()
 	click_up.button_index = MOUSE_BUTTON_LEFT
 	click_up.pressed = false
 	arena.weapons.handle_event(click_up, arena.player, shot_aim)
-	expect(not arena.weapons.beam_pulses.is_empty(), "Releasing first click immediately launches quick-shot pulse")
+	expect(not arena.weapons.flash.pulses.is_empty(), "Releasing first click immediately launches quick-shot pulse")
 	arena.weapons.step(0.6, arena.player, shot_aim, arena.director.enemies, 0.6)
 	tick(0.02)
 	expect(arena.tutorial.is_learned(&"shot") and arena.mode == &"pressure", "First shot input immediately after explanation hits specimen and completes lesson")

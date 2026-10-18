@@ -2,12 +2,6 @@ extends SceneTree
 
 const Feedback = preload("res://scenes/prototype/combat_feedback.gd")
 
-class WeaponState extends Node3D:
-	var ring_phase := "idle"
-	var beam_charging := false
-	var beam_charge := 0.0
-	var cone_active := false
-
 var checks := 0
 var failures: Array[String] = []
 
@@ -22,7 +16,7 @@ func run() -> void:
 	var saved_config := FileAccess.get_file_as_bytes(path) if had_config else PackedByteArray()
 	var feedback := Feedback.new()
 	root.add_child(feedback)
-	var weapons := WeaponState.new()
+	var weapons := preload("res://scenes/weapons/weapons.tscn").instantiate()
 	root.add_child(weapons)
 	var original_mute: bool = feedback.muted
 	if feedback.muted:
@@ -75,10 +69,10 @@ func run() -> void:
 	for index in range(70):
 		feedback.step(0.02, 0.02, 1.0, false, 0.0, weapons, null)
 	expect(feedback.clock_pitch > 0.99, "Mechanical loop returns to normal speed")
-	weapons.ring_phase = "outbound"
-	weapons.beam_charging = true
-	weapons.beam_charge = 0.8
-	weapons.cone_active = true
+	weapons.ring.flight_phase = "outbound"
+	weapons.flash.charging = true
+	weapons.flash.charge = 0.8
+	weapons.bellows.active = true
 	feedback.step(0.10, 0.10, 1.0, false, 0.0, weapons, null)
 	await create_timer(0.15).timeout
 	var stats: Dictionary = feedback.metrics()

@@ -152,10 +152,10 @@ func step(real_delta: float, world_delta: float, world_scale: float, inspecting:
 	var cone_active := false
 	var charge := 0.0
 	if weapons != null and not inspecting:
-		ring_active = String(weapons.get("ring_phase")) != "idle"
-		charge_active = bool(weapons.get("beam_charging"))
-		cone_active = bool(weapons.get("cone_active"))
-		charge = clampf(float(weapons.get("beam_charge")), 0.0, 1.0)
+		ring_active = weapons.ring.flight_phase != "idle"
+		charge_active = weapons.flash.charging
+		cone_active = weapons.bellows.active
+		charge = clampf(weapons.flash.charge, 0.0, 1.0)
 	_set_loop(&"ring_loop", 0.8 if ring_active else 0.0, world_pitch, dt)
 	_set_loop(&"charge_loop", 0.55 + charge * 0.45 if charge_active else 0.0, (0.72 + charge * 0.65) * world_pitch, dt)
 	_set_loop(&"cone_loop", 0.65 if cone_active else 0.0, world_pitch, dt)

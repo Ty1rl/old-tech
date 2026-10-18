@@ -8,7 +8,7 @@ const TOOLS: Array[StringName] = [&"ring", &"beam", &"cone"]
 const COLORS: Array[Color] = [ToolStyle.RING, ToolStyle.BEAM, ToolStyle.CONE]
 const NAMES: Array[String] = ["Ring", "Flash", "Cone"]
 const TIME_COLOR := Color("bf92e8")
-const CHECKPOINTS: int = preload("res://scenes/prototype/tuning.gd").REPAIR_STEPS
+var checkpoints: int = 4 # Updated from the active equipment resource.
 const READOUT_FILE := "user://combat-hud.cfg"
 const READOUT_ALPHA: Array[float] = [1.0, 0.25, 0.0]
 
@@ -81,6 +81,7 @@ func set_combat_hint(muted: bool) -> void:
 	if developer: key_hint.text += " · F10 encounters"
 
 func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> void:
+	checkpoints = equipment.repair_steps
 	tracked_player = player
 	var camera: Camera3D = player.camera
 	visible = not camera.is_position_behind(player.global_position)
@@ -136,11 +137,11 @@ func _draw() -> void:
 		var end := -PI + (i + 1) * PI / 3.0 - .08
 		var color := Color(COLORS[i], .92 if active else .22)
 		# Each quarter is one real repair checkpoint, including partial condition.
-		for checkpoint in range(CHECKPOINTS):
-			var a := lerpf(start, end, float(checkpoint) / CHECKPOINTS) + .018
-			var b := lerpf(start, end, float(checkpoint + 1) / CHECKPOINTS) - .018
+		for checkpoint in range(checkpoints):
+			var a := lerpf(start, end, float(checkpoint) / checkpoints) + .018
+			var b := lerpf(start, end, float(checkpoint + 1) / checkpoints) - .018
 			draw_arc(center, radius, a, b, 10, Color(COLORS[i], .14 if active else .06), 7 * _scale, true)
-			var fill := clampf(fractions[i] * CHECKPOINTS - checkpoint, 0, 1)
+			var fill := clampf(fractions[i] * checkpoints - checkpoint, 0, 1)
 			if fill > 0:
 				draw_arc(center, radius, a, lerpf(a, b, fill), 10, color, 6 * _scale, true)
 		if active:

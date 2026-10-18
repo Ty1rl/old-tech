@@ -39,10 +39,10 @@ func run() -> void:
 	arena.player.model.basis = Basis.IDENTITY
 	enemy.position = Vector3(0, 0, -5)
 	enemy.visual_root.basis = Basis.IDENTITY
-	arena.weapons.ring_phase = "stroke"
-	arena.weapons.ring_points.assign([Vector3(0, 0, -4), Vector3(5, 0, -4)])
-	arena.weapons.ring_pos = Vector3(0, 0, -4)
-	arena.weapons.beam_pulses.assign([pulse(Vector3(0, 0, -2))])
+	arena.weapons.ring.flight_phase = "stroke"
+	arena.weapons.ring.flight_points.assign([Vector3(0, 0, -4), Vector3(5, 0, -4)])
+	arena.weapons.ring.head = Vector3(0, 0, -4)
+	arena.weapons.flash.pulses.assign([pulse(Vector3(0, 0, -2))])
 	arena.player.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 	enemy.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_INHERIT
 	var old := view.capture_pose(arena.player, arena.director, arena.weapons)
@@ -56,9 +56,9 @@ func run() -> void:
 	enemy.facing = Vector3.RIGHT
 	# Visual facing is captured independently of the authoritative facing vector.
 	enemy.visual_root.basis = Basis(Vector3.UP, PI * 0.5)
-	arena.weapons.ring_pos = Vector3(8, 0, -4)
-	arena.weapons.beam_pulses[0].pos = Vector3(8, 0, -2)
-	arena.weapons.beam_cooldown = 0.8
+	arena.weapons.ring.head = Vector3(8, 0, -4)
+	arena.weapons.flash.pulses[0].pos = Vector3(8, 0, -2)
+	arena.weapons.flash.cooldown = 0.8
 	var target: Dictionary = arena.capture_state()
 	var target_bytes := var_to_bytes(target)
 	var target_pose := view.capture_pose(arena.player, arena.director, arena.weapons)
@@ -74,10 +74,10 @@ func run() -> void:
 	expect(is_equal_approx(arena.player.position.x, 4.0) and is_equal_approx(enemy.position.x, 4.0), "Halfway player and enemy positions blend")
 	expect(arena.player.model.basis.is_equal_approx(Basis(Vector3.UP, PI * 0.25))
 		and enemy.visual_root.basis.is_equal_approx(Basis(Vector3.UP, PI * 0.25)), "Model and enemy visual orientation blend")
-	expect(arena.weapons.ring_pos.is_equal_approx(Vector3(4, 0, -4))
-		and arena.weapons.beam_pulses[0].pos.is_equal_approx(Vector3(4, 0, -2)), "Ring and matching flash pulse positions blend")
+	expect(arena.weapons.ring.head.is_equal_approx(Vector3(4, 0, -4))
+		and arena.weapons.flash.pulses[0].pos.is_equal_approx(Vector3(4, 0, -2)), "Ring and matching flash pulse positions blend")
 	expect(enemy.health == 23 and enemy.flash_timer == 0.12 and enemy.facing == Vector3.RIGHT
-		and arena.weapons.beam_cooldown == 0.8 and arena.weapons.beam_pulses[0].remaining_range == 15.0,
+		and arena.weapons.flash.cooldown == 0.8 and arena.weapons.flash.pulses[0].remaining_range == 15.0,
 		"Preview preserves health, facing gameplay vector, feedback and flight timers")
 	expect(var_to_bytes(old) == old_bytes and var_to_bytes(target) == target_bytes, "Pose and gameplay snapshots remain immutable")
 	var intermediate := view.capture_pose(arena.player, arena.director, arena.weapons)
@@ -88,14 +88,14 @@ func run() -> void:
 		and enemy.physics_interpolation_mode == Node.PHYSICS_INTERPOLATION_MODE_INHERIT, "Finish restores original interpolation modes")
 	expect(arena.capture_state() == target, "Finish restores exact gameplay state with no events or timer changes")
 	arena.player.position.x = -4
-	arena.weapons.ring_pos.x = -4
-	arena.weapons.beam_pulses[0].pos.x = -4
+	arena.weapons.ring.head.x = -4
+	arena.weapons.flash.pulses[0].pos.x = -4
 	view.begin(intermediate, arena.player, arena.director, arena.weapons)
-	expect(arena.player.position.x == 4.0 and arena.weapons.ring_pos.x == 4.0, "Rapid reversal starts from current displayed intermediate pose")
+	expect(arena.player.position.x == 4.0 and arena.weapons.ring.head.x == 4.0, "Rapid reversal starts from current displayed intermediate pose")
 	view.step(ScrubView.DURATION * 0.5)
-	expect(is_equal_approx(arena.player.position.x, 0.0) and is_equal_approx(arena.weapons.ring_pos.x, 0.0), "Rapid reversal blends without snapping to previous snapshot")
+	expect(is_equal_approx(arena.player.position.x, 0.0) and is_equal_approx(arena.weapons.ring.head.x, 0.0), "Rapid reversal blends without snapping to previous snapshot")
 	view.step(1.0)
-	expect(not view.active and arena.player.position.x == -4.0 and arena.weapons.ring_pos.x == -4.0,
+	expect(not view.active and arena.player.position.x == -4.0 and arena.weapons.ring.head.x == -4.0,
 		"Oversized delta ends exactly at target")
 	view.finish()
 	expect(arena.player.physics_interpolation_mode == Node.PHYSICS_INTERPOLATION_MODE_ON, "Repeated finish is harmless")
@@ -122,12 +122,12 @@ func run() -> void:
 	view.finish()
 	old = view.capture_pose(arena.player, arena.director, arena.weapons)
 	arena.director.clear()
-	arena.weapons.beam_pulses.clear()
-	arena.weapons.ring_phase = "idle"
+	arena.weapons.flash.pulses.clear()
+	arena.weapons.ring.flight_phase = "idle"
 	view.begin(old, arena.player, arena.director, arena.weapons)
 	view.step(ScrubView.DURATION * 0.5)
-	expect(arena.director.enemies.is_empty() and arena.weapons.beam_pulses.is_empty()
-		and arena.weapons.ring_phase == "idle", "Deleted enemies and attacks stay deleted without ghosts")
+	expect(arena.director.enemies.is_empty() and arena.weapons.flash.pulses.is_empty()
+		and arena.weapons.ring.flight_phase == "idle", "Deleted enemies and attacks stay deleted without ghosts")
 	view.finish()
 	old = view.capture_pose(arena.player, arena.director, arena.weapons)
 	view.begin(old, arena.player, arena.director, arena.weapons)

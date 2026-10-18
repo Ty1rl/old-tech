@@ -128,13 +128,13 @@ func run() -> void:
 	player.reset_state()
 	var slow_start: float = visual.walk_phase
 	for tick in range(10):
-		visual.step_visual(0.04 * float(Tuning.SLOW.scale), 6.0, 6.0, Vector3(0, 0, -6.0))
+		visual.step_visual(0.04 * float(arena.time_controller.settings.slow_scale), 6.0, 6.0, Vector3(0, 0, -6.0))
 	var slow_delta: float = visual.walk_phase - slow_start
 	var norm_start: float = visual.walk_phase
 	for tick in range(10):
 		visual.step_visual(0.04, 6.0, 6.0, Vector3(0, 0, -6.0))
 	var norm_delta: float = visual.walk_phase - norm_start
-	expect(absf(slow_delta / norm_delta - float(Tuning.SLOW.scale)) < 0.01,
+	expect(absf(slow_delta / norm_delta - float(arena.time_controller.settings.slow_scale)) < 0.01,
 		"Slow-time gait phase scales by exact world_scale ratio")
 
 	var scrub := ScrubView.new()
@@ -166,7 +166,7 @@ func run() -> void:
 		{"name": "turn", "vel": Vector3(2.5, 0, -4.5), "dt": 0.04, "yaw_step": deg_to_rad(4.8)},
 		{"name": "backward", "vel": Vector3(0, 0, 4.5), "dt": 0.04, "yaw_step": 0.0},
 		{"name": "strafe", "vel": Vector3(5.5, 0, 0), "dt": 0.04, "yaw_step": 0.0},
-		{"name": "slow", "vel": Vector3(0, 0, -6.0), "dt": 0.04 * float(Tuning.SLOW.scale), "yaw_step": 0.0},
+		{"name": "slow", "vel": Vector3(0, 0, -6.0), "dt": 0.04 * float(arena.time_controller.settings.slow_scale), "yaw_step": 0.0},
 	]
 	for reg: Dictionary in regimes:
 		player.reset_state()

@@ -92,7 +92,7 @@ func run() -> void:
 	mouse.pressed = true
 	root.push_input(mouse)
 	await settle()
-	expect(not arena.weapons.beam_charging, "Settings mouse press cannot start attack in paused arena")
+	expect(not arena.weapons.flash.charging, "Settings mouse press cannot start attack in paused arena")
 	var escape := InputEventKey.new()
 	escape.physical_keycode = KEY_ESCAPE
 	escape.keycode = KEY_ESCAPE
@@ -106,7 +106,7 @@ func run() -> void:
 	mouse.pressed = false
 	root.push_input(mouse)
 	await settle()
-	expect(not arena.weapons.beam_charging and arena.weapons.beam_cooldown <= 0, "Closing settings and resuming cannot fire a stale mouse release")
+	expect(not arena.weapons.flash.charging and arena.weapons.flash.cooldown <= 0, "Closing settings and resuming cannot fire a stale mouse release")
 	var layer := CanvasLayer.new()
 	layer.layer = 60
 	root.add_child(layer)

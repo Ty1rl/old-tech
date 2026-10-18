@@ -41,11 +41,12 @@ func run() -> void:
 	var overlap_target = director.spawn(&"target", Vector3.ZERO)
 	for i in range(10):
 		director.step(0.2, player)
-	expect(is_equal_approx(player.health, 100.0) and overlap_target.position.length() < 0.001, "Stationary test target never moves or damages player")
+	expect(is_equal_approx(arena.time_controller.meter, 100.0) and overlap_target.position.length() < 0.001, "Stationary test target never moves or damages player")
 
 	# 3. Brute directional armor: front vs side vs rear using contact_world (not player position)
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	player.position = Vector3(0.0, 0.55, 0.0) # Player stands in front (+Z) of the brute
 	var brute = director.spawn(&"brute", Vector3(0.0, 0.0, -6.0))
 	brute.facing = Vector3(0.0, 0.0, 1.0) # Facing +Z toward player
@@ -77,35 +78,37 @@ func run() -> void:
 	# 5. Swarmer approach, XZ-only contact judgment, world-delta contact cooldown, and time-slow scaling
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	player.position = Vector3(0.0, 4.0, 0.0) # Elevated Y to verify XZ-only contact check
 	var runner = director.spawn(&"swarmer", Vector3(0.0, 0.0, -2.0))
 	for i in range(10):
 		director.step(0.05, player)
-	expect(is_equal_approx(player.health, 95.0), "Swarmer closes in XZ and deals 5 contact damage ignoring player Y height")
+	expect(is_equal_approx(arena.time_controller.meter, 95.0), "Swarmer closes in XZ and deals 5 contact damage ignoring player Y height")
 
 	# Step 0.4 world seconds (< 1.0s CONTACT_COOLDOWN): no second hit yet
 	director.step(0.4, player)
-	expect(is_equal_approx(player.health, 95.0), "Contact cooldown prevents immediate repeat damage within 1.0 world second")
+	expect(is_equal_approx(arena.time_controller.meter, 95.0), "Contact cooldown prevents immediate repeat damage within 1.0 world second")
 
 	# Under time slow (world_scale = 0.18), 2.0 real seconds = 0.36 world seconds (total 0.76s < 1.0s): still on cooldown
 	for i in range(20):
-		director.step(0.1 * Tuning.SLOW.scale, player)
-	expect(is_equal_approx(player.health, 95.0), "Time-slowed world_delta scales enemy contact cooldown")
+		director.step(0.1 * arena.time_controller.settings.slow_scale, player)
+	expect(is_equal_approx(arena.time_controller.meter, 95.0), "Time-slowed world_delta scales enemy contact cooldown")
 
 	# Advance remaining 0.3 world seconds (total 1.06s >= 1.0s): second contact hit triggers
 	director.step(0.3, player)
-	expect(is_equal_approx(player.health, 90.0), "Swarmer deals second contact hit once world-time cooldown expires")
+	expect(is_equal_approx(arena.time_controller.meter, 90.0), "Swarmer deals second contact hit once world-time cooldown expires")
 
 	# 6. Dead-player policy: stop dealing damage at zero HP
-	player.health = 3.0
+	arena.time_controller.try_spend(arena.time_controller.meter - 3.0)
 	director.step(1.05, player)
-	expect(is_equal_approx(player.health, 0.0), "Contact damage clamps player health at 0.0")
+	expect(is_equal_approx(arena.time_controller.meter, 0.0), "Contact damage depletes time and opens emergency recovery")
 	director.step(2.0, player)
-	expect(is_equal_approx(player.health, 0.0), "Enemies stop dealing contact damage once player health is 0.0")
+	expect(is_equal_approx(arena.time_controller.meter, 0.0), "Emergency freezes subsequent contact damage")
 
 	# 7. Skirmisher finite sidestep/orbit within cone range -> commit and contact hit
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	var skirm = director.spawn(&"skirmisher", Vector3(0.0, 0.0, -5.5))
 	for i in range(12):
 		director.step(0.1, player)
@@ -115,10 +118,10 @@ func run() -> void:
 	var committed_and_hit := false
 	for i in range(30):
 		director.step(0.1, player)
-		if player.health < 100.0:
+		if arena.time_controller.meter < 100.0:
 			committed_and_hit = true
 			break
-	expect(committed_and_hit and is_equal_approx(player.health, 100.0 - Tuning.ENEMIES.skirmisher.damage), "Skirmisher commits after finite orbit and lands contact damage")
+	expect(committed_and_hit and is_equal_approx(arena.time_controller.meter, 100.0 - Tuning.ENEMIES.skirmisher.damage), "Skirmisher commits after finite orbit and lands contact damage")
 
 	# 8. spawn_group() and reset_state() restore clean state
 	director.clear()
@@ -133,27 +136,29 @@ func run() -> void:
 	# 9. Round C: Crowd control (shove knockback + stagger suppression + recovery) on swarmer
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	player.position = Vector3.ZERO
 	var shoved_swarmer = director.spawn(&"swarmer", Vector3(0.0, 0.0, -1.0))
-	shoved_swarmer.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONTROL.pulse_impulse), float(Tuning.CONTROL.stagger))
+	shoved_swarmer.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONE.pulse_impulse), float(Tuning.CONTROL.stagger))
 	expect(shoved_swarmer.is_staggered() and is_equal_approx(shoved_swarmer.stagger_timer, float(Tuning.CONTROL.stagger)), "apply_control sets stagger_timer on swarmer")
 	director.step(0.2, player)
 	expect(shoved_swarmer.position.z < -2.2, "Strong shove visibly displaces swarmer away from player")
-	expect(is_equal_approx(player.health, 100.0), "Staggered enemy suppresses contact attack even when starting in contact range")
+	expect(is_equal_approx(arena.time_controller.meter, 100.0), "Staggered enemy suppresses contact attack even when starting in contact range")
 
 	# Place staggered swarmer right on top of player while still staggered: still no contact damage
 	shoved_swarmer.position = Vector3(0.0, 0.0, -0.5)
 	shoved_swarmer.knockback_vel = Vector3.ZERO
 	director.step(0.2, player)
-	expect(shoved_swarmer.is_staggered() and is_equal_approx(player.health, 100.0), "Staggered swarmer does not deal contact damage while stagger_timer > 0")
+	expect(shoved_swarmer.is_staggered() and is_equal_approx(arena.time_controller.meter, 100.0), "Staggered swarmer does not deal contact damage while stagger_timer > 0")
 
 	# Advance past remaining stagger so swarmer recovers and resumes AI + contact attack
 	director.step(0.5, player)
-	expect(not shoved_swarmer.is_staggered() and is_equal_approx(player.health, 95.0), "Recovered swarmer resumes normal AI and contact attack after stagger expires")
+	expect(not shoved_swarmer.is_staggered() and is_equal_approx(arena.time_controller.meter, 95.0), "Recovered swarmer resumes normal AI and contact attack after stagger expires")
 
 	# 10. Round D: Distinct Brute displacement vs stun resistance + Stationary Target push/stun
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	player.position = Vector3.ZERO
 	var ctrl_swarmer = director.spawn(&"swarmer", Vector3(-3.0, 0.0, -4.0))
 	var ctrl_brute = director.spawn(&"brute", Vector3(0.0, 0.0, -4.0))
@@ -194,6 +199,7 @@ func run() -> void:
 	# 11. Round C/D: Frame-delta and time-slow consistency for knockback + stagger recovery
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	player.position = Vector3(0.0, 0.0, 10.0)
 	var enemy_coarse = director.spawn(&"swarmer", Vector3(-2.0, 0.0, 2.0))
 	enemy_coarse.apply_control(Vector3(0.0, 0.0, -1.0), 10.0, 0.3)
@@ -214,14 +220,14 @@ func run() -> void:
 	var slow_a = director.spawn(&"brute", Vector3(2.0, 0.0, -3.0))
 	slow_a.apply_control(Vector3(0.0, 0.0, -1.0), 22.0, 0.85)
 	for i in range(5):
-		director.step(0.1 * float(Tuning.SLOW.scale), player)
+		director.step(0.1 * float(arena.time_controller.settings.slow_scale), player)
 	var slow_a_pos: Vector3 = slow_a.position
 	var slow_a_stagger: float = slow_a.stagger_timer
 
 	director.clear()
 	var slow_b = director.spawn(&"brute", Vector3(2.0, 0.0, -3.0))
 	slow_b.apply_control(Vector3(0.0, 0.0, -1.0), 22.0, 0.85)
-	director.step(0.5 * float(Tuning.SLOW.scale), player)
+	director.step(0.5 * float(arena.time_controller.settings.slow_scale), player)
 	expect(slow_a_pos.distance_to(slow_b.position) < 0.001 and is_equal_approx(slow_a_stagger, slow_b.stagger_timer),
 		"World-time control integration scales consistently under time slow")
 
@@ -229,7 +235,7 @@ func run() -> void:
 	director.clear()
 	# Left cover rectangle is Rect2(-6, -6, 2, 3) -> x in [-6, -4], z in [-6, -3]
 	var kb_cover_enemy = director.spawn(&"swarmer", Vector3(-5.0, 0.0, -2.2))
-	kb_cover_enemy.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONTROL.pulse_impulse), float(Tuning.CONTROL.stagger))
+	kb_cover_enemy.apply_control(Vector3(0.0, 0.0, -1.0), float(Tuning.CONE.pulse_impulse), float(Tuning.CONTROL.stagger))
 	var crossed_or_overlapped := false
 	for i in range(15):
 		kb_cover_enemy.step_enemy(0.04, player, [])
@@ -240,6 +246,7 @@ func run() -> void:
 	# 13. Round C: Cover-safe AI navigation around cover box without getting stuck
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	player.position = Vector3(-5.0, 0.0, 0.0) # Directly Across Rect2(-6, -6, 2, 3) from (-5, 0, -7.2)
 	var nav_swarmer = director.spawn(&"swarmer", Vector3(-5.0, 0.0, -7.2))
 	var nav_overlapped := false
@@ -248,7 +255,7 @@ func run() -> void:
 		director.step(0.05, player)
 		if nav_swarmer.overlaps_cover(-0.005):
 			nav_overlapped = true
-		if player.health < 100.0:
+		if arena.time_controller.meter < 100.0:
 			reached_player = true
 			break
 	expect(not nav_overlapped and reached_player, "Enemy spawned behind cover steers around the cover box and reaches player without overlapping cover")
@@ -256,6 +263,7 @@ func run() -> void:
 	# 14. Round C: Bounded encounter schedule, live cap (<= 6), victory, defeat stop-spawning, and sandbox reset
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	expect(director.status_text() == "Sandbox", "Default director status_text() is Sandbox")
 	director.start_encounter()
 	expect(director.encounter_active and director.status_text().begins_with("Encounter Wave 1/"), "start_encounter() enters running state and updates status_text()")
@@ -272,6 +280,7 @@ func run() -> void:
 	expect(third_wave.count(&"side_guard") == 1 and third_wave.count(&"front_guard") == 1 and third_wave.size() <= int(Tuning.ENCOUNTER.max_enemies), "Both opening layouts arrive after the colored introductions, within live cap")
 	director.restore_state(opening)
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 
 	# Step across multiple 12s wave intervals without killing enemies to verify live cap <= 6
 	var cap_exceeded := false
@@ -291,12 +300,16 @@ func run() -> void:
 
 	# Defeat condition: at 0 player HP, stop spawning and report reset hint
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	director.start_encounter()
 	for e in director.enemies:
 		e.hit(999.0, e.position - e.facing)
 	director.step(0.05, player)
 	expect(director.enemies.is_empty(), "Cleared wave 0 enemies before testing defeat")
-	player.health = 0.0
+	arena.time_controller.settings = arena.time_controller.settings.duplicate()
+	arena.time_controller.settings.charges_per_attempt = 0
+	arena.time_controller.begin_attempt()
+	arena.time_controller.force_depletion()
 	director.step(15.0, player) # Crosses 12s wave boundary while player is at 0 HP
 	expect(director.encounter_state == &"defeat" and director.enemies.is_empty() and director.status_text().contains("R"), "At 0 player HP, encounter stops spawning new waves and reports reset hint")
 
@@ -310,6 +323,7 @@ func run() -> void:
 		"reset_state() resets _spawn_counter and assigns rewind_id=1 to initial target")
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	player.position = Vector3.ZERO
 	var e1 = director.spawn(&"swarmer", Vector3(-3.0, 0.0, -3.5))
 	var e2 = director.spawn(&"brute", Vector3(0.0, 0.0, -6.0))
@@ -372,6 +386,7 @@ func run() -> void:
 	# 16. Round D: Encounter state / elapsed / wave index round-trip without replaying waves
 	director.clear()
 	player.reset_state()
+	arena.time_controller.begin_attempt()
 	director.start_encounter()
 	director.step(15.0, player) # Crosses wave 1 at 12.0s; wave_index is now 2, elapsed is 15.0s
 	expect(director.encounter_wave_index == 2 and is_equal_approx(director.encounter_elapsed, 15.0),

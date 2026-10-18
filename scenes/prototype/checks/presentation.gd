@@ -38,7 +38,7 @@ func run() -> void:
 	await physics_frame
 	await physics_frame
 	arena.set_physics_process(false)
-	for index in range(1, 5):
+	for index in range(1, 4):
 		var select := InputEventKey.new()
 		select.physical_keycode = KEY_1 + index - 1
 		select.pressed = true
@@ -57,10 +57,10 @@ func run() -> void:
 	expect(guard.is_core_exposed(), "Actual cut opens yellow core")
 	var cues: int = arena.feedback.accepted_cues
 	var cut: Dictionary = arena.capture_state()
-	arena._restore_world(uncut, arena.player.slow_charge)
+	arena._restore_world(uncut)
 	expect(not guard.cable_cut and not guard.is_core_exposed(), "Rewind restores cable and shield")
 	expect(arena.feedback.accepted_cues == cues, "Restoring mechanisms never replays hit or break cues")
-	arena._restore_world(cut, arena.player.slow_charge)
+	arena._restore_world(cut)
 	flash(guard.core_world_position())
 	expect(guard.core_broken and guard.health <= 0, "Actual cut then charged aimed flash kills guard")
 
@@ -93,7 +93,7 @@ func run() -> void:
 	var heated: Dictionary = arena.capture_state()
 	flash(guard.core_world_position())
 	expect(guard.core_broken and guard.health <= 0.0, "Actual heat then one fully charged core hit kills guard")
-	arena._restore_world(heated, arena.player.slow_charge)
+	arena._restore_world(heated)
 	flash(guard.core_world_position(), 0.05)
 	expect(guard.health > 0.0 and guard.health < before and not guard.core_broken,
 		"Quick shot into heated core deals ordinary damage without finishing guard")
@@ -102,18 +102,17 @@ func run() -> void:
 	for tick in range(30):
 		arena.player.position.x = tick * 0.1
 		arena.history.record(0.05, arena.capture_state)
-	arena.weapons.select_tool(4)
-	arena._begin_inspection()
+	arena.time_controller.force_depletion()
 	var present: Vector3 = arena.player.position
 	cues = arena.feedback.accepted_cues
-	arena._seek_inspection(0.75)
-	var chosen: Vector3 = arena._preview.player.position
+	arena.emergency_rewind.select(15)
+	var chosen: Vector3 = arena.emergency_rewind.choice_state(15).player.position
 	expect(arena.scrub_view.active and arena.player.position.is_equal_approx(present), "Scrub begins from displayed pose instead of jumping immediately")
 	arena._process(0.07)
 	expect(arena.player.position.x < present.x and arena.player.position.x > chosen.x, "Scrub eases toward recorded pose")
-	arena._seek_inspection(0.25)
+	arena.emergency_rewind.select(5)
 	arena._process(0.03)
-	arena._finish_inspection(true)
+	arena.emergency_rewind.confirm()
 	expect(not arena.scrub_view.active and arena.player.position.x > chosen.x, "Fast scrub reversal commits exact chosen state")
 	expect(arena.feedback.accepted_cues == cues, "Scrub motion and commit create no historical hit sounds")
 	arena.feedback.cue(&"hit", arena.player.position, 1)

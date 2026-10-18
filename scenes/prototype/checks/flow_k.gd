@@ -124,17 +124,24 @@ func run() -> void:
 	director.step(8, arena.player)
 	expect(director.flow.pressure_index == 3 and not director.flow.pressure_active, "finite three-burst schedule stops spawning")
 	var count: int = director.enemies.size()
-	arena.player.health = 10000
+	arena.time_controller.settings = arena.time_controller.settings.duplicate()
+	arena.time_controller.settings.capacity = 10000
+	arena.time_controller.begin_attempt()
 	director.step(20, arena.player)
 	expect(director.enemies.size() <= count, "no endless reinforcements after finite pressure")
 	fresh()
 	director.start_flow(arena.player)
-	arena.player.health = 0
+	arena.time_controller.settings = arena.time_controller.settings.duplicate()
+	arena.time_controller.settings.charges_per_attempt = 0
+	arena.time_controller.begin_attempt()
+	arena.time_controller.force_depletion()
 	director.step(20, arena.player)
 	expect(not director.flow.pressure_active and director.enemies.size() == 3, "defeat cancels future pressure bursts")
 	fresh()
 	director.start_flow(arena.player)
-	arena.player.health = 10000
+	arena.time_controller.settings = arena.time_controller.settings.duplicate()
+	arena.time_controller.settings.capacity = 10000
+	arena.time_controller.begin_attempt()
 	director.step(30, arena.player)
 	var overdue_count: int = director.enemies.size()
 	director.step(.01, arena.player)
@@ -157,7 +164,7 @@ func run() -> void:
 			ids.append(node.combat_id())
 		director.flow.add(&"mixed", members)
 	for i in range(8):
-		arena.weapons.beam_pulses.append({"muzzle":Vector3(0, 1.2, 0), "pos":Vector3.ZERO, "dir":Vector2.UP,
+		arena.weapons.flash.pulses.append({"muzzle":Vector3(0, 1.2, 0), "pos":Vector3.ZERO, "dir":Vector2.UP,
 			"speed":42.0, "remaining_range":35.0, "radius":.35, "damage":100.0, "charge":1.0, "piercing":true, "hit_ids":ids.duplicate()})
 	var full_state: Dictionary = arena.capture_state()
 	peak_payload_bytes = var_to_bytes(full_state).size()

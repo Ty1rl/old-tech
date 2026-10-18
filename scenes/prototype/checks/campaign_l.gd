@@ -157,11 +157,11 @@ func run() -> void:
 	arena.director.projectiles.clear();tick(.01)
 	expect(arena.mode==&"recovery","Quiet recovery begins after remaining bolts are gone")
 	arena.debug_start(3,1)
-	arena._slow_key_held=true;arena.weapons.mouse_held=true;arena.weapons.cone_active=true
+	arena._space_action_held=true;arena.weapons.mouse_held=true;arena.weapons.bellows.active=true
 	var release:=InputEventKey.new();release.physical_keycode=KEY_SPACE;release.pressed=false
 	arena._input(release)
 	var mouse_release:=mouse(false);arena._input(mouse_release)
-	expect(not arena._slow_key_held and not arena.weapons.mouse_held and not arena.weapons.cone_active,"Boss entrance processes Space and mouse releases")
+	expect(not arena._space_action_held and not arena.weapons.mouse_held and not arena.weapons.bellows.active,"Boss entrance processes Space and mouse releases")
 	root.get_node("SceneManager").clear_popups()
 	game.start_game()
 	for key in prior: game.set_setting(key, prior[key])

@@ -154,8 +154,8 @@ func run() -> void:
 		"Arena exposes typed time_controller, emergency_rewind, and history")
 	expect(hist.has_checkpoint and hist.rejected_count == 0,
 		"Arena seeds room-start checkpoint into ReplayHistory with valid value-only payload")
-	expect(InputMap.has_action(&"slow_time") and InputMap.has_action(&"slow"),
-		"Arena registers slow_time / slow InputMap action for Space")
+	expect(InputMap.has_action(&"slow_time") and not InputMap.action_get_events(&"slow_time").is_empty(),
+		"Arena registers one bound slow_time InputMap action for Space")
 	expect(weapons.available_tools == [1, 2, 3],
 		"Arena initializes three weapons (1..3) with no fourth clock slot")
 

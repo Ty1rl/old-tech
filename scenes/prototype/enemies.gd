@@ -481,6 +481,7 @@ func _suspend_for_player(player: Node3D) -> bool:
 	if not is_instance_valid(player) or player.can_act: return false
 	var controller: TimeController = player.time_controller
 	if controller.exhausted:
+		flow.pressure_active = false
 		projectiles.clear()
 		if encounter_state == &"running":
 			encounter_active = false

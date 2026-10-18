@@ -120,7 +120,7 @@ func run() -> void:
 	hud.bind_time_controller(controller); hud.bind_time_controller(controller)
 	hud.update_status(player, weapons, equipment); await settle()
 	expect(hud.time_controller == controller and controller.hit_taken.get_connections().size() == 1, "HUD binds one controller idempotently without duplicated hit signals")
-	expect(hud.available_tools == [1, 2, 3] and hud.fractions.size() == 3 and hud.CHECKPOINTS == 4, "HUD has three tools and actual quarter-checkpoint segmentation")
+	expect(hud.available_tools == [1, 2, 3] and hud.fractions.size() == 3 and hud.checkpoints == 4, "HUD has three tools and actual quarter-checkpoint segmentation")
 	equipment.spend(&"beam", equipment.capacity(&"beam") * .4); weapons.selected_tool = 2
 	hud.update_status(player, weapons, equipment)
 	expect(is_equal_approx(hud.fractions[1], .6) and "60%" in hud.caption, "HUD reads real equipment condition")

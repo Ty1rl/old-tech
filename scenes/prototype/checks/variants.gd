@@ -161,27 +161,27 @@ func run() -> void:
 	var saved: Dictionary = arena.capture_state()
 	var desired: Vector3 = pack[1].pack_target(Vector3.ZERO, pack)
 	arena.director.step(0.1, arena.player)
-	arena._restore_world(saved, arena.player.slow_charge)
+	arena._restore_world(saved)
 	expect(pack[1].pack_target(Vector3.ZERO, arena.director.enemies).is_equal_approx(desired), "Pack slots reconstruct exactly from restored stable IDs and positions")
 	for tick in range(360): arena.director.step(1.0 / 60, arena.player)
-	expect(arena.player.health < 100, "Curved packs release formation and actually attack instead of orbiting forever")
+	expect(arena.time_controller.meter < 100, "Curved packs release formation and actually attack instead of orbiting forever")
 
 	enemy = fresh(&"blue", Vector3(0, 0, -1.1))
-	var health: float = arena.player.health
+	var health: float = arena.time_controller.meter
 	enemy.step_enemy(0.01, arena.player)
-	expect(enemy.attack_phase == &"windup" and arena.player.health == health, "Contact begins a visible windup, not instant damage")
+	expect(enemy.attack_phase == &"windup" and arena.time_controller.meter == health, "Contact begins a visible windup, not instant damage")
 	var winding: Dictionary = enemy.capture_state()
 	enemy.step_enemy(0.55, arena.player)
-	expect(arena.player.health < health and enemy.attack_phase == &"recover", "Committed attack deals one hit then recovers")
-	var after: float = arena.player.health
+	expect(arena.time_controller.meter < health and enemy.attack_phase == &"recover", "Committed attack deals one hit then recovers")
+	var after: float = arena.time_controller.meter
 	enemy.step_enemy(1.0, arena.player)
-	expect(arena.player.health == after and enemy.attack_phase == &"recover", "Recovery supplies a genuine gap in attacks")
+	expect(arena.time_controller.meter == after and enemy.attack_phase == &"recover", "Recovery supplies a genuine gap in attacks")
 	enemy.restore_state(winding)
 	expect(enemy.attack_phase == &"windup" and is_equal_approx(enemy.attack_timer, winding.attack_timer), "Rewind restores windup and remaining time")
 	enemy.apply_control(Vector3.FORWARD, 22, 0.85)
 	expect(enemy.stagger_timer >= 2.0 and enemy.knockback_vel.length() > 22, "Cone gives light enemies a larger shove and two-second stun")
 	enemy.step_enemy(1.5, arena.player)
-	expect(enemy.stagger_timer > 0 and arena.player.health == after, "Cone interruption leaves an attack-free repair window")
+	expect(enemy.stagger_timer > 0 and arena.time_controller.meter == after, "Cone interruption leaves an attack-free repair window")
 
 	fresh(&"target")
 	expect(arena.player.visual.scale.is_equal_approx(Vector3.ONE * 1.3), "Player visual is larger without changing collider or history root")
@@ -191,11 +191,11 @@ func run() -> void:
 	key(KEY_1)
 	arena.weapons.handle_event(mouse(true), arena.player, Vector3(0, 0, -5))
 	key(KEY_TAB)
-	expect(arena.weapons.selected_tool == 2 and not arena.weapons.ring_drawing, "Tab switches tools and cancels unfinished drawing")
+	expect(arena.weapons.selected_tool == 2 and not arena.weapons.ring.drawing, "Tab switches tools and cancels unfinished drawing")
 	key(KEY_TAB, true)
 	expect(arena.weapons.selected_tool == 1, "Shift-Tab cycles backward")
 	key(KEY_TAB, true)
-	expect(arena.weapons.selected_tool == 4, "Backward cycling wraps to clock")
+	expect(arena.weapons.selected_tool == 3, "Backward cycling wraps to cone")
 	for code in [KEY_F2, KEY_F3, KEY_F4, KEY_F8]: key(code)
 	var kinds: Array = arena.director.enemies.map(func(e): return e.kind)
 	expect(kinds == [&"target", &"blue", &"yellow", &"orange", &"side_guard"], "Sandbox spawns only stationary targets and current part variants")
@@ -207,7 +207,10 @@ func run() -> void:
 	for tick in range(100): arena.history.record(0.05, arena.capture_state)
 	expect(arena.history.snapshot_count == 100 and arena.history.rejected_count == 0,
 		"Full history accepts 32 part-bearing enemies without exceeding snapshot cap")
-	expect(arena.history.encoded_bytes <= 100 * 65536,
+	var encoded_bytes := 0
+	for i in range(arena.history.snapshot_count):
+		encoded_bytes += var_to_bytes(arena.history.state_at(i)).size()
+	expect(encoded_bytes <= 100 * ReplayHistory.MAX_PAYLOAD_BYTES,
 		"Part variants preserve the existing bounded rewind storage")
 
 	arena.feedback.reset_state()

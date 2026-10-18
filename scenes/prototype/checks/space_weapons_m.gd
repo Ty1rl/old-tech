@@ -44,7 +44,7 @@ func run() -> void:
 			else:
 				var toward := Vector2(player.position.x - enemy.position.x, player.position.z - enemy.position.z).angle()
 				for i in range(33): path.append(enemy.position + Vector3(cos(toward + i * TAU / 32), 0, sin(toward + i * TAU / 32)) * 1.9)
-			var weapons := Weapons.new()
+			var weapons := preload("res://scenes/weapons/weapons.tscn").instantiate()
 			weapons.cover = cover
 			root.add_child(weapons)
 			weapons.select_tool(1)
@@ -53,7 +53,7 @@ func run() -> void:
 				var move := InputEventMouseMotion.new()
 				move.button_mask = MOUSE_BUTTON_MASK_LEFT
 				weapons.handle_event(move, player, point)
-			expect(not weapons.preview_blocked, "Actual raw stroke does not hit cover: " + String(def.id) + "/" + String(kind))
+			expect(not weapons.ring.preview_blocked, "Actual raw stroke does not hit cover: " + String(def.id) + "/" + String(kind))
 			weapons.handle_event(mouse(false), player, path[-1])
 			for frame in range(150):
 				weapons.step(1.0 / 60, player, path[-1], enemies, 1.0 / 60)

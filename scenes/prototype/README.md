@@ -6,10 +6,10 @@ Use **Godot 4.7.2 Standard / Compatibility**. From the Ubuntu host:
 ~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo
 ```
 
-Restart an already running game after source updates. Choose **New Game** for the
-campaign. **Encounter select** in the main/pause menu, or F10 during play, jumps to
-a room, encounter or valid boss phase with the required equipment. Disable these
-entrypoints with `SceneManager.developer_tools = false`.
+Restart a running game after updates. Choose **New Game** for the campaign.
+**Encounter select** in the main/pause menu, or F10, jumps to a room, encounter or
+boss phase with the required equipment. `SceneManager.developer_tools` hides the
+shortcuts when false.
 
 ## Controls
 
@@ -17,122 +17,136 @@ entrypoints with `SceneManager.developer_tools = false`.
 |---|---|
 | WASD | Move, including while repairing |
 | Mouse | Aim |
-| 1–4 | Equip cutter, flash camera, heat bellows, clock, once collected |
-| Tab / Shift+Tab | Cycle collected tools, including inside repair |
+| 1 / 2 / 3 | Equip collected cutter / flash camera / heat bellows |
+| Tab / Shift+Tab | Cycle collected weapons, including inside repair |
 | Left mouse | Draw/release cutter; charge/release flash; hold cone |
-| E | Toggle repair for the selected item; release E does nothing |
-| Escape | Close repair, cancel a rewind preview, or pause ordinary play |
-| Space | Manual slow; with the clock outside repair, enter rewind review |
-| Wheel down / up | During review, go backward / toward the present |
-| Release Space | Commit the selected rewind; NOW simply resumes |
+| E | Toggle repair; release E does nothing |
+| Escape | Close repair or pause play/recovery |
+| Hold Space | Slow the world and player; drawing/input stay responsive |
+| Wheel down / up | During emergency recovery, choose older / newer moments |
+| Click / Enter | Confirm emergency recovery |
 | +/- | Zoom the perspective camera |
 | R | Retry the current room |
 | F7 | Full/dim/hidden diagnostic numbers, saved across launches |
 | M | Toggle sound, saved across launches |
 
-Holding Space survives tool switches. Switching to the clock enters review;
-switching away cancels an uncommitted preview and keeps slowing while Space is
-held. Inside repair, selecting the clock stays in repair rather than entering
-review. The clock cannot power its own repair.
+There is no selectable clock or manual rewind. Holding Space survives weapon
+switches. Repair never starts slow motion automatically.
 
-## Repair and condition
+## Time and recovery
 
-Repair shows a large transparent model over the moving world. Drag the highlighted
-part to spin it in either direction, trace the highlighted route, or connect
-matching shapes. Spin accepts uneven circles, partial turns and regrips.
+One rechargeable time meter replaces player health. Hits, slowing and completed
+repair checkpoints spend it. Running out through voluntary spending stops slow
+or repair; only a hit triggers emergency recovery. The passive time device never
+breaks or needs repair.
 
-E or Escape closes repair. Full gear stays visible as Ready so another item can
-be selected without reopening the interface. Completed condition checkpoints
-survive interruption; ordinary damage does not dismiss the panel. Death, leaving
-play or losing application focus still cleans up the interaction. Weapons cannot
-fire through the repair UI.
+Starting values live in `scripts/time/time_settings.tres`: 100 time, recharge
+12/second after a 1.5-second hit delay, slow at 0.18x for 8 time/second, repair
+6 time/checkpoint, and three emergency charges per room attempt. These are
+playtest settings. Recharge pauses while slowing or performing a repair gesture;
+an idle repair panel allows recharge.
 
-**Repair never starts time slow automatically.** Hold Space manually if desired
-and the clock is available. Movement and enemies continue; repairs grant no damage
-immunity. Equipment condition is consumed by use, not by idle time:
+A depleting hit spends one charge immediately and freezes combat. Scroll down for
+older moments, then click or press Enter. Recovery grants at least 40 time and
+1.5 seconds of protection. Charges cannot be refunded by rewinding. With no
+history, a seeded room checkpoint remains available. With no charges left, retry
+the current room with fresh time/charges, preserving learned lessons and equipment.
 
-| Tool | Full condition |
-|---|---|
-| Cutter | 24 launches |
-| Flash | 64 shots |
-| Cone | 24 seconds, with extra wear for displacement pulses |
-| Clock | 18 seconds; no passive recharge |
+History stores at most 240 value-only snapshots over 12 world seconds, each at
+most 64 KiB, plus a checkpoint and the emergency's current-state copy. No nodes,
+rigs, time balance, charges, learned lessons or acquired loadout enter snapshots.
+Deep validation runs in checks; normal sampling retains size bounds without
+recursive validation. Reinforcement debt and in-flight attacks rewind together.
 
-Yellow remains protected during the opening lessons and encounters. A deliberate
-safe break teaches repair before ordinary yellow wear begins. Completing that
-lesson restores the acquired tools. These are playtest budgets, not final balance.
+## Repair and HUD
+
+Three upper arcs show weapon condition in repair-checkpoint segments. Unowned
+weapons are hidden; inactive ones are smaller/dimmer. An extra outer line marks
+selection. The smooth lower purple arc shows time, with emergency-charge pips.
+Charge appears at the cursor. Repair keeps a time readout above its transparent
+model even when optional diagnostic numbers are hidden.
+
+E starts with the equipped weapon if damaged, otherwise the most damaged owned
+weapon. Drag the highlighted part to spin, trace, or connect matching shapes.
+Spin accepts either direction, partial turns and regrips. Completed checkpoints
+survive interruptions. Finishing a weapon advances to another damaged owned
+weapon; finishing all closes the screen automatically. Tab/1–3 also select
+manually. E/Escape closes. Mouse gestures cannot fire a weapon through the panel.
+
+Condition is consumed by use: cutter 24 launches; flash 64 shots; cone 24 seconds
+with extra wear for displacement pulses. Edit `scenes/weapons/settings/weapon_condition.tres`.
+Opening yellow lessons are protected until a deliberate repair lesson.
 
 ## Campaign and combat
 
-A burial device beneath the museum assembles bodies from its exhibits. The run
-crosses Public Galleries, Connected Collections, Restoration Rooms and Burial
-Exhibition. Equipment is found in order: yellow, orange, blue, purple.
+A burial device beneath the museum assembles bodies from its exhibits. Cross
+Public Galleries, Connected Collections, Restoration Rooms and Burial Exhibition,
+collecting yellow, orange, then blue. Time is available from the start.
 
-New mechanics get a brief explanation and safe attempt, followed by finite staged
-combat. Early encounters refill promptly when almost cleared; arrivals remain
-warned and capped. Loop and multi-cut spawns reserve their full interactive span
-and drawing clearance, including future boss phases. Clear rooms open a broad
-green doorway; repair before walking through when ready.
+New mechanics get an explanation, safe practice and then staged combat. Emergency
+rewind is taught through a real controlled depletion after usable history exists.
+Retries retain completed lessons. Cleared rooms open a green exit doorway.
 
 | Part | Efficient interaction |
 |---|---|
 | Blue | Cross the connection with the cutter; one stroke can cut several units |
-| Orange | Heat away protection with the cone; shove/stagger creates room |
+| Orange | Heat away protection; cone shove/stagger creates room |
 | Yellow | Aim at the exposed target; quick shots work on simple yellow units |
 | Guard | Cut or heat protection, then charge a shot into the exposed core |
-| Pair | Quick shot at A opens B briefly; complete the sequence |
+| Pair | Shoot A, then the briefly opened B |
 | Loop / zigzag | Complete the cut pattern, then charge the exposed core |
 
-The Loop Curator has three cut/open/core phases; the Sequence Warden has three
-paired-shot/core phases. The Burial Device tests pair, zigzag, loop and final core.
-Body damage remains a slow alternative to every intended pattern. Partial pattern
-timeouts reset links/shutters, not body damage or destroyed orange armor.
+The Loop Curator tests cut/open/core phases; the Sequence Warden tests paired
+shots. The Burial Device combines pairs, zigzags, loops and a final core.
+Ordinary damage remains a slow alternative. Pattern timeouts reset links/shutters,
+not body damage or destroyed orange armor.
 
-Fully charged flash shots pierce intersected enemies; solid cover stops them.
-The cutter arcs harmlessly to its start, cuts along the stroke, and returns to the
-moving player. Hit samples stay unchanged; only its displayed path is smoothed.
+Charged flash pierces intersected enemies; cover stops it. Cutter outbound/return
+travel is harmless. Its raw stroke drives hits; mild display smoothing leaves
+successful cuts unchanged. Incoming attacks have subtle warning lines and visible
+projectile heads. Movement dodges them; cover blocks them; time slows them.
 
-Hostile projectiles have locked windups, outlined red/ivory heads and short trails.
-They can be dodged through movement, respect cover, slow with the world and rewind.
-Their projected heads stay visible over the repair model. Dead owners, clear/retry
-and lethal player damage remove their shots. There is no separate defense ability.
+## Where to edit
 
-## Time, health and state
+- `arena.gd` (`CombatArena`): composition, input, simulation tick and snapshot wiring.
+- `campaign.gd` (`MuseumCampaign`), `rooms.gd`: progression, lessons and encounter data.
+- `scripts/time/`: typed time/recovery core; `CONTRACT.md` describes its public API.
+- `scenes/weapons/weapons.tscn`: real cutter/flash/bellows child components and
+  inspector resources. See `scenes/weapons/README.txt` for an editing example.
+- `combat_player.tscn`: authored player/camera/rig composition. `player.gd` handles
+  movement and forwards damage to the shared time controller.
+- `repair.tscn`, `repair.gd`, `repair_gestures.gd`: repair layout and gestures.
+- `scenes/ui/*.tscn`, `museum_theme.tres`: editable menus; no rebuilding their child
+  trees in `_ready`. Status arcs and attack paths remain procedural geometry.
 
-Slow scales player/enemy movement, gait, attack travel and combat timers. Cursor
-input, drawing, charging and resource wear use real elapsed time. Clock review
-freezes combat; positions interpolate between previews while discrete state stays
-recorded. Releasing Space commits; Escape or switching tools cancels the preview.
+The existing scene manager and popup flow remain in use. The old `prototype`
+directory name is retained to avoid a broad path migration during the jam.
 
-Campaign history is bounded to 12 seconds / 240 snapshots, at most 64 KiB per
-snapshot plus one backup. Only value data is stored. Reference/type, depth and size
-validation remain enabled. History clears at progression boundaries; learned
-controls and acquired equipment remain permanent within the run. Reinforcement
-debt and in-flight threats rewind with the combat roster.
+## Verification
 
-Review costs 0.2 clock units per real second; jumping additionally costs one unit
-per second rewound. Previewing never refunds worn clock condition.
+From the shared project directory:
 
-Only the latest wound regenerates after five quiet WORLD seconds, at 12 HP/s.
-Another hit restarts the wait. Room retry/entry restores health and condition.
-After finding the clock, lethal damage leaves a short rewind opportunity; otherwise
-retry the room. Regeneration never revives a dead player.
+```sh
+python3 check.py --seat jam-1 --suite campaign_n
+python3 check.py --seat jam-1 --suite complete_run
+python3 check.py --seat jam-1 --suite repair_n
+```
 
-## Source and verification
+Other focused suites cover time_core_n, combat_player_n, emergency_mode_n,
+weapon_components_n, weapon_smoothing_n, enemy_time_n, ui_n, and movement_m.
+Retained earlier combat, pattern, room, menu and animation checks use the current
+components. Logs/receipts stay in each seat's state. Combined Round N evidence:
+`state/old-tech-jam-1/exports/round-n/integration/`.
 
-`arena.gd` coordinates input and the single simulation clock. `campaign.gd` owns
-progression; `rooms.gd` contains rosters/layouts. Equipment/repair, weapons, enemy
-controllers/visuals, history, and HUD remain separate. The directory's historical
-`prototype` name is retained; teammate scenes and popup managers are still used.
+The removed manual-clock/four-tool suites were `rewind`, `presentation_j`,
+`controls_l`, `resource_integration`, `space_m`, `repair_m`, `repairs`, `ui_m` and
+`hud_profile_m`. Their obsolete health/clock assumptions are preserved in Git;
+new time, repair, recovery, UI and integrated checks cover the replacement rules.
+The remaining repair-view check still exercises actual gestures at multiple sizes.
 
-For the isolated sandbox, open `scenes/prototype/arena.tscn` and press F6. F1–F4
-spawn targets/color units; F5 a pack, F6 an encounter, F8/F9 guards; Backspace clears.
-Campaign blocks those sandbox keys.
+Automated graphical previews must use shared `render.py` on a private display.
+`flow_capture_k` is a graphical capture, not a headless check: frame-post-draw
+requires a renderer. Never launch automated previews on Matt's desktop.
 
-Use the shared project `check.py --seat jam-N --suite NAME` for bounded feature
-checks. Keep full logs in seat state and report totals/failures. Automated graphical
-previews must use `render.py` on its private virtual display, never Matt's desktop.
-Current integration receipts live in `state/old-tech-jam-1/exports/round-m/`.
-
-Models remain stylized, boss assemblies are simple, and audio remains provisional.
-Human playtesting determines whether repair, pressure and movement feel right.
+Models and sound remain provisional. Human playtesting determines whether the
+resource budgets, repair interruptions and encounter pressure feel right.

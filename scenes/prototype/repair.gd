@@ -1,3 +1,4 @@
+class_name WeaponRepair
 extends Control
 
 const Gestures = preload("res://scenes/prototype/repair_gestures.gd")
@@ -24,7 +25,7 @@ const ORANGE := Color("f59b56")
 const TOOL_ORDER: Array[StringName] = [&"ring", &"beam", &"cone"]
 
 var ROUTES: Array = []
-var equipment: RefCounted
+var equipment: WeaponEquipment
 var time_controller: TimeController = null
 var tool: StringName = &"ring"
 var _session: int = -1
@@ -245,8 +246,6 @@ func _ready() -> void:
 		for sibling in get_parent().get_children():
 			if sibling is ColorRect:
 				sibling.color = Color.TRANSPARENT
-	if panel == null:
-		_build_fallback_nodes()
 	if not board.resized.is_connected(_sync_tool_canvas):
 		board.resized.connect(_sync_tool_canvas)
 	if not board.gui_input.is_connected(_on_board_input):
@@ -265,111 +264,6 @@ func _ready() -> void:
 	_refresh()
 	if not _allow_full_preview and equipment != null and Gestures.pick_repair_tool(equipment, _acquired_tools(), tool) == &"":
 		call_deferred("_request_close")
-
-
-func _build_fallback_nodes() -> void:
-	panel = PanelContainer.new()
-	panel.name = "Panel"
-	panel.custom_minimum_size = PANEL_MIN_SIZE
-	panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	add_child(panel)
-	var margin := MarginContainer.new()
-	margin.name = "Margin"
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 8)
-	panel.add_child(margin)
-	var column := VBoxContainer.new()
-	column.name = "Column"
-	column.add_theme_constant_override("separation", 8)
-	margin.add_child(column)
-	var header_row := HBoxContainer.new()
-	header_row.name = "HeaderRow"
-	header_row.add_theme_constant_override("separation", 8)
-	column.add_child(header_row)
-	heading = Label.new()
-	heading.name = "Heading"
-	_style_prompt(heading, 22)
-	header_row.add_child(heading)
-	progress = Label.new()
-	progress.name = "Progress"
-	progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_style_prompt(progress, 16)
-	header_row.add_child(progress)
-	meter = ProgressBar.new()
-	meter.name = "Meter"
-	meter.show_percentage = false
-	meter.custom_minimum_size.y = 5
-	column.add_child(meter)
-	instructions = Label.new()
-	instructions.name = "Instructions"
-	instructions.text = "Spin, trace, or connect the highlighted mechanism."
-	_style_prompt(instructions, 18)
-	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	instructions.max_lines_visible = 2
-	column.add_child(instructions)
-	board = Control.new()
-	board.name = "Board"
-	board.custom_minimum_size = BOARD_MIN_SIZE
-	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	board.clip_contents = true
-	board.mouse_filter = Control.MOUSE_FILTER_STOP
-	column.add_child(board)
-	viewport_container = SubViewportContainer.new()
-	viewport_container.name = "ToolBackdropViewport"
-	viewport_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	viewport_container.stretch = true
-	viewport_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	board.add_child(viewport_container)
-	sub_viewport = SubViewport.new()
-	sub_viewport.name = "SubViewport"
-	sub_viewport.own_world_3d = true
-	sub_viewport.transparent_bg = true
-	sub_viewport.size = Vector2i(int(BOARD.x), int(BOARD.y))
-	sub_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	viewport_container.add_child(sub_viewport)
-	var env_node := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_CLEAR_COLOR
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.62, 0.66, 0.72)
-	env.ambient_light_energy = 1.15
-	env_node.environment = env
-	sub_viewport.add_child(env_node)
-	var key_light := DirectionalLight3D.new()
-	key_light.rotation_degrees = Vector3(-48.0, 32.0, 0.0)
-	key_light.light_energy = 1.65
-	key_light.light_color = Color(1.0, 0.97, 0.92)
-	sub_viewport.add_child(key_light)
-	var fill_light := DirectionalLight3D.new()
-	fill_light.rotation_degrees = Vector3(-28.0, -125.0, 0.0)
-	fill_light.light_energy = 0.85
-	fill_light.light_color = Color(0.78, 0.86, 0.98)
-	sub_viewport.add_child(fill_light)
-	var rim_light := DirectionalLight3D.new()
-	rim_light.rotation_degrees = Vector3(18.0, 165.0, 0.0)
-	rim_light.light_energy = 0.95
-	rim_light.light_color = Color(0.95, 0.90, 0.82)
-	sub_viewport.add_child(rim_light)
-	preview_cam = Camera3D.new()
-	preview_cam.name = "PreviewCamera"
-	preview_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	preview_cam.size = 0.60
-	preview_cam.position = Vector3(0.0, 1.25, 1.35)
-	preview_cam.look_at_from_position(preview_cam.position, Vector3.ZERO, Vector3.UP)
-	sub_viewport.add_child(preview_cam)
-	overlay = Control.new()
-	overlay.name = "GestureOverlay"
-	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	board.add_child(overlay)
-	feedback = Label.new()
-	feedback.name = "Feedback"
-	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	feedback.max_lines_visible = 2
-	feedback.custom_minimum_size = Vector2(240, 20)
-	_style_prompt(feedback, 15)
-	column.add_child(feedback)
 
 
 func _populate_tool_models() -> void:
@@ -495,7 +389,7 @@ func _refresh() -> void:
 		route.assign(ROUTES[0])
 	else:
 		var s: int = equipment.stage(tool)
-		var steps: int = int(equipment.get("repair_steps")) if "repair_steps" in equipment else 4
+		var steps: int = equipment.repair_steps
 		active_op_index = Gestures.operation_index_for_stage(s)
 		active_op = Gestures.active_operation(tool, s)
 		active_kind = active_op["kind"]

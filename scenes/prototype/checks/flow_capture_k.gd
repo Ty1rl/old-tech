@@ -1,6 +1,6 @@
 extends SceneTree
 
-const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-6/exports/round-k/"
+var OUT := OS.get_environment("XDG_DATA_HOME").get_base_dir() + "/exports/round-n/integration/flow_capture_k/"
 const PASS := "pass-b"
 var arena: Node3D
 var title: Label
@@ -24,7 +24,9 @@ func fresh(tool: int) -> void:
 	arena.reset_arena()
 	arena.director.clear()
 	arena.player.position = Vector3(0, .55, 0)
-	arena.player.health = 10000
+	arena.time_controller.settings = arena.time_controller.settings.duplicate()
+	arena.time_controller.settings.capacity = 10000
+	arena.time_controller.begin_attempt()
 	arena.weapons.select_tool(tool)
 	arena.player.set_visual_tool(tool)
 	arena.player.model.basis = Basis.looking_at(Vector3.FORWARD)
@@ -43,6 +45,7 @@ func picture(name: String, caption: String) -> void:
 
 
 func run() -> void:
+	DirAccess.make_dir_recursive_absolute(OUT)
 	arena = load("res://scenes/prototype/arena.tscn").instantiate()
 	root.add_child(arena)
 	current_scene = arena
@@ -81,7 +84,7 @@ func run() -> void:
 	for point in raw:
 		var move := InputEventMouseMotion.new()
 		arena.weapons.handle_event(move, arena.player, point)
-	arena.weapons._rebuild_visuals(arena.player, raw[-1])
+	arena.weapons.rebuild_visuals(arena.player)
 	await picture(PASS + "-cutter-guide", "Cutter / sweeping curve with a slight lead")
 	arena.weapons.handle_event(button(false), arena.player, raw[-1] + Vector3.RIGHT * .25)
 	for i in range(45):
@@ -98,7 +101,7 @@ func run() -> void:
 	var aim: Vector3 = nodes[-1].position
 	arena.weapons.handle_event(button(true), arena.player, aim)
 	arena.weapons.step(.9, arena.player, aim, nodes, 0)
-	expect(arena.weapons.presentation.pierce_ready and arena.weapons.beam_pulses.is_empty(), "ready aperture, no pre-release beam")
+	expect(arena.weapons.presentation.pierce_ready and arena.weapons.flash.pulses.is_empty(), "ready aperture, no pre-release beam")
 	await picture(PASS + "-charge-ready", "PIERCE READY / release to fire")
 	arena.weapons.handle_event(button(false), arena.player, aim)
 	arena.weapons.step(.22, arena.player, aim, nodes)

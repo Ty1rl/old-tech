@@ -1,65 +1,20 @@
-extends Node3D
+extends CombatArena
 # A small combat harness using the existing player and weapons, no campaign edits.
 const PatternEnemy = preload("res://scenes/prototype/pattern_enemy.gd")
 const Visual = preload("res://scenes/prototype/pattern_visual.gd")
-const Weapons = preload("res://scenes/prototype/weapons.gd")
-const Equipment = preload("res://scenes/prototype/equipment.gd")
-const PlayerController = preload("res://scenes/prototype/player.gd")
-const Cover = preload("res://scenes/prototype/cover.gd")
 const MODES := [&"loop", &"zigzag", &"pair", &"final_boss"]
-var player: CharacterBody3D
-var weapons: Node3D
 var enemy: Node3D
 var camera: Camera3D
-var hud: Label
 var chosen := 0
 var saved: Dictionary = {}
 var paused := false
-var equipment := Equipment.new()
 
 func _ready() -> void:
-	var helper := Visual.new()
-	helper.box(self, Vector3(0, -0.06, 0), Vector3(40, 0.1, 40), Color("494944"))
-	for rectangle: Rect2 in Cover.RECTANGLES:
-		helper.box(self, Vector3(rectangle.get_center().x, 0.7, rectangle.get_center().y), Vector3(rectangle.size.x, 1.4, rectangle.size.y), Color("686962"))
-	helper.free()
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-65, -30, 0)
-	sun.shadow_enabled = true
-	add_child(sun)
-	var environment := WorldEnvironment.new()
-	environment.environment = Environment.new()
-	environment.environment.background_mode = Environment.BG_COLOR
-	environment.environment.background_color = Color("252a2b")
-	environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.environment.ambient_light_color = Color("c8c9c4")
-	environment.environment.ambient_light_energy = 0.7
-	add_child(environment)
-	player = preload("res://scenes/player.tscn").instantiate()
-	player.set_script(PlayerController)
-	player.equipment = equipment
-	player.model = player.get_node("MeshInstance3D")
-	player.camera = player.get_node("Camera3D")
-	add_child(player)
+	super._ready()
+	director.clear()
 	camera = player.camera
-	# Fixed world camera, same 22-unit size and -55° pitch as the playable baseline.
-	camera.reparent(self)
-	camera.position = Vector3(0, 20, 14)
-	camera.rotation_degrees = Vector3(-55, 0, 0)
-	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 22
-	camera.current = true
-	weapons = Weapons.new()
-	weapons.equipment = equipment
-	add_child(weapons)
 	enemy = PatternEnemy.new()
 	add_child(enemy)
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	hud = Label.new()
-	hud.position = Vector2(20, 14)
-	hud.add_theme_font_size_override("font_size", 20)
-	layer.add_child(hud)
 	reset_enemy()
 
 func reset_enemy() -> void:
@@ -72,7 +27,7 @@ func reset_enemy() -> void:
 	enemy.facing = Vector3.BACK
 	saved = enemy.capture_state()
 
-func aim() -> Vector3:
+func _pattern_aim() -> Vector3:
 	var screen := get_viewport().get_mouse_position()
 	var plane := Plane(Vector3.UP, 0)
 	var hit: Variant = plane.intersects_ray(camera.project_ray_origin(screen), camera.project_ray_normal(screen))
@@ -95,8 +50,10 @@ func aim() -> Vector3:
 	return result
 
 func _physics_process(delta: float) -> void:
-	var point := aim()
+	var point := _pattern_aim()
 	var frozen := paused or Input.is_physical_key_pressed(KEY_F)
+	time_controller.slow_requested = Input.is_action_pressed(SLOW_ACTION) and not frozen
+	time_controller.advance(0.0 if frozen else delta)
 	if not frozen: player.step(delta, point)
 	var world_delta: float = 0.0 if frozen else delta * player.world_scale
 	weapons.step(0 if frozen else delta, player, point, [enemy], world_delta)
@@ -113,4 +70,4 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.physical_keycode == KEY_P: paused = not paused
 		elif event.physical_keycode == KEY_V: saved = enemy.capture_state()
 		elif event.physical_keycode == KEY_B: enemy.restore_state(saved)
-	if not paused and not Input.is_physical_key_pressed(KEY_F): weapons.handle_event(event, player, aim())
+	if not paused and not Input.is_physical_key_pressed(KEY_F): weapons.handle_event(event, player, _pattern_aim())

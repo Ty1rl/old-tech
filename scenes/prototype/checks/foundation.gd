@@ -42,9 +42,9 @@ func run() -> void:
 	await process_frame
 	expect(not paused and not scenes.has_popup(), "Existing resume clears pause popup")
 	arena.player.take_damage(12.0)
-	expect(arena.player.health < 100.0, "Player receives contact damage")
+	expect(arena.time_controller.meter < arena.time_controller.capacity, "Player receives contact damage")
 	arena.reset_arena()
-	expect(arena.player.health == 100.0 and arena.player.velocity == Vector3.ZERO, "Reset restores player health and clears motion")
+	expect(arena.time_controller.meter == arena.time_controller.capacity and arena.player.velocity == Vector3.ZERO, "Reset restores player time and clears motion")
 	expect(arena.player.world_scale == 1.0, "Reset restores normal world time")
 	expect(Engine.time_scale == 1.0, "Prototype leaves engine clock unscaled")
 	# Exercise visibility through the real hotkey, and restore the tester's preference.
@@ -63,7 +63,7 @@ func run() -> void:
 			expect(arena.hud.visible and arena.hud.modulate.a < 0.3, "Dim readout retains faint debugging information")
 	expect(modes.size() == 3 and arena.status_hud.readout_mode == initial_mode, "F7 cycles all modes and restores initial choice")
 	var settings := ConfigFile.new()
-	settings.load(arena.StatusHud.READOUT_FILE)
+	settings.load(TimeStatusHUD.READOUT_FILE)
 	expect(int(settings.get_value("hud", "readout", -1)) == initial_mode, "Readout choice is saved across launches")
 	arena.equipment.spend(&"ring", arena.equipment.capacity(&"ring") * 0.75)
 	arena.weapons.select_tool(3)

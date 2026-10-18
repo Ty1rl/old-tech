@@ -1,5 +1,6 @@
 extends Control
 
+const UI = preload("res://scenes/ui/ui_style.gd")
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 # Screen-space geometry keeps these small gauges readable at any camera zoom.
@@ -33,11 +34,17 @@ var history_seconds := 0.0
 var selected_age := 0.0
 var jump_cost := 0.0
 var time_feedback := ""
+var legend: RichTextLabel
+var _scale := 1.0
+var _hint_state := -1
+var _font: Font
+
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_font = ThemeDB.fallback_font
 	var settings := ConfigFile.new()
 	if settings.load(READOUT_FILE) == OK:
 		readout_mode = clampi(int(settings.get_value("hud", "readout", 1)), 0, 2)
@@ -52,7 +59,7 @@ func _ready() -> void:
 	key_hint.offset_top = -28
 	key_hint.offset_right = 360
 	key_hint.offset_bottom = -8
-	var legend := RichTextLabel.new()
+	legend = RichTextLabel.new()
 	legend.bbcode_enabled = true
 	legend.scroll_active = false
 	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -74,7 +81,14 @@ func cycle_readout() -> void:
 
 
 func set_combat_hint(muted: bool) -> void:
-	key_hint.text = "M sound: %s · F7 numbers · F10 encounters" % ("off" if muted else "on")
+	var manager := get_node_or_null("/root/SceneManager")
+	var developer := bool(manager.developer_tools) if manager else false
+	var next := int(muted) + 2 * int(developer)
+	if next == _hint_state: return
+	_hint_state = next
+	key_hint.text = "E toggle repair · hold Space: slow · M sound: %s · F7 numbers" % ("off" if muted else "on")
+	if developer: key_hint.text += " · F10 encounters"
+
 
 
 func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> void:
@@ -95,10 +109,16 @@ func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> vo
 	for i in range(TOOLS.size()):
 		fractions[i] = clampf(equipment.remaining(TOOLS[i]) / equipment.capacity(TOOLS[i]), 0.0, 1.0)
 	caption = NAMES[selected] if not available_tools.is_empty() else "Find the illuminated exhibit"
-	if repairing:
-		caption += " · repair · slow" if slowing else " · repair · normal time"
+	if available_tools.is_empty():
+		queue_redraw()
+		return
+	if not selected + 1 in available_tools:
+		caption += " · locked"
+	elif repairing:
+		caption += " · full · E close" if fractions[selected] >= 0.999 else " · repairing · E close"
+		if slowing: caption += " · Space slow"
 	elif not equipment.can_use(TOOLS[selected], 1.0 if selected < 2 else 0.000001):
-		caption += " · empty · E repair"
+		caption += " · empty · E toggle repair"
 	elif selected == 0 and weapons.ring_drawing:
 		caption += " · draw %.0f%%" % (100.0 * weapons.preview_length / Tuning.RING.length)
 	elif selected == 0 and weapons.ring_phase != "idle":
@@ -112,16 +132,28 @@ func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> vo
 	elif selected == 2 and weapons.cone_burst_cooldown > 0.0:
 		caption += " · shove %.1fs" % weapons.cone_burst_cooldown
 	elif selected == 3:
-		caption += " · Space inspect · E repair" if fractions[selected] < 0.999 else " · Space inspect"
+		caption += " · Space slow · wheel rewind"
 	elif fractions[selected] < 0.999:
-		caption += " · E repair"
+		caption += " · %.0f%% · E toggle repair" % (fractions[selected] * 100)
 	else:
-		caption += " · ready"
+		caption += " · full"
+
 	queue_redraw()
 
 
 func _process(_delta: float) -> void:
 	damage_bright = maxf(0.0, damage_bright - _delta * 1.6)
+	legend.visible = get_window().size.y >= 480
+	var factor := UI.scale_for(self)
+	if not is_equal_approx(_scale, factor):
+		_scale = factor
+		key_hint.add_theme_font_size_override("font_size", roundi(13 * factor))
+		key_hint.offset_top = -28 * factor
+		key_hint.offset_bottom = -6 * factor
+		key_hint.offset_right = size.x - 16
+		legend.add_theme_font_size_override("normal_font_size", roundi(12 * factor))
+		legend.offset_top = -52 * factor
+		legend.offset_bottom = -30 * factor
 	if not is_instance_valid(tracked_player):
 		return
 	# Camera and player both interpolate. Project their rendered transforms
@@ -147,56 +179,57 @@ func update_timeline(history: RefCounted, cost: float, feedback: String, clock_a
 
 
 func _draw() -> void:
+	var radius := RADIUS * _scale
+	var width := WIDTH * _scale
 	for i in range(TOOLS.size()):
 		var start := -PI + i * PI * 0.5 + GAP
 		var finish := start + PI * 0.5 - GAP * 2.0
-		var active := i == selected or (i == 3 and (slowing or inspecting))
 		var unlocked := i + 1 in available_tools
-		var color := COLORS[i]
-		# The track is visible even when empty; nothing fills the center.
-		draw_arc(center, RADIUS, start, finish, 32, Color(color, 0.12), WIDTH + 2.0, true)
+		var active := unlocked and (i == selected or (i == 3 and (slowing or inspecting)))
+		var color := COLORS[i] if unlocked else Color("a39b8e")
+		draw_arc(center, radius, start, finish, 32, Color(color, 0.17 if unlocked else 0.09), width + 2 * _scale, true)
 		if fractions[i] > 0.0 and unlocked:
-			draw_arc(center, RADIUS, start, lerpf(start, finish, fractions[i]), 32,
-				Color(color, 0.62 if active else 0.32), WIDTH, true)
-		if i == selected:
-			draw_arc(center, RADIUS + 6.0, start, finish, 32, Color(color, 0.4), 1.0, true)
+			draw_arc(center, radius, start, lerpf(start, finish, fractions[i]), 32,
+				Color(color, 0.8 if active else 0.4), width, true)
+		if i == selected and unlocked:
+			draw_arc(center, radius + 6 * _scale, start, finish, 32, Color(color, 0.8), 2 * _scale, true)
 		var middle := (start + finish) * 0.5
-		var label_at := center + Vector2(cos(middle), sin(middle)) * (RADIUS + 18.0)
-		_draw_centered(KEYS[i], label_at + Vector2(0, 4), 12, Color(color, 0.8 if active else 0.45))
-		if fractions[i] < 0.25:
-			# A quiet, persistent low-condition mark; avoid four flashing warnings.
-			draw_circle(center + Vector2(cos(middle), sin(middle)) * (RADIUS - 9.0), 2.0,
-				Color(color, 0.9))
-	# Ivory health is distinct from the four equipment colors, with an empty center.
+		var direction := Vector2(cos(middle), sin(middle))
+		var label_at := center + direction * (radius + 18 * _scale)
+		_draw_centered(KEYS[i], label_at + Vector2(0, 4 * _scale), 12, Color(color, 0.95 if active else 0.45 if unlocked else 0.22))
+		if unlocked and fractions[i] < 0.25:
+			draw_circle(center + direction * (radius - 9 * _scale), 2 * _scale, Color(color,0.8))
 	var health_start := -PI * 0.4
 	var health_end := health_start + TAU * 0.8
-	draw_arc(center, RADIUS - 14, health_start, health_end, 48, Color("ece4d2", 0.12), 3.0, true)
+	var health_radius := radius - 14 * _scale
+	draw_arc(center, health_radius, health_start, health_end, 48, Color("ece4d2",0.15), 3 * _scale,true)
 	if health_fraction > 0:
-		draw_arc(center, RADIUS - 14, health_start, lerpf(health_start, health_end, health_fraction),
-			48, Color("ece4d2", 0.35 + damage_bright * 0.6), 3.0, true)
+		draw_arc(center, health_radius, health_start, lerpf(health_start,health_end,health_fraction),48,
+			Color("ece4d2",0.45+damage_bright*.55),3*_scale,true)
 	if charging:
-		var pointer := get_viewport().get_mouse_position() + Vector2(0,-24)
-		draw_arc(pointer, 12, -PI * 0.5, PI * 1.5, 32, Color(COLORS[1],0.2),3,true)
-		draw_arc(pointer, 12, -PI * 0.5, -PI * 0.5 + TAU * charge_fraction, 32, Color(COLORS[1],0.9),3,true)
-	_draw_centered(caption, center + Vector2(0, RADIUS + 39), 13, Color(COLORS[selected], 0.9))
+		var pointer := get_viewport().get_mouse_position() + Vector2(0,-24*_scale)
+		pointer = pointer.clamp(Vector2.ONE*16*_scale,get_viewport_rect().size-Vector2.ONE*16*_scale)
+		draw_arc(pointer,12*_scale,-PI*.5,PI*1.5,32,Color(COLORS[1],.2),3*_scale,true)
+		draw_arc(pointer,12*_scale,-PI*.5,-PI*.5+TAU*charge_fraction,32,Color(COLORS[1],.9),3*_scale,true)
+	_draw_centered(caption,center+Vector2(0,radius+39*_scale),13,Color(COLORS[selected],.95))
 	if inspecting:
-		var left := center + Vector2(-100, RADIUS + 57)
-		var right := left + Vector2(200, 0)
-		draw_line(left, right, Color(COLORS[3], 0.35), 3, true)
-		var fraction := selected_age / history_seconds if history_seconds > 0.0 else 0.0
-		var cursor := right.lerp(left, fraction)
-		draw_line(cursor - Vector2(0, 5), cursor + Vector2(0, 5), COLORS[3], 2, true)
-		_draw_centered("−%.1fs" % history_seconds, left + Vector2(0, 20), 11, COLORS[3])
-		_draw_centered("NOW", right + Vector2(0, 20), 11, COLORS[3])
-		var hint := "Wheel ↓ past / ↑ present · Esc cancel" if selected_age < 0.000001 else "Wheel ↓ past / ↑ present · release Space to jump · Esc cancel"
-		_draw_centered(time_feedback if not time_feedback.is_empty() else hint, center + Vector2(0, RADIUS + 100), 12, Color(COLORS[3], 0.85))
+		var half_width := minf(100*_scale,(size.x-40)*.5)
+		var timeline_center := Vector2(clampf(center.x,half_width+20,size.x-half_width-20),minf(center.y+radius+57*_scale,size.y-90*_scale))
+		var left := timeline_center-Vector2(half_width,0)
+		var right := timeline_center+Vector2(half_width,0)
+		draw_line(left,right,Color(COLORS[3],.35),3*_scale,true)
+		var fraction := selected_age/history_seconds if history_seconds>0 else 0.0
+		var cursor := right.lerp(left,clampf(fraction,0,1))
+		draw_line(cursor-Vector2(0,5*_scale),cursor+Vector2(0,5*_scale),COLORS[3],2*_scale,true)
+		_draw_centered("−%.1fs" % history_seconds,left+Vector2(0,20*_scale),11,COLORS[3])
+		_draw_centered("NOW",right+Vector2(0,20*_scale),11,COLORS[3])
+		var hint := "Wheel: past / present · Esc cancel" if selected_age < .000001 else "Release Space: jump · Esc: keep present"
+		_draw_centered(time_feedback if not time_feedback.is_empty() else hint,timeline_center+Vector2(0,43*_scale),12,Color(COLORS[3],.9))
 
 
 func _draw_centered(text: String, at: Vector2, font_size: int, color: Color) -> void:
-	var font := ThemeDB.fallback_font
-	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	# A small shadow keeps lettering legible without opaque backing panels.
-	draw_string(font, at - Vector2(width * 0.5, -1), text, HORIZONTAL_ALIGNMENT_LEFT,
-		-1, font_size, Color(0, 0, 0, 0.65))
-	draw_string(font, at - Vector2(width * 0.5, 0), text, HORIZONTAL_ALIGNMENT_LEFT,
-		-1, font_size, color)
+	font_size = roundi(font_size * _scale)
+	var width := _font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size).x
+	var x := clampf(at.x-width*.5,8,maxf(8,size.x-width-8))
+	draw_string(_font,Vector2(x,at.y+_scale),text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size,Color(0,0,0,.65))
+	draw_string(_font,Vector2(x,at.y),text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size,color)

@@ -7,6 +7,9 @@ var encounter_picker: OptionButton
 var phase_picker: OptionButton
 
 func _ready() -> void:
+	if not SceneManager.developer_tools:
+		queue_free()
+		return
 	var column := UI.shell(self, "Encounter select", "Development shortcuts · starts with the equipment needed here.", 560)
 	room_picker = OptionButton.new()
 	room_picker.name = "RoomPicker"
@@ -25,7 +28,7 @@ func _ready() -> void:
 	UI.button(column, "Start encounter", _launch, "StartEncounter")
 	UI.button(column, "Prototype sandbox", func(): SceneManager.start_play(true))
 	UI.button(column, "Back", func(): SceneManager.close_popup(&"Developer"))
-	room_picker.grab_focus.call_deferred()
+	UI.focus_on_open(self, room_picker)
 
 func _update_encounters() -> void:
 	encounter_picker.clear()
@@ -49,8 +52,10 @@ func _update_phases() -> void:
 	if not phase_picker.disabled:
 		for i in range(PatternEnemy.phases_for(wave.enemies[0])):
 			phase_picker.add_item("Boss phase %d" % (i+1))
+	UI.wire_focus(self)
 
 func _launch() -> void:
+	if not SceneManager.developer_tools or SceneManager.is_transitioning(): return
 	if SceneManager.go_to(&"Campaign", {"debug_room": room_picker.selected,
 		"debug_wave": encounter_picker.selected, "debug_phase": phase_picker.selected-1}):
 		GameState.start_game()

@@ -3,8 +3,8 @@ const UI = preload("res://scenes/ui/ui_style.gd")
 var widgets: Dictionary = {}
 
 func _ready() -> void:
-	var column := UI.shell(self, "Settings", "Changes apply now and are saved automatically.", 610)
-	column.add_theme_constant_override("separation", 8)
+	var column := UI.shell(self, "Settings", "Changes save automatically.", 650)
+	column.add_theme_constant_override("separation", 6)
 	var prefs: Dictionary = GameState.preferences()
 	for entry in [["sound", "Sound"], ["fullscreen", "Fullscreen"], ["tutorial", "Contextual teaching"]]:
 		var key: String = entry[0]
@@ -14,8 +14,7 @@ func _ready() -> void:
 		toggle.toggled.connect(func(value: bool): GameState.set_setting(key, value))
 		column.add_child(toggle)
 		widgets[key] = toggle
-		if key == "sound":
-			toggle.grab_focus.call_deferred()
+
 	UI.label(column, "Volume", 17)
 	var volume := HSlider.new()
 	volume.min_value = 0
@@ -36,3 +35,4 @@ func _ready() -> void:
 	widgets.hud = hud
 	UI.label(column, "Teaching appears once per run. Turn it off to enter encounters directly.", 15).modulate = UI.MUTED
 	UI.button(column, "Back", func(): SceneManager.close_popup(&"Settings"), "BackButton")
+	UI.focus_on_open(self, widgets.sound)

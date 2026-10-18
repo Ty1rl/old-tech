@@ -32,6 +32,8 @@ var cover_root: Node3D
 var _built := false
 var _shared_meshes: Dictionary = {}
 var _shared_aabbs: Dictionary = {}
+var _floor_shader_material: ShaderMaterial
+var _wall_materials: Array[StandardMaterial3D] = []
 
 
 func _ready() -> void:
@@ -79,6 +81,17 @@ func apply_to_arena(arena: Node3D, hide_placeholder_meshes: bool = true) -> void
 				for sub in child.get_children():
 					if sub is MeshInstance3D:
 						sub.visible = false
+
+
+func get_cover_world_rectangles() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	if cover_root == null:
+		return rects
+	for child in cover_root.get_children():
+		if child is MeshInstance3D and child.mesh != null:
+			var aabb: AABB = child.transform * child.mesh.get_aabb()
+			rects.append(Rect2(aabb.position.x, aabb.position.z, aabb.size.x, aabb.size.z))
+	return rects
 
 
 func _clear_built_children() -> void:
@@ -192,17 +205,21 @@ func _prepare_mesh(src_mesh: Mesh, flip_inside_out: bool, tint: Color, roughness
 					shader.code = """shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D floor_texture : source_color;
+uniform vec3 base_color = vec3(0.20, 0.22, 0.23);
 void fragment() {
 	float grain = fract(sin(dot(UV * 4096.0, vec2(12.9898, 78.233))) * 43758.5453);
-	ALBEDO = vec3(0.20, 0.22, 0.23) + (grain - 0.5) * 0.012;
+	ALBEDO = base_color + (grain - 0.5) * 0.012;
 	ROUGHNESS = 0.94;
 }
 """
 					var floor_material := ShaderMaterial.new()
 					floor_material.shader = shader
 					floor_material.set_shader_parameter("floor_texture", mat.albedo_texture)
+					floor_material.set_shader_parameter("base_color", Vector3(0.20, 0.22, 0.23))
+					_floor_shader_material = floor_material
 					out_mesh.surface_set_material(s, floor_material)
 				else:
+					_wall_materials.append(mat)
 					out_mesh.surface_set_material(s, mat)
 			else:
 				out_mesh.surface_set_material(s, src_mat)

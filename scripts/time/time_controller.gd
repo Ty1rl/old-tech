@@ -12,6 +12,16 @@ extends Node
 ## Nothing here is captured in replay snapshots: rewinding the world never refunds
 ## time or charges. Consumers read state and call the methods below; they must not
 ## keep their own copy of the meter or charges. See scripts/time/CONTRACT.md.
+##
+## Capabilities: slow_unlocked / rewind_unlocked (default true for sandbox and
+## isolated tools) are run progress owned by the campaign via set_capabilities().
+## They are never captured in snapshots and survive begin_attempt(). While rewind
+## is locked a depleting hit ends the attempt (attempt_exhausted -> room retry)
+## without spending a charge.
+##
+## Time units: meter costs, recharge, slow drain and grace use REAL seconds passed
+## to advance(). world_scale converts real deltas into WORLD deltas for gameplay
+## and ReplayHistory.record().
 
 signal meter_changed(meter: float, capacity: float)
 signal charges_changed(remaining: int, per_attempt: int)
@@ -21,9 +31,11 @@ signal hit_taken(cost: float)
 ## Hit-driven depletion spent one charge; the world is frozen until finish_emergency().
 signal emergency_started(charges_remaining: int)
 signal emergency_finished
-## Hit-driven depletion with no charge left. The room attempt is over.
+## Hit-driven depletion with no charge left, or before rewind is unlocked. The
+## room attempt is over; the campaign retries the room.
 signal attempt_exhausted
 signal attempt_started
+signal capabilities_changed(slow_unlocked: bool, rewind_unlocked: bool)
 
 const DEFAULT_SETTINGS: TimeSettings = preload("res://scripts/time/time_settings.tres")
 
@@ -33,8 +45,22 @@ const DEFAULT_SETTINGS: TimeSettings = preload("res://scripts/time/time_settings
 ## nodes, see _ready). Tests and special drivers may disable it and call advance().
 @export var auto_advance: bool = true
 
-## Input intent: Space (or its InputMap action) is held. Set by the input owner.
-var slow_requested: bool = false
+## Input intent: the slow_time action is held. Set by the input owner every
+## change and tick. A fresh press (false -> true) may start slow with any time
+## left; while held after running empty, slow resumes at slow_min_to_start.
+var slow_requested: bool = false:
+	set(value):
+		if value and not slow_requested:
+			_slow_press_pending = true
+		elif not value:
+			_slow_press_pending = false
+		slow_requested = value
+## Campaign capability: holding slow_time does nothing until unlocked.
+var slow_unlocked: bool:
+	get: return _slow_unlocked
+## Campaign capability: before unlock, depletion retries the room (no charge spent).
+var rewind_unlocked: bool:
+	get: return _rewind_unlocked
 
 var meter: float:
 	get: return _meter
@@ -69,6 +95,9 @@ var _grace_left := 0.0
 var _recharge_wait := 0.0
 var _world_scale := 1.0
 var _repair_gesture := false
+var _slow_unlocked := true
+var _rewind_unlocked := true
+var _slow_press_pending := false
 
 
 func _init() -> void:
@@ -117,7 +146,9 @@ func advance(real_delta: float) -> void:
 		_set_slow(false)
 		return
 	_grace_left = maxf(0.0, _grace_left - real_delta)
-	var wants_slow := slow_requested and _meter > 0.0 and (_slow_active or _meter >= settings.slow_min_to_start)
+	var can_start := _slow_active or _meter >= settings.slow_min_to_start or (_slow_press_pending and _meter > 0.0)
+	var wants_slow := _slow_unlocked and slow_requested and _meter > 0.0 and can_start
+	_slow_press_pending = false # A fresh press is evaluated exactly once.
 	if wants_slow and settings.slow_drain_per_second > 0.0:
 		var wanted := settings.slow_drain_per_second * real_delta
 		var spent := minf(_meter, wanted)
@@ -167,7 +198,8 @@ func apply_hit(base_amount: float) -> float:
 ## Teaching hook: empties the meter and runs the SAME depletion path as a hit,
 ## spending a real charge (or exhausting the attempt). Ignores recovery grace so
 ## a scripted lesson cannot be silently absorbed. Returns false when an emergency
-## is already active or the attempt is exhausted.
+## is already active or the attempt is exhausted. Unlock rewind first: while
+## rewind is locked this ends the attempt like any other depletion.
 func force_depletion() -> bool:
 	if _emergency or _exhausted:
 		return false
@@ -215,9 +247,22 @@ func finish_emergency() -> void:
 	emergency_finished.emit()
 
 
+## Run capabilities from the campaign (sandbox keeps both true). Not part of
+## snapshots or attempts; a new run must set them explicitly.
+func set_capabilities(slow: bool, rewind: bool) -> void:
+	if slow == _slow_unlocked and rewind == _rewind_unlocked:
+		return
+	_slow_unlocked = slow
+	_rewind_unlocked = rewind
+	if not slow and _slow_active:
+		_set_slow(false)
+		_world_scale = 1.0
+	capabilities_changed.emit(_slow_unlocked, _rewind_unlocked)
+
+
 func _deplete() -> void:
 	_set_slow(false)
-	if _charges <= 0:
+	if not _rewind_unlocked or _charges <= 0:
 		_exhausted = true
 		_world_scale = 1.0
 		attempt_exhausted.emit()

@@ -22,8 +22,9 @@ extends Resource
 @export_range(0.01, 1.0, 0.01) var slow_scale: float = 0.18
 ## Units drained per REAL second while slow is active.
 @export_range(0.0, 100.0, 0.5) var slow_drain_per_second: float = 8.0
-## Slow may only START at or above this meter value; once active it runs to zero.
-## The hysteresis prevents flicker when Space is held while the meter recharges.
+## A fresh slow_time press starts slow with any time left. While the key stays
+## held after the meter ran empty, slow only resumes at or above this value, so a
+## held key does not flicker on every recharge tick.
 @export_range(0.0, 100.0, 0.5) var slow_min_to_start: float = 15.0
 
 @export_group("Repair")
@@ -39,9 +40,12 @@ extends Resource
 @export_range(0.0, 10.0, 0.05) var recovery_grace_seconds: float = 1.5
 
 @export_group("Replay history")
-## Bounded window of recorded world snapshots, in recorded (world) seconds.
-@export_range(1.0, 30.0, 0.5) var history_seconds: float = 12.0
-## Snapshots per recorded second.
-@export_range(1.0, 60.0, 1.0) var history_sample_rate: float = 20.0
-## Hard cap on stored snapshots regardless of window/rate.
+## Bounded window of recorded snapshots, in WORLD seconds (slowed time records
+## proportionally less real time; a frozen world records nothing).
+@export_range(1.0, 30.0, 0.5) var history_seconds: float = 18.0
+## Snapshots per WORLD second. Restores land exactly on a snapshot; the display
+## eases between previewed moments.
+@export_range(1.0, 60.0, 1.0) var history_sample_rate: float = 12.0
+## Hard memory cap on stored snapshots regardless of window/rate
+## (18 s x 12 Hz = 216 fits under 240).
 @export_range(1, 600, 1) var history_max_snapshots: int = 240

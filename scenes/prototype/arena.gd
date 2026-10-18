@@ -17,6 +17,7 @@ const TimeCoreScene = preload("res://scenes/time/time_core.tscn")
 const RepairGestures = preload("res://scenes/prototype/repair_gestures.gd")
 
 const TOOL_IDS: Array[StringName] = [&"ring", &"beam", &"cone"]
+## Held slow action, authored in project.godot (physical Space by default).
 const SLOW_ACTION: StringName = &"slow_time"
 
 var museum: Node3D
@@ -36,7 +37,14 @@ var status_hud: TimeStatusHUD
 var emergency_view: EmergencyRewindView
 var aim: Vector3 = Vector3.ZERO
 var aim_valid: bool = false
+## Camera distance scale in Tuning.VIEW.camera_size units (22 = authored framing).
+## The authored Camera3D in combat_player.tscn keeps its inspector settings; zoom
+## only scales its offset from the player.
+var zoom: float = float(Tuning.VIEW.camera_size)
+## Last slow_time press/release seen by _input. OR-ed with the native action state;
+## cleared on every pause/state/focus change so a missed release cannot stick.
 var _space_action_held := false
+var _camera_rest_position := Vector3.ZERO
 var _repair_held := false
 var _suppress_next_lmb_release := false
 var _last_emergency_age := 0.0
@@ -48,7 +56,6 @@ var _scrub_speed := 0.0
 
 
 func _ready() -> void:
-	_ensure_input_map()
 	_setup_time_core()
 	_build_floor()
 	_build_cover()
@@ -59,12 +66,7 @@ func _ready() -> void:
 	player = PlayerScene.instantiate()
 	player.time_controller = time_controller
 	add_child(player)
-	player.camera.position = Vector3(0, 20, 14)
-	player.camera.rotation_degrees = Vector3(-55, 0, 0)
-	player.camera.projection = Camera3D.PROJECTION_PERSPECTIVE
-	player.camera.fov = float(Tuning.VIEW.fov)
-	player.camera.size = float(Tuning.VIEW.camera_size)
-	player.camera.current = true
+	_camera_rest_position = player.camera.position
 	weapons = WeaponsScene.instantiate()
 	equipment = WeaponEquipment.new(weapons.condition_settings)
 	weapons.equipment = equipment
@@ -95,15 +97,6 @@ func _exit_tree() -> void:
 		emergency_view.bind_emergency_rewind(null)
 
 
-func _ensure_input_map() -> void:
-	if not InputMap.has_action(SLOW_ACTION):
-		InputMap.add_action(SLOW_ACTION)
-	if InputMap.action_get_events(SLOW_ACTION).is_empty():
-		var key := InputEventKey.new()
-		key.physical_keycode = KEY_SPACE
-		InputMap.action_add_event(SLOW_ACTION, key)
-
-
 func _setup_time_core() -> void:
 	var time_core: Node = TimeCoreScene.instantiate()
 	add_child(time_core)
@@ -128,22 +121,12 @@ func create_museum() -> Node3D:
 
 
 func _set_zoom(value: float) -> void:
-	player.camera.size = clampf(value, 10.0, 32.0)
-	player.camera.fov = float(Tuning.VIEW.fov)
-	player.camera.position = Vector3(0, 20, 14) * (player.camera.size / float(Tuning.VIEW.camera_size))
+	zoom = clampf(value, 10.0, 32.0)
+	player.camera.position = _camera_rest_position * (zoom / float(Tuning.VIEW.camera_size))
 
 
-func _active_repair_panel() -> Control:
-	if not SceneManager.has_popup(&"Repair"):
-		return null
-	var popups: Variant = SceneManager.get("_popups")
-	if popups is Array:
-		for holder in popups:
-			if is_instance_valid(holder):
-				for child in holder.get_children():
-					if child is Control and child.has_method("switch_tool"):
-						return child
-	return null
+func _active_repair_panel() -> WeaponRepair:
+	return SceneManager.get_popup(&"Repair") as WeaponRepair
 
 
 func _has_non_repair_popup() -> bool:
@@ -188,15 +171,14 @@ func _switch_tool(index: int) -> void:
 	var owned_slots := _owned_tool_slots()
 	if index not in owned_slots:
 		if repair_panel != null:
-			repair_panel.feedback.text = "That tool is not yet collected."
-			repair_panel._queue_redraws()
+			repair_panel.show_message("That tool is not yet collected.")
 		return
 	var target_tool: StringName = TOOL_IDS[index - 1]
 	if index == weapons.selected_tool and (repair_panel == null or repair_panel.tool == target_tool):
 		return
 	weapons.select_tool(index)
 	if repair_panel != null:
-		if repair_panel.tool != target_tool or (not equipment.is_full(target_tool) and not equipment.is_session_active(repair_panel._session, target_tool)):
+		if repair_panel.tool != target_tool or (not equipment.is_full(target_tool) and not repair_panel.has_active_session(target_tool)):
 			repair_panel.switch_tool(target_tool)
 	if time_controller != null:
 		time_controller.slow_requested = _is_slow_held()
@@ -481,10 +463,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		match code:
 			KEY_EQUAL, KEY_PLUS:
-				_set_zoom(player.camera.size - 2)
+				_set_zoom(zoom - 2.0)
 				return
 			KEY_MINUS:
-				_set_zoom(player.camera.size + 2)
+				_set_zoom(zoom + 2.0)
 				return
 			KEY_F7:
 				status_hud.cycle_readout()

@@ -256,17 +256,17 @@ func check_exhaustion_and_retry() -> void:
 func check_history() -> void:
 	var settings: TimeSettings = load(SETTINGS_PATH)
 	var h := ReplayHistory.from_settings(settings)
-	expect(near(h.window_seconds, 12.0) and near(h.sample_interval, 0.05) and h.max_snapshots == 240, "History sizes come from TimeSettings")
+	expect(near(h.window_seconds, 18.0) and near(h.sample_interval, 1.0 / 12.0) and h.max_snapshots == 240, "History sizes come from TimeSettings")
 	var stored := 0
 	for i in range(600): # 20 recorded seconds at 30 Hz
 		if h.record(1.0 / 30.0, func() -> Dictionary: return {"i": i}):
 			stored += 1
-	expect(stored >= 395 and stored <= 401, "Samples at ~20 Hz of recorded time (%d)" % stored)
-	expect(h.snapshot_count <= 240 and h.age_of(0) <= 12.0 + EPS, "Window and count stay bounded")
+	expect(stored >= 239 and stored <= 241, "Samples at ~12 Hz of recorded time (%d)" % stored)
+	expect(h.snapshot_count <= 240 and h.age_of(0) <= 18.0 + EPS, "Window and count stay bounded")
 	expect(int(h.state_at(h.snapshot_count - 1)["i"]) >= 598, "Newest snapshot is the latest capture")
 	var count := h.snapshot_count
 	expect(not h.record(0.0, func() -> Dictionary: return {}) and h.snapshot_count == count, "Zero delta (frozen world) records nothing")
-	var target := count - 21
+	var target := count - 13
 	var target_age := h.age_of(target)
 	var state := h.rewind_to(target)
 	expect(h.snapshot_count == target + 1 and near(h.age_of(target), 0.0), "rewind_to trims newer snapshots and rebases time")

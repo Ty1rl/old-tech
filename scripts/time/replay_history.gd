@@ -37,7 +37,7 @@ var _clock := 0.0
 var _accumulator := 0.0
 
 
-func _init(seconds: float = 12.0, rate: float = 20.0, snapshots: int = 240) -> void:
+func _init(seconds: float = 18.0, rate: float = 12.0, snapshots: int = 240) -> void:
 	window_seconds = maxf(0.1, seconds)
 	sample_interval = 1.0 / maxf(0.1, rate)
 	max_snapshots = maxi(1, snapshots)

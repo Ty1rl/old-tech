@@ -156,7 +156,7 @@ func mini_arena_loop(gs: Node, t: TimeController, e: EmergencyRewind) -> void:
 	Input.action_release(&"move_right")
 	var samples := history.snapshot_count
 	var x_before_hit := player.global_position.x
-	expect(samples >= 39 and samples <= 41 and history.rejected_count == 0, "History records validated value snapshots at 20 Hz (%d)" % samples)
+	expect(samples >= 23 and samples <= 25 and history.rejected_count == 0, "History records validated value snapshots at 12 Hz of world time (%d)" % samples)
 	player.take_damage(1000.0)
 	expect(gs.state == gs.State.EMERGENCY and e.active and e.choice_count == samples + 1, "Hit depletion opens NOW + every recorded moment")
 	for i in range(15):
@@ -165,14 +165,15 @@ func mini_arena_loop(gs: Node, t: TimeController, e: EmergencyRewind) -> void:
 		player.step(dt, player.global_position + Vector3.RIGHT)
 		history.record(dt * t.world_scale, capture)
 	expect(history.snapshot_count == samples and near_x(player, x_before_hit), "Frozen world neither moves nor records")
-	e.step_selection(20) # ~1 s back
+	e.step_selection(12) # twelve moments at 12 Hz ~ one second back
+	var chosen_index := e.selected_index
 	var age := e.choice_age(e.selected_index)
 	var chosen: Dictionary = e.choice_state(e.selected_index)
 	e.confirm()
-	expect(absf(age - 0.95) < 0.06, "Twenty wheel steps choose about one second back (%.2f)" % age)
+	expect(absf(age - 0.95) < 0.1, "Twelve wheel steps choose about one second back (%.2f)" % age)
 	expect(player.position.is_equal_approx(chosen.player.position) and player.global_position.x < x_before_hit - 3.0, "Confirm restores the player to the chosen moment")
 	expect(gs.state == gs.State.PLAYING and player.can_act and t.meter >= t.settings.recovery_floor - 0.001, "Play resumes with the recovery floor")
-	expect(history.snapshot_count == samples - 19, "History newer than the chosen moment is discarded")
+	expect(history.snapshot_count == samples - chosen_index + 1, "History newer than the chosen moment is discarded")
 	player.free()
 	floor_body.free()
 

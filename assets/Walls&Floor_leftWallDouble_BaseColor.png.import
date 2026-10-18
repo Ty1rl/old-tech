@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://brbghdlu0gyb7"
-path.s3tc="res://.godot/imported/floor_floor_BaseColor.png-c2bf7e7b1eb1e172b5ad16b8a98ceb79.s3tc.ctex"
+uid="uid://cwqq48ykv0ice"
+path.s3tc="res://.godot/imported/Walls&Floor_leftWallDouble_BaseColor.png-1e1f5fcead3c4c955d90b0edee3fd1f0.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "0cb9491c4e3441f62a667341c8c15884"
+"md5": "f1bf9575a45c6ad74d6b823b89ca75a7"
 }
 
 [deps]
 
-source_file="res://assets/modelWallsFloors/floor_floor_BaseColor.png"
-dest_files=["res://.godot/imported/floor_floor_BaseColor.png-c2bf7e7b1eb1e172b5ad16b8a98ceb79.s3tc.ctex"]
+source_file="res://assets/Walls&Floor_leftWallDouble_BaseColor.png"
+dest_files=["res://.godot/imported/Walls&Floor_leftWallDouble_BaseColor.png-1e1f5fcead3c4c955d90b0edee3fd1f0.s3tc.ctex"]
 
 [params]
 

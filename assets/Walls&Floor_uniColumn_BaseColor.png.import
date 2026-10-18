@@ -2,20 +2,24 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://y7i388egjjdm"
-path="res://.godot/imported/leftWallDouble_BaseColor.png-873aa9e89753c368a32f754da1d9041b.ctex"
+uid="uid://crqgukqte6c5a"
+path.s3tc="res://.godot/imported/Walls&Floor_uniColumn_BaseColor.png-f21a72b5eef403e8ba327155833b8fe8.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "94de409ad892dd07280a274ff315296e"
 }
 
 [deps]
 
-source_file="res://assets/modelWallsFloors/leftWallDouble_BaseColor.png"
-dest_files=["res://.godot/imported/leftWallDouble_BaseColor.png-873aa9e89753c368a32f754da1d9041b.ctex"]
+source_file="res://assets/Walls&Floor_uniColumn_BaseColor.png"
+dest_files=["res://.godot/imported/Walls&Floor_uniColumn_BaseColor.png-f21a72b5eef403e8ba327155833b8fe8.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -23,7 +27,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -37,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

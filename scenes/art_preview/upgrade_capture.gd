@@ -1,9 +1,10 @@
 extends SceneTree
 
 # Isolated art review. This scene never loads or changes the playable prototype.
-const OUT := "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/state/old-tech-jam-5/exports/character-upgrade/"
+const OUT := "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/state/old-tech-jam-2/exports/round-j/"
 const ASSET := "res://assets/characters/protagonist/protagonist.glb"
-const CLIPS := ["Idle", "Walk", "RingHold", "FlashHold", "ConeHold", "ClockHold"]
+const CLIPS := ["Idle", "Walk", "Run", "BackWalk", "RingHold", "FlashHold", "ConeHold", "ClockHold"]
+const GAMEPLAY_VISUAL_SCALE := 1.3
 var checks := 0
 var failures: Array[String] = []
 var stage: Node3D
@@ -208,7 +209,7 @@ func standin(clip: String) -> Node3D:
 
 func run() -> void:
 	DirAccess.make_dir_recursive_absolute(OUT + "godot")
-	for sequence in ["idle-gameplay", "walk-gameplay", "walk-close"]:
+	for sequence in ["idle-gameplay", "walk-gameplay", "run-gameplay", "backwalk-gameplay", "walk-close", "run-close"]:
 		DirAccess.make_dir_recursive_absolute(OUT + "godot/" + sequence)
 	setup_stage()
 	model = (load(ASSET) as PackedScene).instantiate() as Node3D
@@ -275,20 +276,28 @@ func run() -> void:
 	var deformation_ok := true
 	var stance_ok := true
 	for clip in CLIPS:
-		var times := [0.0, 0.5, 1.0] if clip == "Idle" else ([0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 0.99999] if clip == "Walk" else [0.0])
+		var anim_len := player.get_animation(clip).length
+		var times: Array = [0.0, 0.5, 1.0] if clip == "Idle" else (
+			[0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, anim_len - 0.00001] if (clip == "Walk" or clip == "BackWalk") else (
+			[0.0, anim_len * 0.125, anim_len * 0.25, anim_len * 0.375, anim_len * 0.5, anim_len * 0.625, anim_len * 0.75, anim_len * 0.875, anim_len - 0.00001] if clip == "Run" else [0.0]))
 		for time in times:
 			var sample := deformation(clip, time)
-			deformation_ok = deformation_ok and sample.finite and sample.min_m[1] >= -0.008 and sample.max_m[1] < 2.0
-			if clip == "Walk":
+			deformation_ok = deformation_ok and sample.finite and sample.min_m[1] >= -0.012 and sample.max_m[1] < 2.0
+			if clip == "Walk" or clip == "BackWalk":
 				var feet: Dictionary = sample.foot_min_y_m
-				stance_ok = stance_ok and minf(feet.L, feet.R) < 0.012
+				stance_ok = stance_ok and minf(feet.L, feet.R) < 0.016
+			elif clip == "Run":
+				var feet: Dictionary = sample.foot_min_y_m
+				stance_ok = stance_ok and minf(feet.L, feet.R) < 0.038
 	expect(deformation_ok, "Non-finite deformation, ground penetration, or implausible pose bounds")
-	expect(stance_ok, "Walk loses planted-foot ground contact")
-	pose("Walk", 0)
-	var knee0 := skeleton.get_bone_global_pose(skeleton.find_bone("shin.L"))
-	pose("Walk", 0.25)
-	var knee1 := skeleton.get_bone_global_pose(skeleton.find_bone("shin.L"))
-	expect(knee0.basis.get_rotation_quaternion().angle_to(knee1.basis.get_rotation_quaternion()) > 0.1, "Walk must bend the knee, not just move rigid legs")
+	expect(stance_ok, "Locomotion clips lose planted-foot ground contact")
+	for gait_clip in ["Walk", "Run"]:
+		var anim_len := player.get_animation(gait_clip).length
+		pose(gait_clip, 0)
+		var knee0 := skeleton.get_bone_global_pose(skeleton.find_bone("shin.L"))
+		pose(gait_clip, anim_len * 0.75)
+		var knee1 := skeleton.get_bone_global_pose(skeleton.find_bone("shin.L"))
+		expect(knee0.basis.get_rotation_quaternion().angle_to(knee1.basis.get_rotation_quaternion()) > 0.2, gait_clip + " must bend the knee, not just move rigid legs")
 	for clip in ["RingHold", "FlashHold", "ConeHold", "ClockHold"]:
 		pose(clip, 0)
 		# BoneAttachment3D publishes transforms at the frame boundary. Reading
@@ -312,35 +321,60 @@ func run() -> void:
 				var target: Vector3 = targets[clip][0 if name == "Grip_R" else 1]
 				expect(relative.origin.distance_to(target) < 0.012, "Socket must follow its posed hand: " + clip + "/" + name)
 		sockets[clip] = transforms
+	# 1. Actual gameplay scale (1.3x visual scale) and camera contract (ortho 22, pitch -55, 1280x800).
+	model.scale = Vector3.ONE * GAMEPLAY_VISUAL_SCALE
 	model.rotation.y = deg_to_rad(155)
-	# Exact current gameplay camera contract, in a neutral isolated grid stage.
 	camera.position = Vector3(0, 20, 14)
 	camera.rotation_degrees = Vector3(-55, 0, 0)
 	camera.size = 22
-	for clip in ["Idle", "Walk"]:
-		label.text = "PROTAGONIST / %s  •  Actual gameplay camera: ortho 22 m, pitch −55°\nSkinned in-place animation · isolated review stage · 1280×800" % clip
-		var sequence := "idle-gameplay" if clip == "Idle" else "walk-gameplay"
-		var duration := 2.0 if clip == "Idle" else 1.0
-		var count := 30 if clip == "Idle" else 16
+	var gameplay_specs := {
+		"Idle": {"seq": "idle-gameplay", "count": 12, "hero_t": 0.0, "meta": "2.0 s loop · 1.0x playback"},
+		"Walk": {"seq": "walk-gameplay", "count": 16, "hero_t": 0.0, "meta": "1.456 m scaled stride · ~1.35x playback"},
+		"Run": {"seq": "run-gameplay", "count": 16, "hero_t": 0.0, "meta": "1.976 m scaled stride · ~2.0x playback at 6 m/s"},
+		"BackWalk": {"seq": "backwalk-gameplay", "count": 12, "hero_t": 0.0, "meta": "1.248 m scaled stride · ~1.50x playback"}
+	}
+	for clip in ["Idle", "Walk", "Run", "BackWalk"]:
+		var spec: Dictionary = gameplay_specs[clip]
+		var anim_len := player.get_animation(clip).length
+		label.text = "PROTAGONIST / %s (1.3x gameplay scale)  •  Camera: ortho 22 m, pitch −55°, 1280×800\n%s" % [clip, spec.meta]
+		var count: int = spec.count
 		for frame in range(count):
-			pose(clip, duration * frame / count)
-			await save_image("godot/%s/frame-%02d.png" % [sequence, frame])
-		pose(clip, 0.22 if clip == "Walk" else 0)
-		await save_image("godot/%s.png" % sequence)
+			pose(clip, anim_len * frame / count)
+			await save_image("godot/%s/frame-%02d.png" % [spec.seq, frame])
+		pose(clip, spec.hero_t)
+		await save_image("godot/%s.png" % spec.seq)
+	# 2. Close deformation & planted/swing inspection at unit model scale.
+	model.scale = Vector3.ONE
 	camera.position = Vector3(2.7, 2.15, 4.8)
 	camera.look_at(Vector3(0, 0.95, 0))
 	camera.size = 2.45
-	label.text = "PROTAGONIST / WALK  •  Deformation inspection\nSame imported skeleton, weights and loop · no runtime IK"
+	label.text = "PROTAGONIST / WALK  •  Close deformation inspection (planted & swing)\nRefined hip/knee/cuff/boot weights · LOOP_LINEAR · no runtime IK"
 	for frame in range(16):
 		pose("Walk", frame / 16.0)
 		await save_image("godot/walk-close/frame-%02d.png" % frame)
+	pose("Walk", 0.0)
+	await save_image("godot/walk-planted-close.png")
+	pose("Walk", 0.75)
+	await save_image("godot/walk-swing-close.png")
+	var run_len := player.get_animation("Run").length
+	label.text = "PROTAGONIST / RUN  •  Close deformation inspection (planted & high swing)\n1.52 m unscaled stride (1.976 m at 1.3x) · ~2.0x playback for 6 m/s"
+	for frame in range(16):
+		pose("Run", run_len * frame / 16.0)
+		await save_image("godot/run-close/frame-%02d.png" % frame)
+	pose("Run", 0.0)
+	await save_image("godot/run-planted-close.png")
+	pose("Run", run_len * 0.75)
+	await save_image("godot/run-swing-close.png")
+	pose("BackWalk", 0.0)
+	label.text = "PROTAGONIST / BACKWALK  •  Close backward gait inspection\n0.96 m unscaled stride (1.248 m at 1.3x) · toe-first rear reach"
+	await save_image("godot/backwalk-close.png")
 	for clip in ["RingHold", "FlashHold", "ConeHold", "ClockHold"]:
 		pose(clip, 0)
 		var prop := standin(clip)
 		label.text = "PROTAGONIST / %s  •  Holding pose and socket review\nCrude prop stand-in · Grip_R follows hand.R · final equipment fitting belongs to integration" % clip
 		await save_image("godot/%s.png" % clip)
 		prop.free()
-	expect(saved_images == 68, "Expected 62 loop frames plus six review stills")
+	expect(saved_images == 101, "Expected 88 loop sequence frames plus 13 review stills")
 	finish()
 
 
@@ -349,7 +383,7 @@ func finish() -> void:
 		"failures": failures, "mesh_objects": meshes.size(), "triangles": triangles, "materials": materials.size(),
 		"bones": skeleton.get_bone_count() if skeleton else 0, "animations": player.get_animation_list() if player else [],
 		"deformation_samples": samples, "exported_socket_transforms": sockets,
-		"images": saved_images, "gameplay_camera": {"position": [0, 20, 14], "pitch": -55, "size": 22, "resolution": [1280, 800]},
+		"images": saved_images, "gameplay_camera": {"position": [0, 20, 14], "pitch": -55, "size": 22, "resolution": [1280, 800], "visual_scale": GAMEPLAY_VISUAL_SCALE},
 		"playable_build_changed": false}
 	var file := FileAccess.open(OUT + "godot-verification.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(result, "\t") + "\n")

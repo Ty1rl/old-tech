@@ -15,9 +15,12 @@ from mathutils import Vector, Matrix
 sys.dont_write_bytecode=True
 
 REPO = Path(os.environ['JAM_REPO'])
-OUT = Path(os.environ['JAM_STATE_ROOT']) / 'exports/character-upgrade'
+STATE_ROOT = Path(os.environ['JAM_STATE_ROOT'])
+OUT = STATE_ROOT / os.environ.get('JAM_EXPORT_SUBDIR', 'exports/round-j')
+if not (OUT/'settings.json').exists() and (STATE_ROOT/'exports/character-upgrade/settings.json').exists():
+    OUT = STATE_ROOT / 'exports/character-upgrade'
 OUT.mkdir(parents=True, exist_ok=True)
-SETTINGS = json.loads((OUT/'settings.json').read_text()) if (OUT/'settings.json').exists() else {'rig':True,'iteration':2}
+SETTINGS = json.loads((OUT/'settings.json').read_text()) if (OUT/'settings.json').exists() else {'rig':True,'rebuild_rig':True,'iteration':1}
 SOURCE = REPO/'art-source/protagonist/protagonist.blend'
 bpy.ops.wm.open_mainfile(filepath=str(SOURCE))
 bpy.context.preferences.filepaths.save_version=0
@@ -263,7 +266,7 @@ if SETTINGS.get('rig',True):
             for ob in list(props.objects): bpy.data.objects.remove(ob,do_unlink=True)
             bpy.data.collections.remove(props)
         for action in list(bpy.data.actions):
-            if action.name in ['Idle','Walk','RingHold','FlashHold','ConeHold','ClockHold']:
+            if action.name in ['Idle','Walk','Run','BackWalk','StrafeLeft','StrafeRight','RingHold','FlashHold','ConeHold','ClockHold']:
                 bpy.data.actions.remove(action)
     rig=build_rig(character,OUT)
 
@@ -315,7 +318,7 @@ scene.render.image_settings.file_format='PNG'
 camera=scene.camera
 iteration=OUT/('iteration-%02d'%SETTINGS.get('iteration',1))
 iteration.mkdir(parents=True,exist_ok=True)
-for name in SETTINGS.get('render_views',['three-quarter','portrait','walk','ring-hold']):
+for name in SETTINGS.get('render_views',['three-quarter','walk','walk-side','run','run-side','backwalk','legs-close','ring-hold']):
     scene.render.resolution_x=900
     scene.render.resolution_y=1100
     camera.data.ortho_scale=2.13
@@ -330,7 +333,25 @@ for name in SETTINGS.get('render_views',['three-quarter','portrait','walk','ring
     elif name=='back': camera.location=(0,6,.94)
     elif name=='side': camera.location=(6,0,.94)
     elif name=='walk' and rig:
-        rig.animation_data.action=bpy.data.actions['Walk']; scene.frame_set(10)
+        rig.animation_data.action=bpy.data.actions['Walk']; scene.frame_set(1)
+    elif name=='walk-side' and rig:
+        rig.animation_data.action=bpy.data.actions['Walk']; scene.frame_set(1)
+        camera.location=(5.5,-1.5,1.15); target=Vector((0,0,.88))
+    elif name=='walk-swing' and rig:
+        rig.animation_data.action=bpy.data.actions['Walk']; scene.frame_set(24)
+        camera.location=(4.8,-2.5,1.05); target=Vector((0,0,.78)); camera.data.ortho_scale=1.65
+    elif name=='run' and rig:
+        rig.animation_data.action=bpy.data.actions['Run']; scene.frame_set(1)
+    elif name=='run-side' and rig:
+        rig.animation_data.action=bpy.data.actions['Run']; scene.frame_set(2)
+        camera.location=(5.5,-1.5,1.15); target=Vector((0,0,.88))
+    elif name=='backwalk' and rig:
+        rig.animation_data.action=bpy.data.actions['BackWalk']; scene.frame_set(1)
+        camera.location=(4.5,-3.5,1.65); target=Vector((0,0,.90))
+    elif name=='legs-close' and rig:
+        rig.animation_data.action=bpy.data.actions['Run']; scene.frame_set(16)
+        scene.render.resolution_y=950; camera.data.ortho_scale=1.18
+        target=Vector((0,-.04,.52)); camera.location=(3.8,-3.2,.82)
     elif name.endswith('-hold') and rig:
         action={'ring-hold':'RingHold','flash-hold':'FlashHold','cone-hold':'ConeHold','clock-hold':'ClockHold'}[name]
         rig.animation_data.action=bpy.data.actions[action]; scene.frame_set(1)

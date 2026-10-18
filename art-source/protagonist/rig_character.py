@@ -56,10 +56,20 @@ def build_rig(character,out):
         t=ease(1.15,1.34,z); return {'spine':1-t,'chest':t}
 
     def leg_weights(v,label):
-        z=v.z
-        if z>.81:
-            t=ease(.82,.96,z); return {'thigh.'+label:1-t,'pelvis':t}
-        t=ease(.47,.64,z)
+        x,y,z=v.x,v.y,v.z
+        if z>.72:
+            t=ease(.74,.95,z)
+            # Soften the inner-thigh/crotch seam near x=0 so wide Run/Walk strides never step or tear.
+            crotch=(1-ease(.012,.068,abs(x)))*ease(.70,.83,z)
+            t=max(t,crotch)
+            return {'thigh.'+label:1-t,'pelvis':t}
+        if z<.29:
+            # Blend lower trouser hem smoothly with the ankle so it moves with the boot collar.
+            a=(1-ease(.19,.28,z))*.22
+            return {'shin.'+label:1-a,'foot.'+label:a}
+        # Knee joint sits at z=0.55. Keep z<0.50 on shin so the upper shin never balloons forward in swing,
+        # while blending smoothly across the patella and lower thigh (0.50..0.65).
+        t=ease(.50,.65,z)
         return {'shin.'+label:1-t,'thigh.'+label:t}
 
     def arm_weights(v,label):
@@ -94,9 +104,14 @@ def build_rig(character,out):
             elif name.startswith('Trousers |') or name.startswith('Shaped knee'):
                 weights=leg_weights(v.co,label)
             elif name.startswith('Trouser turnup.'):
-                t=ease(.24,.30,z); weights={'foot.'+label:1-t,'shin.'+label:t}
+                # Match the lower trouser leg weighting so the cuff never shears or crushes against the shin.
+                a=(1-ease(.19,.28,z))*.22
+                weights={'shin.'+label:1-a,'foot.'+label:a}
+            elif name.startswith('Boot sole'):
+                weights={'foot.'+label:1}
             elif name.startswith('Boot'):
-                t=ease(.20,.28,z)*.38
+                # Rigid foot/sole at the bottom, blending smoothly into the shin up the boot collar.
+                t=ease(.16,.27,z)*.72
                 weights={'foot.'+label:1-t,'shin.'+label:t}
             elif name=='Neck':
                 t=ease(1.49,1.55,z); weights={'neck':1-t,'head':t}
@@ -168,16 +183,50 @@ def build_rig(character,out):
         direction_matrix(second,elbow,target)
         return target
 
+    def foot_pose(foot_name,ankle_pos,pitch_rad):
+        # Negative world-X rotation lifts the toe (-Y) upward (+Z) for heel strike;
+        # positive world-X rotation points the toe downward (-Z) for push-off.
+        m=(Matrix.Rotation(-pitch_rad,3,'X')@rest[foot_name].to_3x3()).to_4x4()
+        m.translation=Vector(ankle_pos)
+        desired[foot_name]=m
+
     holds={
         'RingHold':{'R':(-.115,-.31,1.17),'L':(.130,-.44,1.17)},
         'FlashHold':{'R':(-.150,-.32,1.21),'L':(.150,-.36,1.21)},
         'ConeHold':{'R':(-.115,-.29,1.16),'L':(.115,-.44,1.19)},
         'ClockHold':{'R':(-.105,-.27,1.16),'L':(.105,-.29,1.16)},
     }
+    gait_metrics={
+        'Walk':{
+            'stride_length_unscaled_m':1.12,
+            'stride_length_scaled_1_3x_m':1.456,
+            'duration_s':1.0,
+            'base_speed_scaled_1_3x_mps':1.456,
+            'recommended_playback_rate_walk':1.35,
+            'notes':'In-place walk cycle with planted stance contact and 0.56 m per-foot excursion (1.12 m full cycle unscaled, 1.456 m at 1.3x visual scale).'
+        },
+        'Run':{
+            'stride_length_unscaled_m':1.52,
+            'stride_length_scaled_1_3x_m':1.976,
+            'duration_s':0.6667,
+            'base_speed_scaled_1_3x_mps':2.964,
+            'recommended_playback_rate_at_6mps':2.0,
+            'notes':'In-place run cycle with forward torso lean, high swing knee/heel recovery, and 0.76 m per-foot excursion (1.52 m full cycle unscaled, 1.976 m at 1.3x visual scale; plays at ~2.0x for 6 m/s gameplay speed).'
+        },
+        'BackWalk':{
+            'stride_length_unscaled_m':0.96,
+            'stride_length_scaled_1_3x_m':1.248,
+            'duration_s':1.0,
+            'base_speed_scaled_1_3x_mps':1.248,
+            'recommended_playback_rate_backwalk':1.5,
+            'notes':'Dedicated backward walk cycle with rear toe-first reach and grounded draw-back stance.'
+        }
+    }
     scene=bpy.context.scene
     scene.render.fps=30
     rig.animation_data_create()
-    for name,end,step in [('Idle',61,3),('Walk',31,1)]+[(n,31,30) for n in holds]:
+    clip_specs=[('Idle',61,3),('Walk',31,1),('Run',21,1),('BackWalk',31,1)]+[(n,31,30) for n in holds]
+    for name,end,step in clip_specs:
         action=bpy.data.actions.new(name)
         action.use_fake_user=True
         action.use_frame_range=True
@@ -185,38 +234,113 @@ def build_rig(character,out):
         rig.animation_data.action=action
         for frame in range(1,end+1,step):
             phase=2*math.pi*(frame-1)/(end-1)
-            walking=name=='Walk'; holding=name in holds
+            walking=name=='Walk'
+            running=name=='Run'
+            backwalking=name=='BackWalk'
+            locomotion=walking or running or backwalking
+            holding=name in holds
             desired.clear()
-            bob=-.035+.006*math.sin(phase*2)**2 if walking else .0017*math.sin(phase)
-            sway=.006*math.sin(phase) if walking else .001*math.sin(phase)
+            if running:
+                # Lowest at full-stride contact/push-off (cos(phase*2)==1) so the 0.784m leg chain reaches ground,
+                # highest as the stance leg drives upward through mid-pass (cos(phase*2)==-1).
+                bob=-.058-.022*math.cos(phase*2)
+                sway=.011*math.sin(phase)
+                pelvis_rot=(.045,.028*math.sin(phase),-.042*math.cos(phase))
+                spine_rot=(.085-.014*math.cos(phase*2),-.016*math.sin(phase),.026*math.cos(phase))
+                chest_rot=(.060-.010*math.cos(phase*2),-.030*math.sin(phase),.038*math.cos(phase))
+                head_rot=(-.110,-.010*math.sin(phase),-.018*math.cos(phase))
+            elif walking:
+                # Lowest at double-support passing, highest as planted leg vaults over mid-stance.
+                bob=-.026-.012*math.cos(phase*2)
+                sway=.008*math.sin(phase)
+                pelvis_rot=(.012,.022*math.sin(phase),-.028*math.cos(phase))
+                spine_rot=(.018-.006*math.cos(phase*2),-.010*math.sin(phase),.016*math.cos(phase))
+                chest_rot=(.012,-.022*math.sin(phase),.024*math.cos(phase))
+                head_rot=(-.018,-.008*math.sin(phase),-.010*math.cos(phase))
+            elif backwalking:
+                bob=-.028-.009*math.cos(phase*2)
+                sway=.007*math.sin(phase)
+                pelvis_rot=(.020,-.018*math.sin(phase),.022*math.cos(phase))
+                spine_rot=(.030-.005*math.cos(phase*2),.008*math.sin(phase),-.014*math.cos(phase))
+                chest_rot=(.022,.016*math.sin(phase),-.020*math.cos(phase))
+                head_rot=(-.032,-.006*math.sin(phase),.008*math.cos(phase))
+            else:
+                bob=.0017*math.sin(phase)
+                sway=.001*math.sin(phase)
+                pelvis_rot=(0,0,.008*math.sin(phase))
+                spine_rot=(.013*math.sin(phase),0,0)
+                chest_rot=(-.010*math.sin(phase),0,0)
+                head_rot=(0,-.010*math.sin(phase),0)
             desired['root']=Matrix.Translation((sway,0,bob))@rest['root']
-            fk('pelvis',(0,.018*math.sin(phase) if walking else 0,.008*math.sin(phase)))
-            fk('spine',(.013*math.sin(phase),0,0))
-            fk('chest',(-.010*math.sin(phase),-.024*math.sin(phase) if walking else 0,0))
-            fk('neck'); fk('head',(0,-.010*math.sin(phase),0))
+            fk('pelvis',pelvis_rot)
+            fk('spine',spine_rot)
+            fk('chest',chest_rot)
+            fk('neck'); fk('head',head_rot)
             for s,label in [(1,'L'),(-1,'R')]:
-                # In-place walk, with a planted stance and a lifted swing foot.
                 legphase=phase+(math.pi if s<0 else 0)
-                stride=-.190*math.sin(legphase) if walking else .009
-                lift=.075*max(0,math.cos(legphase))**2 if walking else 0
+                c=math.cos(legphase)
+                sn=math.sin(legphase)
+                if running:
+                    # legphase=0: front strike (-Y); pi/2: mid-stance; pi: rear toe push-off (+Y); 3pi/2: high swing recovery.
+                    stride=-.380*c
+                    swing_Bell=max(0,-sn)
+                    # pitch_rad > 0 lifts toe for front heel strike; < 0 points toe down on push-off & swing recovery.
+                    foot_pitch=.14*max(0,c)*(1-.4*swing_Bell)-.32*max(0,-c)-.22*(swing_Bell**1.2)
+                    lift=.155*(swing_Bell**1.35)+.13*max(0,-foot_pitch)*(1-.3*swing_Bell)
+                elif walking:
+                    # legphase=0: front heel contact (-Y); pi/2: flat planted mid-stance; pi: rear push-off (+Y); 3pi/2: swing lift.
+                    stride=-.280*c
+                    swing_Bell=max(0,-sn)
+                    foot_pitch=.15*max(0,c)*(1-.5*swing_Bell)-.22*max(0,-c)-.06*swing_Bell
+                    lift=.082*(swing_Bell**1.5)+.13*max(0,-foot_pitch)*(1-.4*swing_Bell)
+                elif backwalking:
+                    # Reverse travel: swing reaches back (+Y) when sn<0, planted stance draws from +Y to -Y when sn>0.
+                    stride=.240*c
+                    swing_Bell=max(0,-sn)
+                    foot_pitch=-.16*max(0,c)-.08*swing_Bell+.10*max(0,-c)
+                    lift=.062*(swing_Bell**1.5)+.12*max(0,-foot_pitch)
+                else:
+                    stride=.009
+                    lift=0
+                    foot_pitch=0
                 thigh='thigh.'+label; shin='shin.'+label; foot='foot.'+label
                 parent=desired['pelvis']@rest['pelvis'].inverted()@rest[thigh]
-                ankle=two_bone(thigh,shin,parent.translation,(s*.183,stride,.16+lift),(s*.15,-.40,.55))
-                desired[foot]=rest[foot].copy(); desired[foot].translation=ankle
+                ankle_x=s*(.174 if locomotion else .183)
+                ankle=two_bone(thigh,shin,parent.translation,(ankle_x,stride,.16+lift),(s*.165,-.45,.55))
+                foot_pose(foot,ankle,foot_pitch)
                 fk('clavicle.'+label)
                 upper='upper_arm.'+label; fore='forearm.'+label; hand='hand.'+label
                 shoulder=desired['clavicle.'+label]@rest['clavicle.'+label].inverted()@rest[upper]
                 if holding:
                     offset=Vector((s*.028,-.005,-.036))
                     wrist_target=Vector(holds[name][label])-offset
+                    arm_pole=(s*.48,.10,1.14)
+                elif running:
+                    # When c < 0 (leg back +Y), same-side arm swings forward (-Y) and slightly up;
+                    # when c > 0 (leg forward -Y), same-side arm swings back (+Y) and stays low.
+                    arm_drive=.18*c
+                    arm_lift=.065*max(0,-c)+.015*max(0,c)
+                    wrist_target=Vector((s*.262,-.095+arm_drive,.965+arm_lift+bob))
+                    arm_pole=(s*.35,.28,1.02)
+                elif walking:
+                    arm_swing=.13*c
+                    wrist_target=Vector((s*.268,-.030+arm_swing,.910+.025*max(0,-c)+bob))
+                    arm_pole=(s*.36,.24,1.06)
+                elif backwalking:
+                    arm_swing=-.11*c
+                    wrist_target=Vector((s*.268,-.025+arm_swing,.915+.020*max(0,c)+bob))
+                    arm_pole=(s*.36,.24,1.06)
                 else:
-                    swing=.10*math.sin(legphase) if walking else .004*math.sin(phase)
+                    swing=.004*math.sin(phase)
                     wrist_target=Vector((s*.286,-.014+swing,.923+bob))
-                wrist=two_bone(upper,fore,shoulder.translation,wrist_target,(s*.48,.10,1.14))
+                    arm_pole=(s*.48,.10,1.14)
+                wrist=two_bone(upper,fore,shoulder.translation,wrist_target,arm_pole)
                 if holding:
                     desired[hand]=rest[hand].copy(); desired[hand].translation=wrist
+                elif running:
+                    direction_matrix(hand,wrist,wrist+Vector((s*-.010,-.055,-.050)))
                 else:
-                    direction_matrix(hand,wrist,wrist+Vector((s*.008,-.004,-.080)))
+                    direction_matrix(hand,wrist,wrist+Vector((s*.008,-.018,-.078)))
             for b in data.bones:
                 pb=rig.pose.bones[b.name]
                 kwargs={}
@@ -229,7 +353,7 @@ def build_rig(character,out):
         for curve in action.fcurves:
             for k in curve.keyframe_points: k.interpolation='LINEAR'
         action['loop']=True
-        action['purpose']='in-place locomotion' if walking else ('static equipment holding pose' if holding else 'subtle breathing idle')
+        action['purpose']='in-place locomotion' if locomotion else ('static equipment holding pose' if holding else 'subtle breathing idle')
     rig.animation_data.action=bpy.data.actions['Idle']
     scene.frame_start=1; scene.frame_end=61; scene.frame_set(1)
     bpy.context.view_layer.update()
@@ -243,8 +367,11 @@ def build_rig(character,out):
     rig.animation_data.action=bpy.data.actions['Idle']; scene.frame_set(1)
     report={'bone_names':[b.name for b in data.bones],'deforming_bones':[b.name for b in data.bones if b.use_deform],
             'skinned_meshes':deforming_meshes,'unweighted_vertices':unweighted,
-            'clips':{a.name:{'frames':list(a.frame_range),'duration_s':(a.frame_range[1]-a.frame_range[0])/30,
+            'clips':{a.name:{'frames':list(a.frame_range),'duration_s':round((a.frame_range[1]-a.frame_range[0])/30,4),
                      'loop':True} for a in bpy.data.actions},
+            'gait_metrics':gait_metrics,
+            'runtime_scale_reference':{'visual_scale':1.3,'gameplay_move_speed_mps':6.0,
+                     'unscaled_model_speed_at_6mps':round(6.0/1.3,4)},
             'sockets':{ob.name:{'bone':ob.parent_bone,'rest_local_matrix':
                 [[v for v in row] for row in ob.matrix_parent_inverse@ob.matrix_basis]} for ob in sockets},
             'holding_poses':poses,'units':'metres','blender_axes':'+Z up, -Y front',

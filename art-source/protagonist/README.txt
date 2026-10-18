@@ -25,17 +25,30 @@ Hierarchy: root > pelvis > spine > chest > neck > head.
 chest > clavicle.L/R > upper_arm.L/R > forearm.L/R > hand.L/R.
 pelvis > thigh.L/R > shin.L/R > foot.L/R.
 All 80 mesh parts have normalized skin weights; torso, shoulder, elbow, hip,
-knee and wrist surfaces blend across bones. Hair, pocket hardware and boot
-soles retain their shapes through appropriate single-bone or limited blends.
+knee, ankle and wrist surfaces blend across bones. In Round J (jam-2), lower-body
+weights were refined so Trousers and Shaped knee share a wider, cohesive knee
+blend (eliminating knee patch separation), inner-thigh/crotch vertices soften into
+pelvis during wide strides, and Trouser turnup cuffs match the lower shin/ankle
+blend while Boot shafts blend smoothly from rigid soles (100% foot.L/R) into
+shin.L/R (eliminating cuff compression and ankle shearing).
 
-Idle: two-second breathing loop. Walk: one-second in-place cycle at 30 fps,
-with bent knees, a planted stance, lifted swing foot and restrained arm swing.
-Starting travel-speed estimate: 0.76 m/s from the 0.38 m stance excursion over
-half the cycle; jam-1 should tune animation playback against the game's speed.
-RingHold, FlashHold, ConeHold, ClockHold: one-second constant holding clips.
-post_import.gd marks all six clips LOOP_LINEAR on Godot import because glTF
-does not standardize loop flags. Keep protagonist.glb.import with the asset.
-No runtime IK, facial rig, finger bones, combat clips or root travel.
+Locomotion & Hold Clips (all marked Animation.LOOP_LINEAR by post_import.gd):
+- Idle (2.0 s, frames 1..61 at 30 fps): subtle breathing loop.
+- Walk (1.0 s, frames 1..31 at 30 fps): in-place walk with heel-to-toe planted
+  stance contact, swing knee lift, and natural counter-rotation.
+  * Unscaled stride: 0.56 m per-foot stance excursion = 1.12 m full cycle (1.12 m/s at 1.0x).
+  * At 1.3x runtime visual scale: 1.456 m full cycle (1.456 m/s at 1.0x; ~1.35x playback rate for ~2.0 m/s walk).
+- Run (0.6667 s, frames 1..21 at 30 fps): energetic in-place run with forward
+  torso lean, opposite-arm drive, planted contact, and high swing knee/heel recovery.
+  * Unscaled stride: 0.76 m per-foot excursion = 1.52 m full cycle (2.28 m/s at 1.0x).
+  * At 1.3x runtime visual scale: 1.976 m (~2.0 m) full cycle (2.964 m/s at 1.0x).
+  * Recommended playback rate at 6.0 m/s gameplay speed: ~2.0x (avoids running Walk at 6 cycles/s).
+- BackWalk (1.0 s, frames 1..31 at 30 fps): dedicated backward gait loop with
+  toe-first rear reach and grounded draw-back stance.
+  * Unscaled stride: 0.48 m per-foot excursion = 0.96 m full cycle (1.248 m at 1.3x scale; ~1.5x playback rate).
+- RingHold, FlashHold, ConeHold, ClockHold (1.0 s, frames 1..31): static equipment
+  holding poses preserving the exact Grip_R / Grip_L socket contract.
+Keep protagonist.glb.import with the asset. No runtime IK or root motion.
 
 Attachment contract
 Blender: metres, +Z up / -Y front; feet/common root on the ground.

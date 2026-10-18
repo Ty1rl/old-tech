@@ -29,6 +29,17 @@
     "legs": "pelvis > thigh.L/R > shin.L/R > foot.L/R"
   },
   "clips": {
+    "BackWalk": {
+      "frames": [
+        1.0,
+        31.0
+      ],
+      "duration_s": 1.0,
+      "loop": true,
+      "stride_length_unscaled_m": 0.96,
+      "stride_length_scaled_1_3x_m": 1.248,
+      "recommended_playback_rate": 1.5
+    },
     "ClockHold": {
       "frames": [
         1.0,
@@ -69,14 +80,59 @@
       "duration_s": 1.0,
       "loop": true
     },
+    "Run": {
+      "frames": [
+        1.0,
+        21.0
+      ],
+      "duration_s": 0.6667,
+      "loop": true,
+      "stride_length_unscaled_m": 1.52,
+      "stride_length_scaled_1_3x_m": 1.976,
+      "recommended_playback_rate_at_6mps": 2.0
+    },
     "Walk": {
       "frames": [
         1.0,
         31.0
       ],
       "duration_s": 1.0,
-      "loop": true
+      "loop": true,
+      "stride_length_unscaled_m": 1.12,
+      "stride_length_scaled_1_3x_m": 1.456,
+      "recommended_playback_rate": 1.35
     }
+  },
+  "gait_metrics": {
+    "Walk": {
+      "stride_length_unscaled_m": 1.12,
+      "stride_length_scaled_1_3x_m": 1.456,
+      "duration_s": 1.0,
+      "base_speed_scaled_1_3x_mps": 1.456,
+      "recommended_playback_rate_walk": 1.35,
+      "notes": "In-place walk cycle with planted stance contact and 0.56 m per-foot excursion (1.12 m full cycle unscaled, 1.456 m at 1.3x visual scale)."
+    },
+    "Run": {
+      "stride_length_unscaled_m": 1.52,
+      "stride_length_scaled_1_3x_m": 1.976,
+      "duration_s": 0.6667,
+      "base_speed_scaled_1_3x_mps": 2.964,
+      "recommended_playback_rate_at_6mps": 2.0,
+      "notes": "In-place run cycle with forward torso lean, high swing knee/heel recovery, and 0.76 m per-foot excursion (1.52 m full cycle unscaled, 1.976 m at 1.3x visual scale; plays at ~2.0x for 6 m/s gameplay speed)."
+    },
+    "BackWalk": {
+      "stride_length_unscaled_m": 0.96,
+      "stride_length_scaled_1_3x_m": 1.248,
+      "duration_s": 1.0,
+      "base_speed_scaled_1_3x_mps": 1.248,
+      "recommended_playback_rate_backwalk": 1.5,
+      "notes": "Dedicated backward walk cycle with rear toe-first reach and grounded draw-back stance."
+    }
+  },
+  "runtime_scale_reference": {
+    "visual_scale": 1.3,
+    "gameplay_move_speed_mps": 6.0,
+    "unscaled_model_speed_at_6mps": 4.6154
   },
   "sockets": {
     "Grip_R": {
@@ -272,6 +328,6 @@
   "limits": [
     "No finger or face rig.",
     "Final handle fitting and runtime IK belong to integration.",
-    "Triangulated cloth/limbs; some joint and cuff compression."
+    "Triangulated cloth/limbs; hip, knee, ankle and cuff weights refined in Round J."
   ]
 }

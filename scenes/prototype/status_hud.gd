@@ -22,6 +22,10 @@ var health_fraction := 1.0
 var slowing := false
 var repairing := false
 var caption := ""
+var available_tools: Array[int] = [1,2,3,4]
+var charge_fraction := 0.0
+var charging := false
+var damage_bright := 0.0
 var key_hint: Label
 var tracked_player: Node3D
 var inspecting := false
@@ -70,7 +74,7 @@ func cycle_readout() -> void:
 
 
 func set_combat_hint(muted: bool) -> void:
-	key_hint.text = "F9 guard demo · M sound: %s · F7 numbers" % ("off" if muted else "on")
+	key_hint.text = "M sound: %s · F7 numbers · F10 encounters" % ("off" if muted else "on")
 
 
 func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> void:
@@ -81,11 +85,16 @@ func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> vo
 	repairing = equipment.repairing != &""
 	if repairing:
 		selected = TOOLS.find(equipment.repairing)
-	health_fraction = clampf(player.health / Tuning.PLAYER.health, 0.0, 1.0)
+	var next_health := clampf(player.health / Tuning.PLAYER.health, 0.0, 1.0)
+	if next_health < health_fraction: damage_bright = 1.0
+	health_fraction = next_health
+	available_tools.assign(weapons.available_tools)
+	charging = weapons.beam_charging
+	charge_fraction = weapons.beam_charge
 	slowing = player.world_scale < 1.0
 	for i in range(TOOLS.size()):
 		fractions[i] = clampf(equipment.remaining(TOOLS[i]) / equipment.capacity(TOOLS[i]), 0.0, 1.0)
-	caption = NAMES[selected]
+	caption = NAMES[selected] if not available_tools.is_empty() else "Find the illuminated exhibit"
 	if repairing:
 		caption += " · repair · slow" if slowing else " · repair · normal time"
 	elif not equipment.can_use(TOOLS[selected], 1.0 if selected < 2 else 0.000001):
@@ -112,6 +121,7 @@ func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> vo
 
 
 func _process(_delta: float) -> void:
+	damage_bright = maxf(0.0, damage_bright - _delta * 1.6)
 	if not is_instance_valid(tracked_player):
 		return
 	# Camera and player both interpolate. Project their rendered transforms
@@ -141,13 +151,14 @@ func _draw() -> void:
 		var start := -PI + i * PI * 0.5 + GAP
 		var finish := start + PI * 0.5 - GAP * 2.0
 		var active := i == selected or (i == 3 and (slowing or inspecting))
+		var unlocked := i + 1 in available_tools
 		var color := COLORS[i]
 		# The track is visible even when empty; nothing fills the center.
 		draw_arc(center, RADIUS, start, finish, 32, Color(color, 0.12), WIDTH + 2.0, true)
-		if fractions[i] > 0.0:
+		if fractions[i] > 0.0 and unlocked:
 			draw_arc(center, RADIUS, start, lerpf(start, finish, fractions[i]), 32,
 				Color(color, 0.62 if active else 0.32), WIDTH, true)
-		if active:
+		if i == selected:
 			draw_arc(center, RADIUS + 6.0, start, finish, 32, Color(color, 0.4), 1.0, true)
 		var middle := (start + finish) * 0.5
 		var label_at := center + Vector2(cos(middle), sin(middle)) * (RADIUS + 18.0)
@@ -156,10 +167,17 @@ func _draw() -> void:
 			# A quiet, persistent low-condition mark; avoid four flashing warnings.
 			draw_circle(center + Vector2(cos(middle), sin(middle)) * (RADIUS - 9.0), 2.0,
 				Color(color, 0.9))
-	# Health is a separate short straight bar inside the lower gap, not gear.
-	var health_at := center + Vector2(-15, 29)
-	draw_line(health_at, health_at + Vector2(30, 0), Color(0, 0, 0, 0.5), 4)
-	draw_line(health_at, health_at + Vector2(30 * health_fraction, 0), Color("b4cfad"), 2)
+	# Ivory health is distinct from the four equipment colors, with an empty center.
+	var health_start := -PI * 0.4
+	var health_end := health_start + TAU * 0.8
+	draw_arc(center, RADIUS - 14, health_start, health_end, 48, Color("ece4d2", 0.12), 3.0, true)
+	if health_fraction > 0:
+		draw_arc(center, RADIUS - 14, health_start, lerpf(health_start, health_end, health_fraction),
+			48, Color("ece4d2", 0.35 + damage_bright * 0.6), 3.0, true)
+	if charging:
+		var pointer := get_viewport().get_mouse_position() + Vector2(0,-24)
+		draw_arc(pointer, 12, -PI * 0.5, PI * 1.5, 32, Color(COLORS[1],0.2),3,true)
+		draw_arc(pointer, 12, -PI * 0.5, -PI * 0.5 + TAU * charge_fraction, 32, Color(COLORS[1],0.9),3,true)
 	_draw_centered(caption, center + Vector2(0, RADIUS + 39), 13, Color(COLORS[selected], 0.9))
 	if inspecting:
 		var left := center + Vector2(-100, RADIUS + 57)

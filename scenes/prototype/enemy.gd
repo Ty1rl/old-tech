@@ -29,6 +29,9 @@ var plate_broken := false
 var attack_phase: StringName = &"approach"
 var attack_timer := 0.0
 var status_root: Node3D
+var ranged_aim := Vector3.FORWARD
+var ranged_warning: MeshInstance3D
+var ranged_lens: MeshInstance3D
 
 # Crowd control / knockback / stagger state (world units and world seconds)
 var knockback_vel: Vector3 = Vector3.ZERO
@@ -88,6 +91,7 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	plate_broken = false
 	attack_phase = &"approach"
 	attack_timer = 0.0
+	ranged_aim = Vector3.FORWARD
 	shield_heat = 0.0
 	shield_open_timer = 0.0
 	core_broken = false
@@ -132,7 +136,7 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 	if mechanism() != &"":
 		impulse_resist = float(Tuning.MATCHUPS.push_heavy if mechanism() in [&"heat", &"open", &"pattern"] else Tuning.MATCHUPS.push_light)
 		stagger_resist = float(Tuning.MATCHUPS.stagger_scale)
-	if kind == &"final_boss":
+	if String(kind).ends_with("_boss"):
 		impulse_resist *= .35
 		stagger_resist *= .35
 	var eff_impulse := maxf(0.0, impulse) * impulse_resist
@@ -179,10 +183,11 @@ func capture_state() -> Dictionary:
 		state["shield_heat"] = shield_heat
 		state["shield_open_timer"] = shield_open_timer
 		state["core_broken"] = core_broken
-	if mechanism() != &"":
+	if mechanism() != &"" or kind == &"ranged":
 		state["plate_broken"] = plate_broken
 		state["attack_phase"] = String(attack_phase)
 		state["attack_timer"] = attack_timer
+		state["ranged_aim"] = ranged_aim
 	if flash_timer > 0.0 or feedback_timer > 0.0:
 		state["feedback_text"] = feedback_label.text if is_instance_valid(feedback_label) else ""
 		state["feedback_color"] = feedback_label.modulate if is_instance_valid(feedback_label) else Color.WHITE
@@ -217,6 +222,7 @@ func restore_state(data: Dictionary) -> void:
 	plate_broken = bool(data.get("plate_broken", false))
 	attack_phase = StringName(data.get("attack_phase", "approach"))
 	attack_timer = maxf(0.0, float(data.get("attack_timer", 0.0)))
+	ranged_aim = data.get("ranged_aim", Vector3.FORWARD)
 	shield_heat = maxf(0.0, float(data.get("shield_heat", 0.0)))
 	shield_open_timer = maxf(0.0, float(data.get("shield_open_timer", 0.0)))
 	core_broken = bool(data.get("core_broken", false))
@@ -246,6 +252,7 @@ func _sync_derived_visuals(fb_text: String, fb_color: Color) -> void:
 	_update_visual_facing()
 	_update_health_visuals()
 	_update_warden_visuals()
+	_sync_ranged_visual()
 	if is_instance_valid(body_material):
 		if flash_timer > 0.0:
 			if stagger_timer > 0.0 or fb_text == "STAGGER" or fb_text == "SHOVE":
@@ -275,12 +282,15 @@ func _make_mat(color: Color, unshaded: bool = false) -> StandardMaterial3D:
 
 
 func _build_visuals() -> void:
+	if is_instance_valid(ranged_warning): ranged_warning.queue_free()
 	if is_instance_valid(visual_root):
 		visual_root.queue_free()
 	if is_instance_valid(status_root):
 		status_root.queue_free()
 	warden_visual = null
 	part_visual = null
+	ranged_warning = null
+	ranged_lens = null
 	visual_root = Node3D.new()
 	add_child(visual_root)
 	status_root = Node3D.new()
@@ -303,6 +313,9 @@ func _build_visuals() -> void:
 		&"warden":
 			base_body_color = Color("495962")
 			body_height = 1.7
+		&"ranged":
+			base_body_color = Color("66587c")
+			body_height = 1.9
 		_:
 			base_body_color = Color("6d7882")
 			body_height = 1.4
@@ -328,6 +341,32 @@ func _build_visuals() -> void:
 		visual_root.add_child(warden_visual)
 		warden_visual.build(radius)
 		_update_warden_visuals()
+
+	if kind == &"ranged":
+		# A tall forked antenna and bright aperture distinguish the shooter.
+		for side in [-1.0, 1.0]:
+			var antenna := MeshInstance3D.new()
+			var stalk := BoxMesh.new()
+			stalk.size = Vector3(.16, 1.25, .2)
+			antenna.mesh = stalk
+			antenna.position = Vector3(side * .55, 1.9, 0)
+			antenna.material_override = _make_mat(Color("b7a7cb"))
+			visual_root.add_child(antenna)
+		ranged_lens = MeshInstance3D.new()
+		var lens := SphereMesh.new()
+		lens.radius = .3
+		lens.height = .6
+		ranged_lens.mesh = lens
+		ranged_lens.position = Vector3(0, 1.8, -.65)
+		ranged_lens.material_override = _make_mat(Color("ffe538"), true)
+		visual_root.add_child(ranged_lens)
+		ranged_warning = MeshInstance3D.new()
+		var strip := BoxMesh.new()
+		strip.size = Vector3(.14, .035, 9.0)
+		ranged_warning.mesh = strip
+		ranged_warning.material_override = _make_mat(Color("f67757"), true)
+		add_child(ranged_warning)
+		_sync_ranged_visual()
 
 	# Forward facing marker (-Z in local visual_root space aligns with `facing`)
 	if kind != &"warden":
@@ -742,9 +781,17 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 				var combined := dir_to_player * radial_weight + tangent * 0.75
 				var raw_dir := combined.normalized() if combined.length_squared() > 0.0001 else dir_to_player
 				move_dir = _steer_around_cover(self_xz, raw_dir, self_xz + raw_dir * 3.0)
+		&"ranged":
+			if attack_phase == &"approach":
+				facing = _rotate_xz_toward(facing, dir_to_player, active_ai_delta * 3)
+				if dist > 8.0:
+					move_dir = _steer_around_cover(self_xz, dir_to_player, player_xz)
+				elif dist < 4.0:
+					move_dir = -dir_to_player
 
 	if mechanism() != &"":
-		facing = _rotate_xz_toward(facing, dir_to_player, 3.0 * active_ai_delta)
+		if attack_phase == &"approach":
+			facing = _rotate_xz_toward(facing, dir_to_player, 3.0 * active_ai_delta)
 		var destination := pack_target(player_xz, neighbors)
 		var pack_direction := destination - self_xz
 		var blend := float(Tuning.PACK.strength) if mechanism() in [&"cut", &"open"] else 0.0
@@ -763,6 +810,9 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 	# Recompute XZ distance for contact damage (suppressed while staggered)
 	var post_xz := Vector3(position.x, 0.0, position.z)
 	var post_dist := post_xz.distance_to(player_xz)
+	if kind == &"ranged":
+		_step_ranged(active_ai_delta, player, post_dist)
+		return
 	if mechanism() != &"":
 		_step_part_attack(active_ai_delta, player, post_dist)
 		return
@@ -774,6 +824,39 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 				skirmish_phase = &"orbit"
 				skirmish_timer = 0.0
 				skirmish_strafe_sign = -skirmish_strafe_sign
+
+
+func _sync_ranged_visual() -> void:
+	if not is_instance_valid(ranged_warning): return
+	ranged_warning.visible = attack_phase == &"windup" and health > 0
+	ranged_warning.position = ranged_aim * 4.5 + Vector3.UP * .04
+	ranged_warning.basis = Basis.looking_at(ranged_aim, Vector3.UP)
+	if is_instance_valid(ranged_lens):
+		ranged_lens.scale = Vector3.ONE * (1.0 + .65 * clampf(1.0 - attack_timer / .95, 0, 1) if attack_phase == &"windup" else 1.0)
+
+
+func _step_ranged(dt: float, player: Node3D, distance: float) -> void:
+	if attack_phase == &"approach":
+		if distance <= 11.5:
+			ranged_aim = Vector3(player.position.x - position.x, 0, player.position.z - position.z).normalized()
+			if ranged_aim.length_squared() < .001: ranged_aim = facing
+			facing = ranged_aim
+			attack_phase = &"windup"
+			attack_timer = .95
+			feedback_label.text = "SHOT INCOMING"
+			feedback_timer = 1.0
+	else:
+		attack_timer = maxf(0, attack_timer - dt)
+		if attack_timer <= 0:
+			if attack_phase == &"windup":
+				var director := get_parent()
+				if director != null and director.has_method("launch_projectile"):
+					director.launch_projectile(position + ranged_aim * (radius + .22), ranged_aim, contact_damage, 7.5)
+				attack_phase = &"recover"
+				attack_timer = 1.8
+			else:
+				attack_phase = &"approach"
+	_sync_ranged_visual()
 
 
 func pack_target(player_position: Vector3, neighbors: Array) -> Vector3:

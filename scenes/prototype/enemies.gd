@@ -7,6 +7,9 @@ const EnemyNode = preload("res://scenes/prototype/enemy.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 const Flow = preload("res://scenes/prototype/flow.gd")
 const MAX_LIVE_ENEMIES := 32
+const MAX_PROJECTILES := 24
+var projectiles: Array[Dictionary] = []
+var _projectile_visuals: Array[MeshInstance3D] = []
 var flow: RefCounted = Flow.new()
 var _arrival_mesh: ImmediateMesh
 
@@ -59,6 +62,7 @@ func _total_scheduled_waves() -> int:
 
 func step(world_delta: float, player: Node3D) -> void:
 	_prune_dead_enemies()
+	_step_projectiles(maxf(0, world_delta), player)
 
 	if encounter_state == &"running":
 		if is_instance_valid(player) and float(player.health) <= 0.0:
@@ -229,6 +233,8 @@ func _cancel_encounter() -> void:
 
 func clear() -> void:
 	_cancel_encounter()
+	projectiles.clear()
+	_sync_projectile_visuals()
 	flow.reset()
 	if _arrival_mesh != null: _arrival_mesh.clear_surfaces()
 	for enemy in enemies:
@@ -261,6 +267,7 @@ func capture_state() -> Dictionary:
 			if roster_data.size() >= MAX_LIVE_ENEMIES:
 				break
 	return {
+		"projectiles": projectiles.duplicate(true),
 		"flow": flow.capture_state(),
 		"spawn_counter": int(_spawn_counter),
 		"encounter_active": bool(encounter_active),
@@ -274,6 +281,14 @@ func capture_state() -> Dictionary:
 func restore_state(data: Dictionary) -> void:
 	if cover == null:
 		cover = CoverScript.new()
+	projectiles.clear()
+	for raw: Variant in data.get("projectiles", []):
+		if projectiles.size() >= MAX_PROJECTILES: break
+		if raw is Dictionary and raw.get("position") is Vector3 and raw.get("velocity") is Vector3:
+			projectiles.append({"position": raw.position, "velocity": raw.velocity,
+				"damage": clampf(float(raw.get("damage", 10)), 0, 100),
+				"life": clampf(float(raw.get("life", 0)), 0, 6)})
+	_sync_projectile_visuals()
 
 	var state_str := String(data.get("encounter_state", "sandbox"))
 	if state_str in ["sandbox", "running", "victory", "defeat"]:
@@ -316,7 +331,10 @@ func restore_state(data: Dictionary) -> void:
 		if existing_by_id.has(eid):
 			enemy = existing_by_id[eid]
 			existing_by_id.erase(eid)
-		else:
+			if PatternEnemy.handles(StringName(entry.get("kind", "target"))) != (enemy.get_script() == PatternEnemy):
+				_retire_enemy_node(enemy)
+				enemy = null
+		if enemy == null:
 			enemy = PatternEnemy.new() if PatternEnemy.handles(StringName(entry.get("kind", "target"))) else EnemyNode.new()
 			enemy.cover = cover
 			enemy.rewind_id = eid
@@ -353,3 +371,67 @@ func status_text() -> String:
 			return "Player Down (0 HP) — Press R to reset or F6 to retry"
 		_:
 			return "Sandbox"
+
+
+# Value-only hostile shots belong to the director, including after their owner dies.
+# World time drives both their sweep and lifetime; rewind restores the whole list.
+func launch_projectile(origin: Vector3, direction: Vector3, damage: float, speed := 7.5) -> bool:
+	if projectiles.size() >= MAX_PROJECTILES or direction.length_squared() < .0001: return false
+	projectiles.append({"position": Vector3(origin.x, 1.0, origin.z),
+		"velocity": Vector3(direction.x, 0, direction.z).normalized() * speed,
+		"damage": maxf(0, damage), "life": 6.0})
+	_sync_projectile_visuals()
+	return true
+
+
+func _step_projectiles(dt: float, player: Node3D) -> void:
+	if dt <= 0: return
+	if cover == null: cover = CoverScript.new()
+	var live: Array[Dictionary] = []
+	for shot: Dictionary in projectiles:
+		var start: Vector3 = shot.position
+		var end: Vector3 = start + shot.velocity * minf(dt, shot.life)
+		var obstacle: Dictionary = cover.clip_segment(start, end, .18)
+		var fraction := float(obstacle.fraction)
+		var hit_player := false
+		if is_instance_valid(player) and float(player.health) > 0:
+			var a := Vector2(start.x, start.z)
+			var b := Vector2(end.x, end.z)
+			var p := Vector2(player.position.x, player.position.z)
+			var movement := b - a
+			var offset := a - p
+			var length_sq := movement.length_squared()
+			# Earliest segment/circle entry, so cover behind the player cannot absorb it.
+			var discriminant := pow(2 * offset.dot(movement), 2) - 4 * length_sq * (offset.length_squared() - .68 * .68)
+			if offset.length_squared() <= .68 * .68:
+				hit_player = true
+			elif length_sq > .000001 and discriminant >= 0:
+				var entry := (-2 * offset.dot(movement) - sqrt(discriminant)) / (2 * length_sq)
+				hit_player = entry >= 0 and entry <= fraction and entry <= 1
+		if hit_player:
+			player.take_damage(float(shot.damage))
+			continue
+		shot.life = maxf(0, float(shot.life) - dt)
+		if obstacle.blocked or shot.life <= 0: continue
+		shot.position = end
+		live.append(shot)
+	projectiles = live
+	_sync_projectile_visuals()
+
+
+func _sync_projectile_visuals() -> void:
+	while _projectile_visuals.size() < projectiles.size():
+		var node := MeshInstance3D.new()
+		var mesh := SphereMesh.new()
+		mesh.radius = .2
+		mesh.height = .4
+		node.mesh = mesh
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = Color("ff684d")
+		node.material_override = material
+		add_child(node)
+		_projectile_visuals.append(node)
+	for i in range(_projectile_visuals.size()):
+		_projectile_visuals[i].visible = i < projectiles.size()
+		if i < projectiles.size(): _projectile_visuals[i].position = projectiles[i].position

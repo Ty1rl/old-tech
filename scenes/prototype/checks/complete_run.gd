@@ -33,8 +33,8 @@ func practice() -> void:
 	if arena.tutorial.blocking:arena.tutorial.request_practice()
 	if lesson==&"move":arena.player.position+=Vector3(3,0,0)
 	elif lesson==&"repair":
-		var session:int=arena.equipment.begin_repair(&"ring")
-		arena.equipment.complete_step(&"ring",session)
+		var session:int=arena.equipment.begin_repair(&"beam")
+		arena.equipment.complete_step(&"beam",session)
 		arena.equipment.end_repair(session)
 	elif lesson==&"rewind":
 		for tick in range(40):arena._physics_process(.05)
@@ -72,15 +72,18 @@ func run() -> void:
 	await physics_frame;await physics_frame
 	state.start_game();arena.set_physics_process(false)
 	var visited:Dictionary={}
-	for step in range(160):
+	for step in range(600):
 		visited[arena.room_index]=true
 		if arena.mode==&"won":break
 		if arena.mode in [&"title",&"ceremony"]:arena._physics_process(3.0)
+		elif arena.mode==&"pickup":
+			arena.player.position=arena.museum.pickup_position+Vector3.UP*.55
+			arena._physics_process(.001)
 		elif arena.mode==&"practice":practice()
 		elif arena.mode==&"pressure":
 			for enemy in arena.director.enemies:enemy.hit(99999,enemy.position)
-			arena._physics_process(.001)
-		elif arena.mode==&"recovery":arena._physics_process(4)
+			arena._physics_process(9.0)
+		elif arena.mode==&"recovery":arena._physics_process(7)
 		elif arena.mode==&"exit":arena.player.position=arena.room.exit_door.position;arena._physics_process(.001)
 		await process_frame
 		if not failures.is_empty():break

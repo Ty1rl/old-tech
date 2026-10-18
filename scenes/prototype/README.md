@@ -1,32 +1,40 @@
-# Old Tech — playable museum run
+# Some Assembly Required — playable museum run
 
-Launch the project from your Ubuntu host, then choose **Play**:
+Launch the project from your Ubuntu host, then choose **New Game**:
 
 ```sh
 ~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo
 ```
 
-Play follows Public Galleries → Connected Collections → Restoration Rooms →
-Burial Exhibition and the final boss. The first appearance of each mechanic
+New Game follows Public Galleries → Connected Collections → Restoration Rooms →
+Burial Exhibition, with the Loop Curator, Sequence Warden, and Burial Device bosses.
+Equipment is acquired physically: yellow → orange → blue → purple. Each safe
+attempt is followed by a finite staged encounter, not another immediate lesson. The first appearance of each mechanic
 freezes the world, marks the actual targets, then gives a safe attempt. Real
 success unlocks pressure. Completed lessons persist when retrying a room.
 
-WASD moves; mouse aims; 1–4/Tab selects equipment. Hold Space to slow movement
+The steep perspective camera keeps zoom controls and floor-correct mouse aiming.
+WASD moves; mouse aims; 1–4/Tab selects collected equipment. Hold Space to slow movement
 and attacks while drawing/aiming stays responsive. With 4 equipped, hold Space
 and scroll down to go back, up toward now; release commits, Escape cancels.
+Space stays held across weapon switches: equip 4 to inspect; switch away to
+cancel the uncommitted preview and keep slowing. Only releasing Space commits.
+Time abilities remain locked until the clock is acquired.
 Campaign history retains up to 12 seconds / 240 samples, with the same 64 KiB
 per-snapshot bound (at most one extra backup payload during review). Only combat
 values are encoded. History clears at lesson/wave/room boundaries. No mesh data.
 
-Hold E to repair the selected tool; release to return. Four tool backdrops now
-have Spin, Trace and matching-contact operations. Completed capacity checkpoints
+Hold E to repair the selected tool; release to return. The large transparent weapon overlay
+has Spin, Trace and matching-shape contact operations. The world remains visible.
+Only the current step is highlighted, with one transform for model/input/gestures. Completed capacity checkpoints
 survive interruption. A fully charged yellow pulse pierces actual enemies on its
 line, respecting solid cover. Pattern units reward a charged core finisher;
 quick taps remain useful for simple yellow targets and A/B sequences.
 
 Only the most recent wound can regenerate after five quiet seconds, at 12 HP/s.
 Another hit resets that wait. Room retry/entry fully restores health and gear.
-Lethal injury leaves six real seconds to start a rewind; otherwise use room retry.
+After acquiring the clock, lethal injury leaves six real seconds to start a rewind;
+before that, use room retry.
 During review the health readout shows the selected return's health. Regeneration
 never revives a dead player. R retries the current room; Escape pauses. Pause,
 settings, retry, return to main and the result screen use the teammate's managers.
@@ -36,9 +44,28 @@ its gates; the sandbox remains available through SceneManager.start_play(true).
 The final boss uses A/B → zigzag → loop → final core. Incomplete pattern timers
 restore links/shutters but retain body damage and destroyed orange. Successful
 cut patterns stay open. Ordinary damage always remains a slower kill route.
-No optional intermediate bosses in this pass. Audio is still synthesized/stubbed;
+The Loop Curator repeats cut/open/core phases with rotating connections; the
+Sequence Warden uses paired valves and charged core finishes. Their attacks
+have different radial/fan patterns. Ranged enemies lock an aimed shot after a
+visible windup; their bolts respect cover, slow time and rewind.
+Audio is still synthesized/stubbed;
 movement and crowd balance need human playtesting. Rendered doorway thresholds
 are floor cues, not solid cover; actual raised cover shares collision/query data.
+
+## Encounter shortcuts
+
+Use **Encounter select** from the main or pause menu, or press F10 in play.
+Choose a room, any authored encounter, and a valid boss phase. The jump grants
+only equipment available by that checkpoint and skips its teaching. Opening the
+selector freezes combat; Back returns to the previous screen. Disable all normal
+entrypoints with `SceneManager.developer_tools = false`.
+
+The ordinary run contains 124 scheduled enemies plus three bosses, in bounded
+arrivals of two or three and 4–6 live enemies. Condition budgets are starting
+values: 48 flash shots, 18 cutter launches, 18 cone seconds, 12 clock seconds.
+Room checkpoints fully restore gear; between encounters, repairs pause the next
+arrival. During active pressure, displacement and positioning earn repair time.
+Clearing the room opens a broad green doorway; approach it when ready to leave.
 
 ## Sandbox mechanics and controls
 
@@ -81,7 +108,7 @@ The partner's original menu/game scenes and popup managers remain intact.
 - **Orange covering:** sustained cone heat breaks it and kills an orange-only enemy.
 - **Side-attachment / front-plate guards:** cut the blue connector OR heat the
   orange covering, then shoot the exposed yellow target. Both openings are
-  permanent; a quick accurate shot is enough to clean up. Body shots before
+  permanent; charge an accurate core shot to clean up. Body shots before
   opening do not receive the core kill.
 
 Every tool can kill every enemy through ordinary damage. New enemies have high

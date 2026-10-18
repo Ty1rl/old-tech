@@ -1,6 +1,6 @@
 extends "res://scenes/prototype/museum_environment.gd"
 
-# jam-4 owns room_environment.gd/.tscn.
+# Four-room museum presentation and physical campaign wayfinding.
 # Extends MuseumEnvironment with four-room cover kit builders (display_island, partition,
 # column, bench, plinth), doorway framing, visible exit/activation cues, restrained
 # room-specific floor/lighting palettes, and the boss entrance gate/pause/activation ceremony.
@@ -38,6 +38,63 @@ var _boss_ring_mat: StandardMaterial3D
 var _boss_core_mat: StandardMaterial3D
 var _north_door_width: float = 6.4
 var _south_door_width: float = 6.4
+var _exit_label: Label3D
+var pickup_root: Node3D
+var pickup_tool := 0
+var pickup_position := Vector3.ZERO
+const PICKUP_MODELS = [preload("res://assets/equipment/ring_caster.glb"),
+	preload("res://assets/equipment/flash_camera.glb"), preload("res://assets/equipment/heat_bellows.glb"),
+	preload("res://assets/equipment/time_device.glb")]
+const PICKUP_NAMES := ["BLUE · DRAWING CUTTER", "YELLOW · FLASH CAMERA", "ORANGE · HEAT BELLOWS", "PURPLE · TIME DEVICE"]
+const PICKUP_COLORS := [Color("60dbde"), Color("f0d77b"), Color("ed9966"), Color("ba9ce9")]
+
+func build(_include_cover_decorations: bool = false) -> Node3D:
+	return super.build(false)
+
+func show_tool_pickup(tool: int, point: Vector3) -> void:
+	clear_tool_pickup()
+	pickup_tool = tool
+	pickup_position = Vector3(point.x, 0, point.z)
+	pickup_root = Node3D.new()
+	pickup_root.name = "ToolPickup_%d" % tool
+	pickup_root.position = pickup_position
+	add_child(pickup_root)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = PICKUP_COLORS[tool - 1]
+	mat.emission_enabled = true
+	mat.emission = mat.albedo_color
+	mat.emission_energy_multiplier = 0.8
+	_add_cylinder_mesh(pickup_root, "AcquisitionHalo", 1.5, 1.5, 0.035, Vector3(0, 0.025, 0), mat)
+	var stone := StandardMaterial3D.new()
+	stone.albedo_color = Color("40454b")
+	_add_box_mesh(pickup_root, "ToolPlinth", Vector3(1.3, 0.65, 1.0), Vector3(0, 0.35, 0), stone)
+	var prop: Node3D = PICKUP_MODELS[tool - 1].instantiate()
+	prop.position = Vector3(0, 1.05, 0)
+	prop.rotation_degrees = Vector3(0, -25, 0)
+	prop.scale = Vector3.ONE * 1.7
+	pickup_root.add_child(prop)
+	var label := Label3D.new()
+	label.text = "%s\nWalk into the light to collect" % PICKUP_NAMES[tool - 1]
+	label.position = Vector3(0, 2.7, 0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 32
+	label.pixel_size = 0.009
+	label.modulate = PICKUP_COLORS[tool - 1]
+	pickup_root.add_child(label)
+
+func clear_tool_pickup() -> void:
+	if is_instance_valid(pickup_root):
+		remove_child(pickup_root)
+		pickup_root.queue_free()
+	pickup_root = null
+	pickup_tool = 0
+
+func player_in_exit(point: Vector3) -> bool:
+	if not exit_open: return false
+	var door: Vector3 = active_definition.exit_door.position
+	# The full illuminated threshold is an exit region, with room for approach.
+	return absf(point.x - door.x) <= _north_door_width * 0.5 and absf(point.z - door.z) <= 2.2
+
 
 
 func _ready() -> void:
@@ -50,6 +107,7 @@ func apply_room(definition: Dictionary, cover_ref: RefCounted = null, arena_node
 	if not _built:
 		build(false)
 	_ensure_room_roots()
+	clear_tool_pickup()
 
 	var def := definition if not definition.is_empty() else Rooms.definitions()[0]
 	active_definition = def.duplicate(true)
@@ -85,6 +143,9 @@ func apply_room(definition: Dictionary, cover_ref: RefCounted = null, arena_node
 
 func set_exit_open(open: bool) -> void:
 	exit_open = open
+	if is_instance_valid(_exit_label):
+		_exit_label.text = "NEXT GALLERY →\nWalk through the lit doorway" if open else "GALLERY SEALED\nClear the exhibits"
+		_exit_label.modulate = Color("91f2bc") if open else Color("a89b85")
 	if open and boss_ceremony_state == &"inactive":
 		gates_closed_ratio = 0.0
 	elif not open and boss_ceremony_state == &"inactive":
@@ -94,6 +155,7 @@ func set_exit_open(open: bool) -> void:
 
 
 func start_boss_entrance() -> void:
+	active_definition["is_boss_room"] = true
 	exit_open = false
 	boss_ceremony_state = &"closing_gates"
 	boss_ceremony_timer = 0.0
@@ -561,6 +623,13 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	north_door.name = "NorthExitDoorway"
 	north_door.position = exit_pos
 	doors_root.add_child(north_door)
+	_exit_label = Label3D.new()
+	_exit_label.position = Vector3(0, 2.3, 0)
+	_exit_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_exit_label.font_size = 34
+	_exit_label.pixel_size = 0.012
+	north_door.add_child(_exit_label)
+	set_exit_open(false)
 
 	for side in [-1.0, 1.0]:
 		var pier_x: float = float(side) * (_north_door_width * 0.5 + 0.65)
@@ -581,8 +650,8 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	_add_box_mesh(
 		north_door,
 		"ExitThresholdStrip",
-		Vector3(_north_door_width, 0.025, 0.65),
-		Vector3(0.0, 0.015, 0.55),
+		Vector3(_north_door_width, 0.025, 4.4),
+		Vector3(0.0, 0.015, 0.0),
 		_exit_beacon_mat
 	)
 	for c_idx in [-1, 0, 1]:
@@ -718,10 +787,10 @@ func _update_gate_and_cue_visuals() -> void:
 
 	if _exit_beacon_mat != null:
 		if exit_open:
-			var ready_col := Color(0.64, 0.62, 0.54)
+			var ready_col := Color(0.18, 0.75, 0.42)
 			_exit_beacon_mat.albedo_color = ready_col
 			_exit_beacon_mat.emission = ready_col
-			_exit_beacon_mat.emission_energy_multiplier = 0.22
+			_exit_beacon_mat.emission_energy_multiplier = 0.65
 		else:
 			var locked_col := Color(0.42, 0.34, 0.28)
 			_exit_beacon_mat.albedo_color = locked_col

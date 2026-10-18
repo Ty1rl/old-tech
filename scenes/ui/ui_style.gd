@@ -1,8 +1,8 @@
 extends RefCounted
 
-const INK := Color("111c22")
+const INK := Color("191713")
 const PAPER := Color("ece4d2")
-const MUTED := Color("a9b5b5")
+const MUTED := Color("b4ab99")
 const ACCENT := Color("cba66c")
 
 static func scale_for(node: Node) -> float:
@@ -15,8 +15,8 @@ static func skin() -> Theme:
 	theme.set_color("font_color", "Label", PAPER)
 	for state in ["normal", "hover", "pressed", "focus"]:
 		var style := StyleBoxFlat.new()
-		style.bg_color = Color("293a42") if state == "normal" else Color("45545a")
-		style.border_color = ACCENT if state != "normal" else Color("53616a")
+		style.bg_color = Color("2b2821") if state == "normal" else Color("494133")
+		style.border_color = ACCENT if state != "normal" else Color("5b5140")
 		style.set_border_width_all(2 if state == "focus" else 1)
 		style.set_corner_radius_all(4)
 		style.content_margin_top = 12
@@ -53,7 +53,7 @@ static func shell(root: Control, title: String, subtitle: String, height: float 
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.theme = skin()
 	var backdrop := ColorRect.new()
-	backdrop.color = Color(0.035, 0.055, 0.067, 0.97)
+	backdrop.color = Color(0.035, 0.03, 0.025, 0.92)
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(backdrop)
 	var outer := MarginContainer.new()
@@ -81,19 +81,29 @@ static func shell(root: Control, title: String, subtitle: String, height: float 
 	column.add_theme_constant_override("separation", 14)
 	scroll.add_child(column)
 	column.owner = root
+	# Deferred resize work may outlive a quickly closed popup. Keep weak refs.
+	var root_ref: WeakRef = weakref(root)
+	var panel_ref: WeakRef = weakref(panel)
+	var scroll_ref: WeakRef = weakref(scroll)
+	var window_ref: WeakRef = weakref(root.get_window())
 	var fit := func() -> void:
-		var factor := scale_for(root)
-		root.theme.default_font_size = roundi(19 * factor)
-		for text in root.find_children("*", "Label", true, false):
+		var view: Control = root_ref.get_ref()
+		var surface: PanelContainer = panel_ref.get_ref()
+		var scroller: ScrollContainer = scroll_ref.get_ref()
+		if view == null or surface == null or scroller == null: return
+		var factor := scale_for(view)
+		view.theme.default_font_size = roundi(19 * factor)
+		for text in view.find_children("*", "Label", true, false):
 			if text.has_meta("base_font_size"):
 				text.add_theme_font_size_override("font_size", roundi(text.get_meta("base_font_size") * factor))
-		panel.custom_minimum_size.x = maxf(200, minf(540 * factor, root.size.x - 40))
-		scroll.custom_minimum_size.y = maxf(120, minf(height * factor, root.size.y - 84))
+		surface.custom_minimum_size.x = maxf(200, minf(540 * factor, view.size.x - 40))
+		scroller.custom_minimum_size.y = maxf(120, minf(height * factor, view.size.y - 84))
 	root.resized.connect(fit)
 	root.get_window().size_changed.connect(fit)
 	root.tree_exiting.connect(func():
-		if root.get_window().size_changed.is_connected(fit):
-			root.get_window().size_changed.disconnect(fit))
+		var window: Window = window_ref.get_ref()
+		if window != null and window.size_changed.is_connected(fit):
+			window.size_changed.disconnect(fit))
 	fit.call_deferred()
 	label(column, "MUSEUM AFTER HOURS", 13).modulate = ACCENT
 	label(column, title, 34)

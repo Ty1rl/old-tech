@@ -25,7 +25,7 @@ func run() -> void:
 	var scenes = root.get_node("SceneManager")
 	expect(state.is_playing() and not paused, "Direct arena launch enters playing state")
 	expect(arena.player.camera.current, "Prototype camera is current")
-	expect(arena.player.camera.projection == Camera3D.PROJECTION_ORTHOGONAL, "Top-down camera is orthographic")
+	expect(arena.player.camera.projection == Camera3D.PROJECTION_PERSPECTIVE, "Top-down camera uses perspective")
 	var origin: Vector3 = arena.player.position
 	Input.action_press("move_right")
 	for frame in range(8):

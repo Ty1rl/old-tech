@@ -44,7 +44,7 @@ var _scrub_speed := 0.0
 func _ready() -> void:
 	_build_floor()
 	_build_cover()
-	museum = MuseumEnvironment.new()
+	museum = create_museum()
 	museum.name = "MuseumEnvironment"
 	museum.build()
 	museum.apply_to_arena(self)
@@ -56,7 +56,8 @@ func _ready() -> void:
 	add_child(player)
 	player.camera.position = Vector3(0, 20, 14)
 	player.camera.rotation_degrees = Vector3(-55, 0, 0)
-	player.camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	player.camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	player.camera.fov = float(Tuning.VIEW.fov)
 	player.camera.size = float(Tuning.VIEW.camera_size)
 	player.camera.current = true
 	weapons = Weapons.new()
@@ -79,6 +80,37 @@ func _ready() -> void:
 	GameState.start_game()
 	reset_arena()
 	CreatureVisual.warmup(self)
+
+
+func create_museum() -> Node3D:
+	return MuseumEnvironment.new()
+
+
+func _set_zoom(value: float) -> void:
+	player.camera.size = clampf(value, 10.0, 32.0)
+	player.camera.fov = float(Tuning.VIEW.fov)
+	player.camera.position = Vector3(0, 20, 14) * (player.camera.size / float(Tuning.VIEW.camera_size))
+
+
+func _switch_tool(index: int) -> void:
+	if index not in weapons.available_tools or index == weapons.selected_tool: return
+	var continue_space := _space_held and not _space_release_required
+	if history.inspecting:
+		_finish_inspection(false) # Switching never commits an accidental rewind.
+	weapons.select_tool(index)
+	if continue_space:
+		_space_release_required = false
+		player._slow_release_required = false
+		if index == 4: _begin_inspection()
+		else: player._step_slow(0.0, 4 in weapons.available_tools)
+	_update_hud()
+
+
+func _cycle_tool(backward: bool = false) -> void:
+	var tools: Array[int] = weapons.available_tools
+	if tools.is_empty(): return
+	var current := tools.find(weapons.selected_tool)
+	_switch_tool(tools[posmod(current + (-1 if backward else 1), tools.size())])
 
 
 func _build_cover() -> void:
@@ -171,6 +203,7 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if SceneManager.has_popup(&"Developer") or SceneManager.has_popup(&"Settings"): return
 	if history.inspecting:
 		feedback.step(delta, 0.0, 0.0, true, _scrub_speed, weapons, equipment)
 		_step_inspection(delta)
@@ -182,8 +215,8 @@ func _physics_process(delta: float) -> void:
 		_update_hud()
 		return # Keep the final live history available for a do-over.
 	aim = floor_aim(get_viewport().get_mouse_position())
-	var repair_slow: bool = equipment.repairing != &"" and equipment.repairing != &"clock"
-	player.step(delta, aim, _space_held and not _space_release_required and weapons.selected_tool != 4, repair_slow)
+	var repair_slow: bool = 4 in weapons.available_tools and equipment.repairing != &"" and equipment.repairing != &"clock"
+	player.step(delta, aim, _space_held and not _space_release_required and weapons.selected_tool != 4 and 4 in weapons.available_tools, repair_slow)
 	player.position.x = clampf(player.position.x, -19.0, 19.0)
 	player.position.z = clampf(player.position.z, -19.0, 19.0)
 	var world_delta: float = delta * player.world_scale
@@ -215,6 +248,11 @@ func _input(event: InputEvent) -> void:
 				_begin_inspection()
 			get_viewport().set_input_as_handled()
 			return
+		if code == KEY_F10 and event.pressed and not event.echo and SceneManager.developer_tools:
+			if SceneManager.has_popup(&"Developer"): SceneManager.close_popup(&"Developer")
+			else: SceneManager.push_popup(&"Developer")
+			get_viewport().set_input_as_handled()
+			return
 		if code == KEY_M and event.pressed and not event.echo:
 			feedback.toggle_mute()
 			_update_hud()
@@ -223,6 +261,13 @@ func _input(event: InputEvent) -> void:
 		if code == KEY_F7 and event.pressed and not event.echo:
 			status_hud.cycle_readout()
 			_update_hud()
+			get_viewport().set_input_as_handled()
+			return
+	if event is InputEventKey and event.pressed and not event.echo and not SceneManager.has_popup():
+		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if code == KEY_TAB or (code >= KEY_1 and code <= KEY_4):
+			if code == KEY_TAB: _cycle_tool(event.shift_pressed)
+			else: _switch_tool(code - KEY_1 + 1)
 			get_viewport().set_input_as_handled()
 			return
 	if history.inspecting:
@@ -246,25 +291,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
 		if code == KEY_TAB:
-			weapons.select_tool(posmod(weapons.selected_tool - 1 + (-1 if event.shift_pressed else 1), 4) + 1)
-			player.reset_input()
-			_space_release_required = _space_held
-			_update_hud()
+			_cycle_tool(event.shift_pressed)
 			return
 		if code >= KEY_1 and code <= KEY_4:
-			var selected: int = weapons.selected_tool
-			weapons.select_tool(code - KEY_1 + 1)
-			if selected != weapons.selected_tool:
-				player.reset_input()
-				_space_release_required = _space_held
-			_update_hud()
+			_switch_tool(code - KEY_1 + 1)
 			return
 		match code:
 			KEY_EQUAL, KEY_PLUS:
-				player.camera.size = maxf(10, player.camera.size - 2)
+				_set_zoom(player.camera.size - 2)
 				return
 			KEY_MINUS:
-				player.camera.size = minf(32, player.camera.size + 2)
+				_set_zoom(player.camera.size + 2)
 				return
 			KEY_F7:
 				status_hud.cycle_readout()
@@ -300,7 +337,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_F9:
 				reset_arena()
 				director.clear()
-				player.camera.size = float(Tuning.VIEW.showcase_size)
+				_set_zoom(float(Tuning.VIEW.showcase_size))
 				director.spawn(&"front_guard", Vector3(0, 0, -7))
 				_update_hud()
 				return
@@ -329,7 +366,7 @@ func reset_arena() -> void:
 	equipment.reset_state()
 	weapons.reset_state()
 	player.reset_state()
-	player.camera.size = float(Tuning.VIEW.camera_size)
+	_set_zoom(float(Tuning.VIEW.camera_size))
 	director.reset_state()
 	time_feedback = ""
 	_update_hud()
@@ -364,7 +401,7 @@ func _restore_world(data: Dictionary, live_clock: float) -> void:
 
 
 func _begin_inspection() -> void:
-	if history.inspecting or weapons.selected_tool != 4 or SceneManager.has_popup() or not equipment.can_use(&"clock"):
+	if history.inspecting or 4 not in weapons.available_tools or weapons.selected_tool != 4 or SceneManager.has_popup() or not equipment.can_use(&"clock"):
 		return
 	weapons.cancel_input()
 	player.reset_input()
@@ -484,13 +521,15 @@ func _update_hud() -> void:
 	if player.visual_tool != display_tool:
 		player.set_visual_tool(display_tool)
 	status_hud.update_status(player, weapons, equipment)
+	status_hud.visible = equipment.repairing == &""
+	if is_instance_valid(player.visual): player.visual.held_tool.visible = not weapons.available_tools.is_empty()
 	if history.inspecting:
 		status_hud.selected = display_tool - 1
 		status_hud.caption = StatusHud.NAMES[display_tool-1] + " · recorded"
 	status_hud.set_combat_hint(feedback.muted)
 	var clock_after: float = _available_clock(_preview) - inspection_cost() if history.inspecting else equipment.remaining(&"clock")
 	status_hud.update_timeline(history, inspection_cost(), time_feedback, clock_after)
-	var alpha: float = StatusHud.READOUT_ALPHA[status_hud.readout_mode]
+	var alpha: float = StatusHud.READOUT_ALPHA[status_hud.readout_mode] if equipment.repairing == &"" else 0.0
 	hud.modulate.a = alpha
 	hud.visible = alpha > 0.0
 	slow_bar.modulate.a = alpha

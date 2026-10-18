@@ -11,7 +11,19 @@ var pattern_open := false
 var motion_clock := 0.0
 
 static func handles(value: StringName) -> bool:
-	return value in [&"pair", &"loop", &"zigzag", &"final_boss"]
+	return value in [&"pair", &"loop", &"zigzag", &"loop_boss", &"sequence_boss", &"final_boss"]
+
+func is_boss() -> bool:
+	return String(kind).ends_with("_boss")
+
+static func phases_for(value: StringName) -> int:
+	return 4 if value == &"final_boss" else (3 if String(value).ends_with("_boss") else 1)
+
+func phase_count() -> int:
+	return phases_for(kind)
+
+func _spans() -> Array:
+	return PatternVisual.spans(active_pattern(), phase if kind == &"loop_boss" else 0)
 
 func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> void:
 	phase = 0
@@ -23,6 +35,8 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	super.configure(p_kind, spawn_pos, orbit_seed)
 
 func active_pattern() -> StringName:
+	if kind == &"loop_boss": return &"loop"
+	if kind == &"sequence_boss": return &"pair"
 	return PHASES[clampi(phase, 0, 3)] if kind == &"final_boss" else kind
 
 func mechanism() -> StringName:
@@ -30,10 +44,10 @@ func mechanism() -> StringName:
 
 func lesson_state() -> Dictionary:
 	var mode := active_pattern()
-	var total := 2 if mode == &"pair" else PatternVisual.spans(mode).size()
+	var total := 2 if mode == &"pair" else _spans().size()
 	return {"pattern": mode, "progress": pair_progress if mode == &"pair" else _cut_count(),
 		"total": total, "open": pattern_open or (kind == &"final_boss" and phase == 3), "complete": pattern_open or health <= 0,
-		"phase": phase}
+		"phase": phase, "phases": phase_count(), "boss": is_boss()}
 
 func _cut_count() -> int:
 	var count := 0
@@ -54,7 +68,7 @@ func attack_radius(_tool: StringName) -> float:
 # each physical span separately, so empty gaps never become cuttable connections.
 func cable_world_points() -> Array[Vector3]:
 	var points: Array[Vector3] = []
-	for span: Array in PatternVisual.spans(active_pattern()):
+	for span: Array in _spans():
 		points.append(_local_part_world(span[0]))
 		points.append(_local_part_world(span[1]))
 	return points
@@ -62,10 +76,10 @@ func cable_world_points() -> Array[Vector3]:
 func core_world_position() -> Vector3:
 	if active_pattern() == &"pair" and not pattern_open:
 		return valve_world_position(pair_progress)
-	return _local_part_world(PatternVisual.core_anchor(kind == &"final_boss"))
+	return _local_part_world(PatternVisual.core_anchor(is_boss()))
 
 func valve_world_position(index: int) -> Vector3:
-	return _local_part_world(PatternVisual.valve_anchor(clampi(index, 0, 1), kind == &"final_boss"))
+	return _local_part_world(PatternVisual.valve_anchor(clampi(index, 0, 1), is_boss()))
 
 func _build_visuals() -> void:
 	if not handles(kind):
@@ -80,7 +94,7 @@ func _build_visuals() -> void:
 	pattern_visual = PatternVisual.new()
 	visual_root = pattern_visual
 	add_child(visual_root)
-	pattern_visual.build(active_pattern(), kind == &"final_boss")
+	pattern_visual.build(active_pattern(), is_boss(), kind, phase)
 	status_root = Node3D.new()
 	add_child(status_root)
 	hp_bar_fill = pattern_visual.box(status_root, Vector3(0, 4.3, 0), Vector3(radius * 2, 0.1, 0.1), Color("67d97e"))
@@ -112,19 +126,36 @@ func _open_pattern() -> void:
 	window_timer = 0
 
 func _phase_floor() -> float:
-	return max_health * float(3 - phase) / 4.0 if kind == &"final_boss" else 0.0
+	return max_health * float(phase_count() - 1 - phase) / float(phase_count()) if is_boss() else 0.0
 
 func _advance_phase() -> void:
-	phase = mini(3, phase + 1)
+	phase = mini(phase_count() - 1, phase + 1)
 	_reset_partial()
-	pattern_open = phase == 3
+	pattern_open = kind == &"final_boss" and phase == 3
 	cable_cut = pattern_open
+	plate_broken = false
+	shield_heat = 0
 	core_broken = false
 	attack_phase = &"recover"
 	attack_timer = float(Tuning.PATTERNS.recovery)
 	_build_visuals()
 	_update_visual_facing()
 	_update_health_visuals()
+
+func debug_set_phase(value: int) -> void:
+	if not is_boss(): return
+	phase = clampi(value, 0, phase_count() - 1)
+	health = max_health * float(phase_count() - phase) / float(phase_count())
+	_reset_partial()
+	pattern_open = kind == &"final_boss" and phase == 3
+	cable_cut = pattern_open
+	plate_broken = false
+	core_broken = false
+	shield_heat = 0
+	attack_phase = &"recover"
+	attack_timer = float(Tuning.PATTERNS.recovery)
+	_build_visuals()
+	_sync_derived_visuals("", Color.WHITE)
 
 func receive_attack(tool: StringName, amount: float, contact_world: Vector3, context: Dictionary = {}) -> Dictionary:
 	if not handles(kind): return super.receive_attack(tool, amount, contact_world, context)
@@ -168,7 +199,7 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 		if link_mask != previous:
 			if window_timer <= 0: window_timer = float(Tuning.PATTERNS.window)
 			cue = &"link_cut"
-		if _cut_count() == PatternVisual.spans(mode).size():
+		if _cut_count() == _spans().size():
 			_open_pattern()
 			cue = &"pattern_open"
 	if tool == &"beam" and segmented and mode == &"pair" and not pattern_open:
@@ -177,7 +208,7 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 			if pair_progress == 2:
 				_open_pattern()
 				cue = &"pattern_open"
-				decisive = kind != &"final_boss" # Ordinary Twin Valve: two quick accurate hits.
+				decisive = not is_boss() # Bosses require a charged exposed-core finisher.
 			else:
 				window_timer = float(Tuning.PATTERNS.pair_window)
 				cue = &"valve_b"
@@ -199,8 +230,8 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 	var result := hit(damage, contact_world)
 	result["connected"] = true
 	result["armored"] = not plate_broken and not decisive
-	if kind == &"final_boss" and health > 0:
-		while phase < 3 and health <= _phase_floor() + 0.001:
+	if is_boss() and health > 0:
+		while phase < phase_count() - 1 and health <= _phase_floor() + 0.001:
 			_advance_phase()
 			cue = &"phase_removed"
 	result["cue"] = cue
@@ -237,11 +268,13 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 	if not handles(kind):
 		super._step_part_attack(world_delta, player, distance)
 		return
-	var reach := radius + PLAYER_CONTACT_RADIUS + 0.2
+	var mode := active_pattern()
+	var reach := 4.1 if is_boss() and mode == &"loop" else radius + PLAYER_CONTACT_RADIUS + 0.2
+	var trigger := 9.5 if is_boss() and mode in [&"pair", &"zigzag", &"core"] else reach
 	if attack_phase == &"approach":
-		if distance <= reach:
+		if distance <= trigger:
 			attack_phase = &"windup"
-			attack_timer = float(Tuning.PATTERNS.windup)
+			attack_timer = 1.1 if is_boss() else float(Tuning.PATTERNS.windup)
 		return
 	attack_timer = maxf(0, attack_timer - world_delta)
 	if attack_timer > 0: return
@@ -249,9 +282,19 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 		attack_phase = &"commit"
 		attack_timer = float(Tuning.PATTERNS.commit)
 	elif attack_phase == &"commit":
-		if distance <= reach and player.health > 0: player.take_damage(contact_damage)
+		if is_boss() and mode != &"loop":
+			var director := get_parent()
+			if director != null and director.has_method("launch_projectile"):
+				var fan := [-.3, 0.0, .3] if mode == &"pair" else [-.55, -.27, 0.0, .27, .55]
+				for angle: float in fan:
+					var direction := facing.rotated(Vector3.UP, angle)
+					director.launch_projectile(position + direction * (radius + .2), direction, contact_damage, 6.4 + phase * .5)
+		elif distance <= reach and player.health > 0:
+			# Loops sweep the whole red circle; ordinary patterns strike forward.
+			var toward: Vector3 = player.position - position
+			if is_boss() or toward.normalized().dot(facing) > .2: player.take_damage(contact_damage)
 		attack_phase = &"recover"
-		attack_timer = float(Tuning.PATTERNS.recovery)
+		attack_timer = 2.3 if is_boss() else float(Tuning.PATTERNS.recovery)
 	else:
 		attack_phase = &"approach"
 

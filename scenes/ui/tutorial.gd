@@ -12,17 +12,17 @@ const ORANGE := Color("ed9966")
 const YELLOW := Color("f0d77b")
 const VIOLET := Color("ba9ce9")
 const LESSONS := {
-	"cut": ["Cut the blue connection", "1 · Hold the mouse, draw across the blue link, then release. The cutter follows your line.", "cut"],
-	"heat": ["Strip the orange armor", "3 · Aim at the orange covering and hold the mouse. Keep the heat on until it breaks.", "heat"],
+	"cut": ["Cut the blue connection", "1 · Hold the mouse, draw across the blue link, then release. The cutter follows your line. A bare blue link dismantles its host; armored hosts may need a yellow finisher.", "cut"],
+	"heat": ["Strip the orange armor", "3 · Aim at the orange covering and hold the mouse until it breaks. Heat also pushes nearby enemies back, helping you make an escape.", "heat"],
 	"shot": ["Aim for yellow", "2 · Aim at the yellow core and click. An exposed core needs only a quick shot.", "shot"],
-	"slow": ["Make yourself time", "With a weapon equipped, hold Space to slow the world. Draw and aim carefully; release to return to full speed.", "slow"],
-	"repair": ["Keep your tools working", "Hold E to open the selected tool. Spin, trace or connect the marked parts. Release E to return; completed work stays fixed.", "repair"],
+	"slow": ["Make yourself time", "Your purple device lends time to every weapon. Keep 1 selected and hold Space to slow the world. Draw across the blue link and release the mouse while time is slow. Release Space to return to full speed.", "slow"],
+	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and hold E to open it. Trace the marked circuit to restore one section. Release E to return; completed repairs stay fixed.", "repair"],
 	"charge": ["A charged shot goes through", "2 · Hold the mouse until the lens is bright, then release. A full charge pierces enemies in its path. Solid cover stops it.", "charge"],
 	"opening": ["Open it, then shoot", "Cut the blue link OR heat the orange armor. The opening stays. Switch to 2 and shoot the exposed yellow core.", "opening"],
 	"pair": ["A, then B", "2 · Shoot A to open B. Shoot B before its shutter closes. Quick aimed shots work. If you wait, try the pair again.", "pair"],
-	"loop": ["Cut every support", "1 · Draw around the creature through every blue support before the links reconnect. A finished loop leaves the yellow core open.", "loop"],
-	"zigzag": ["Follow the blue spans", "1 · Bend your line across each blue span before they reconnect. Keep your turns deliberate. Finish the pattern, then shoot yellow.", "zigzag"],
-	"rewind": ["Take back a bad moment", "Hurt, or cornered? Choose 4 and hold Space. Scroll back before the injury or bad move. Release Space to return there. Escape keeps the present.", "rewind"],
+	"loop": ["Cut every support", "1 · Draw around the creature through every blue support before the links reconnect. A finished loop leaves the yellow core open. Switch to 2, hold to charge, then release at the core.", "loop"],
+	"zigzag": ["Follow the blue spans", "1 · Bend your line across each blue span before they reconnect. Keep your turns deliberate. Finish the pattern, then use a charged shot from 2 on yellow.", "zigzag"],
+	"rewind": ["Take back a bad moment", "Try safely: begin practice and wait for a small injury. Choose 4, hold Space, and scroll down to before the injury. Release Space to return there. Escape keeps the present.", "rewind"],
 	"final": ["Dismantle the burial device", "Shoot A then B. Cut the zigzag, then the loop of supports. Each completed opening stays. Finish with the yellow core.", "final"],
 }
 var blocking := false
@@ -128,6 +128,15 @@ func complete_lesson(id: StringName) -> void:
 
 func is_learned(id: StringName) -> bool:
 	return bool(learned.get(id, false)) or not bool(GameState.preferences().tutorial)
+
+func dismiss() -> void:
+	active_id = &""
+	practicing = false
+	_set_blocking(false)
+	world_points.clear()
+	projected.clear()
+	hide()
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func reset_run() -> void:
 	learned.clear()

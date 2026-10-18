@@ -10,8 +10,8 @@ const ToolModels := {
 }
 
 const BOARD := Vector2(520.0, 260.0)
-const PANEL_MIN_SIZE := Vector2(404.0, 226.0)
-const BOARD_MIN_SIZE := Vector2(378.0, 130.0)
+const PANEL_MIN_SIZE := Vector2(280.0, 220.0)
+const BOARD_MIN_SIZE := Vector2(240.0, 120.0)
 const CORRIDOR := Gestures.TRACE_CORRIDOR
 const CONTACT := Gestures.TRACE_CONTACT
 
@@ -100,33 +100,28 @@ func _ready() -> void:
 	if get_parent() != null:
 		for sibling in get_parent().get_children():
 			if sibling is ColorRect:
-				sibling.color = Color(0.0, 0.0, 0.0, 0.08)
+				sibling.color = Color.TRANSPARENT
 	panel = PanelContainer.new()
 	panel.custom_minimum_size = PANEL_MIN_SIZE
-	var backdrop := StyleBoxFlat.new()
-	backdrop.bg_color = Color(0.09, 0.12, 0.16, 0.92)
-	backdrop.border_color = Color("4b5968")
-	backdrop.set_border_width_all(1)
-	backdrop.set_corner_radius_all(5)
-	panel.add_theme_stylebox_override("panel", backdrop)
+	panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	add_child(panel)
 	var margin := MarginContainer.new()
 	for side in ["left", "top", "right", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 8)
 	panel.add_child(margin)
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 3)
+	column.add_theme_constant_override("separation", 8)
 	margin.add_child(column)
 	var header_row := HBoxContainer.new()
 	header_row.add_theme_constant_override("separation", 8)
 	column.add_child(header_row)
 	heading = Label.new()
-	heading.add_theme_font_size_override("font_size", 16)
+	_style_prompt(heading, 22)
 	header_row.add_child(heading)
 	progress = Label.new()
 	progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	progress.add_theme_font_size_override("font_size", 12)
+	_style_prompt(progress, 16)
 	header_row.add_child(progress)
 	meter = ProgressBar.new()
 	meter.show_percentage = false
@@ -134,14 +129,16 @@ func _ready() -> void:
 	column.add_child(meter)
 	instructions = Label.new()
 	instructions.text = "Spin, trace, or connect the highlighted mechanism."
-	instructions.add_theme_font_size_override("font_size", 11)
+	_style_prompt(instructions, 18)
+	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	instructions.max_lines_visible = 2
 	column.add_child(instructions)
 	board = Control.new()
 	board.custom_minimum_size = BOARD_MIN_SIZE
 	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	board.clip_contents = true
 	board.mouse_filter = Control.MOUSE_FILTER_STOP
-	board.draw.connect(_draw_board)
+	board.resized.connect(_sync_tool_canvas)
 	board.gui_input.connect(_on_board_input)
 	column.add_child(board)
 	_build_tool_viewport()
@@ -154,8 +151,9 @@ func _ready() -> void:
 	feedback = Label.new()
 	feedback.text = "Hold E to repair · release E or Esc to close · WASD still moves."
 	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	feedback.custom_minimum_size = Vector2(378, 16)
-	feedback.add_theme_font_size_override("font_size", 11)
+	feedback.max_lines_visible = 2
+	feedback.custom_minimum_size = Vector2(240, 20)
+	_style_prompt(feedback, 15)
 	column.add_child(feedback)
 	resized.connect(_update_layout)
 	get_viewport().size_changed.connect(_update_layout)
@@ -277,17 +275,31 @@ func _update_layout() -> void:
 	var view_size := size if size.x > 0.0 and size.y > 0.0 else get_viewport_rect().size
 	if view_size.x <= 0.0 or view_size.y <= 0.0:
 		view_size = Vector2(960, 600)
-	var safe_size := view_size
-	var target_size := Vector2(
-		minf(safe_size.x - 32, clampf(safe_size.x * 0.46, 420.0, 620.0)),
-		minf(safe_size.y - 32, clampf(safe_size.y * 0.46, 280.0, 380.0))
-	)
-	var edge_margin := 16.0
-	panel.size = target_size
-	panel.position = Vector2(
-		maxf(edge_margin, safe_size.x - target_size.x - edge_margin),
-		edge_margin
-	)
+	# The tool floats over the live world. Only text gets a compact backing.
+	var edge := Vector2(clampf(view_size.x * 0.025, 12.0, 40.0), clampf(view_size.y * 0.035, 12.0, 34.0))
+	panel.position = edge
+	panel.size = view_size - edge * 2.0
+	_sync_tool_canvas()
+
+
+func _style_prompt(label: Label, font_size: int) -> void:
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", INK)
+	label.add_theme_color_override("font_outline_color", Color(0.015, 0.025, 0.035, 0.95))
+	label.add_theme_constant_override("outline_size", 6)
+	label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+
+
+func _sync_tool_canvas() -> void:
+	if board == null or viewport_container == null:
+		return
+	# Model projection, drawn targets and pointer input share one letterboxed canvas.
+	# Stretching the model to the board independently moves targets off their parts.
+	viewport_container.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	viewport_container.position = _board_offset()
+	viewport_container.size = BOARD * _board_scale()
+	_queue_redraws()
 
 
 func path_length(points: Array[Vector2]) -> float:
@@ -331,7 +343,7 @@ func _refresh() -> void:
 		active_op_index = Gestures.operation_index_for_stage(s)
 		active_op = Gestures.active_operation(tool, s)
 		active_kind = active_op["kind"]
-		progress.text = "Op %d/3 (%d / %d) · %.1f / %.1f" % [active_op_index + 1, s, steps, rem, cap]
+		progress.text = "Step %d/3 · %d / %d checkpoints · %.1f / %.1f" % [active_op_index + 1, s, steps, rem, cap]
 		instructions.text = String(active_op.get("prompt", "Complete the highlighted repair gesture."))
 		solved_path = _slice_polyline(full_path, 0.0, cond)
 		missing_path = _slice_polyline(full_path, cond, 1.0)
@@ -576,14 +588,14 @@ func _handle_connect_button(point: Vector2, pressed: bool) -> void:
 		trace_stage = equipment.stage(tool)
 		if selected_terminal.is_empty():
 			if term.is_empty() or int(term["pair_index"]) in connected_pairs:
-				_invalid("Click an unconnected ▲A or ■B contact terminal. Nothing was lost.")
+				_invalid("Click an unconnected triangle or square socket. Nothing was lost.")
 				return
 			selected_terminal = term
 			dragging = true
 			_drag_pair_pending = -1
 			_drag_completed_pairs.clear()
 			stroke = [Vector2(term["position"])]
-			feedback.text = "Selected %s (%s). Click matching %s terminal." % [term["label"], term["shape"], term["label"]]
+			feedback.text = "%s selected. Click or drag to the matching shape." % String(term["shape"]).capitalize()
 		else:
 			if term.is_empty() or int(term["pair_index"]) in connected_pairs:
 				selected_terminal = {}
@@ -592,18 +604,16 @@ func _handle_connect_button(point: Vector2, pressed: bool) -> void:
 			if int(term["pair_index"]) == int(selected_terminal["pair_index"]) and String(term["side"]) == String(selected_terminal["side"]):
 				dragging = true
 				stroke = [Vector2(term["position"])]
-				feedback.text = "Click the opposite matching %s terminal." % String(term["label"])
+				feedback.text = "Click the other %s socket." % String(term["shape"])
 				return
 			if Gestures.terminals_match(selected_terminal, term):
 				dragging = true
 				_drag_pair_pending = int(term["pair_index"])
 				stroke = [Vector2(selected_terminal["position"]), Vector2(term["position"])]
-				feedback.text = "Matched %s pair! Release to connect." % String(term["label"])
+				feedback.text = "Matched %s sockets. Release to connect." % String(term["shape"])
 			else:
-				var prev_lbl := String(selected_terminal.get("label", "?"))
-				var new_lbl := String(term.get("label", "?"))
 				selected_terminal = {}
-				_invalid("Mismatched terminal (%s vs %s). Match shape and label (▲A to ▲A, ■B to ■B)." % [prev_lbl, new_lbl])
+				_invalid("Shapes do not match. Join triangle to triangle or square to square.")
 	elif dragging:
 		_extend_connect(point)
 		if not dragging:
@@ -623,7 +633,7 @@ func _handle_connect_button(point: Vector2, pressed: bool) -> void:
 			# Clicked and released on the first terminal: keep it selected for the second click!
 			dragging = false
 			stroke = [Vector2(selected_terminal["position"])]
-			feedback.text = "Terminal %s selected. Now click the matching %s terminal." % [selected_terminal["label"], selected_terminal["label"]]
+			feedback.text = "%s selected. Click the other matching shape." % String(selected_terminal["shape"]).capitalize()
 		else:
 			selected_terminal = {}
 			_drag_pair_pending = -1
@@ -673,7 +683,7 @@ func _commit_connect_pairs(pair_indices: Array[int]) -> void:
 		if connected_pairs.size() >= pairs.size():
 			_commit_steps(1)
 		else:
-			var remaining_lbl := "■B" if (0 in connected_pairs) else "▲A"
+			var remaining_lbl := "square" if (0 in connected_pairs) else "triangle"
 			feedback.text = "Pair connected! Now click the matching %s terminals." % remaining_lbl
 			_queue_redraws()
 
@@ -720,95 +730,12 @@ func _exit_tree() -> void:
 		equipment.end_repair(_session)
 
 
-func _draw_board() -> void:
-	board.draw_rect(Rect2(Vector2.ZERO, board.size), Color(0.07, 0.10, 0.14, 0.96))
-	board.draw_set_transform(_board_offset(), 0, Vector2.ONE * _board_scale())
-	# Subtle workshop blueprint grid behind the 3D SubViewport
-	var grid_col := Color(0.16, 0.22, 0.29, 0.35)
-	for gx in range(0, int(BOARD.x) + 1, 40):
-		board.draw_line(Vector2(gx, 0), Vector2(gx, BOARD.y), grid_col, 1.0)
-	for gy in range(0, int(BOARD.y) + 1, 40):
-		board.draw_line(Vector2(0, gy), Vector2(BOARD.x, gy), grid_col, 1.0)
-
-
 func _draw_overlay() -> void:
-	if equipment == null:
+	if equipment == null or equipment.is_full(tool):
 		return
 	overlay.draw_set_transform(_board_offset(), 0, Vector2.ONE * _board_scale())
-	var spec := Gestures.tool_spec(tool)
-	var ops: Array = spec["operations"]
-	var full: bool = equipment.is_full(tool)
-
-	# 1. Tool-specific mechanical backdrop details (including open fan cover & open front grille on Orange cone)
-	_draw_tool_backdrop_details(String(spec["id"]))
-
-	# 2. Draw all 3 operations on the tool so completed work, active gesture, and upcoming steps are legible
-	for op_idx in range(ops.size()):
-		var op: Dictionary = ops[op_idx]
-		var is_done := full or (op_idx < active_op_index)
-		var is_active := (not full) and (op_idx == active_op_index)
-		_draw_operation_layer(op, is_done, is_active)
-
-	# 3. Draw top 3-step operation bar
-	_draw_operation_pills(ops, full)
-
-
-func _draw_tool_backdrop_details(tool_key: String) -> void:
-	if tool_key == "cone":
-		# Orange Heat Bellows: visually open rear fan cover & open front nozzle grille per mockup 5.png
-		var fan_c := Vector2(412.0, 112.0)
-		# Open hinged rear fan lid swung up-right
-		var lid_c := fan_c + Vector2(64.0, -42.0)
-		overlay.draw_circle(lid_c, 34.0, Color("445244"))
-		overlay.draw_arc(lid_c, 34.0, 0.0, TAU, 28, Color("7b8c79"), 2.5, true)
-		overlay.draw_rect(Rect2(fan_c + Vector2(24.0, -24.0), Vector2(18.0, 10.0)), Color("5c695b"))
-		# Exposed rear fan housing & rotating 6-blade fan inside
-		overlay.draw_circle(fan_c, 38.0, Color(0.08, 0.10, 0.12, 0.88))
-		for b_idx in range(6):
-			var ang := spin_visual_angle + float(b_idx) * TAU / 6.0
-			var b_tip := fan_c + Vector2(cos(ang), sin(ang)) * 28.0
-			var b_side := fan_c + Vector2(cos(ang + 0.35), sin(ang + 0.35)) * 18.0
-			overlay.draw_colored_polygon(PackedVector2Array([fan_c, b_tip, b_side]), Color("58646e"))
-		overlay.draw_circle(fan_c, 7.0, Color("c49b45"))
-
-		# Open front nozzle hood + hinged front grille swung down-left exposing glowing orange heating coils
-		var hood_rect := Rect2(Vector2(66.0, 112.0), Vector2(110.0, 92.0))
-		overlay.draw_rect(hood_rect, Color(0.10, 0.11, 0.13, 0.85))
-		overlay.draw_rect(hood_rect, Color("8c6d32"), false, 2.5)
-		# Swung-open bottom grille grate
-		var grille_pts := PackedVector2Array([
-			Vector2(66.0, 204.0),
-			Vector2(176.0, 204.0),
-			Vector2(156.0, 244.0),
-			Vector2(46.0, 238.0),
-		])
-		overlay.draw_colored_polygon(grille_pts, Color(0.15, 0.18, 0.22, 0.90))
-		overlay.draw_polyline(PackedVector2Array([grille_pts[0], grille_pts[1], grille_pts[2], grille_pts[3], grille_pts[0]]), Color("637282"), 2.0, true)
-		for g_idx in range(1, 4):
-			var t := float(g_idx) / 4.0
-			overlay.draw_line(grille_pts[0].lerp(grille_pts[3], t), grille_pts[1].lerp(grille_pts[2], t), Color("4d5966"), 1.5)
-		# Glowing orange ceramic heating coils inside open hood
-		for row_y in [138.0, 160.0, 180.0]:
-			overlay.draw_line(Vector2(78.0, row_y - 2.0), Vector2(116.0, row_y + 1.0), ORANGE, 7.0, true)
-			overlay.draw_line(Vector2(130.0, row_y + 2.0), Vector2(166.0, row_y + 5.0), ORANGE, 7.0, true)
-	elif tool_key == "ring":
-		# Highlight cassette tape reels inside open top gearbox for "WIND TAPE"
-		var c1 := Vector2(194.0, 74.0)
-		var c2 := Vector2(236.0, 84.0)
-		overlay.draw_circle(c1, 22.0, Color(0.38, 0.25, 0.18, 0.85))
-		overlay.draw_circle(c2, 20.0, Color(0.38, 0.25, 0.18, 0.85))
-		overlay.draw_circle(c1, 7.0, Color("e8e2d5"))
-		overlay.draw_circle(c2, 7.0, Color("e8e2d5"))
-	elif tool_key == "beam":
-		# Highlight brass lens aperture ring & top ceramic insulators
-		var lens_c := Vector2(172.0, 180.0)
-		overlay.draw_arc(lens_c, 34.0, 0.0, TAU, 32, Color(0.78, 0.62, 0.28, 0.75), 5.0, true)
-		overlay.draw_circle(lens_c, 22.0, Color(0.92, 0.86, 0.66, 0.65))
-	elif tool_key == "clock":
-		# Highlight front cassette window spools & brass side key lobes
-		overlay.draw_rect(Rect2(Vector2(198.0, 160.0), Vector2(68.0, 44.0)), Color(0.05, 0.06, 0.08, 0.82))
-		overlay.draw_circle(Vector2(216.0, 182.0), 8.0, Color("e8e2d5"))
-		overlay.draw_circle(Vector2(248.0, 182.0), 8.0, Color("e8e2d5"))
+	# Completed and upcoming mechanisms stay unobscured; highlight only the live step.
+	_draw_operation_layer(active_op, false, true)
 
 
 func _draw_operation_layer(op: Dictionary, is_done: bool, is_active: bool) -> void:
@@ -861,7 +788,6 @@ func _draw_spin_operation(op: Dictionary, is_done: bool, is_active: bool) -> voi
 		arrow_tip - tang * 6.0 - norm * 7.0,
 	])
 	overlay.draw_colored_polygon(tri, ring_col)
-	_draw_badge(bpos, String(op["tag"]), ring_col)
 
 
 func _draw_trace_operation(op: Dictionary, is_done: bool, is_active: bool) -> void:
@@ -897,7 +823,6 @@ func _draw_trace_operation(op: Dictionary, is_done: bool, is_active: bool) -> vo
 		overlay.draw_circle(route[i], 13.0, c_col.darkened(0.68))
 		overlay.draw_arc(route[i], 13.0, 0.0, TAU, 20, c_col, 2.5, true)
 		overlay.draw_string(ThemeDB.fallback_font, route[i] + Vector2(-4.0, 5.0), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, INK)
-	_draw_badge(bpos, String(op["tag"]), BLUE)
 
 
 func _draw_connect_operation(op: Dictionary, is_done: bool, is_active: bool) -> void:
@@ -918,39 +843,41 @@ func _draw_connect_operation(op: Dictionary, is_done: bool, is_active: bool) -> 
 			_draw_terminal_node(p["b"], p["shape"], p["label"], INK.darkened(0.45), false)
 		return
 
-	# Active Connect operation
+	# Shape and color reinforce each pair. Selecting one quietly lights its mate.
 	for pair_idx in range(pairs.size()):
 		var p: Dictionary = pairs[pair_idx]
 		var pair_done := pair_idx in connected_pairs
-		var col := GREEN if pair_done else YELLOW
-		if pair_done:
-			overlay.draw_line(p["a"], p["b"], GREEN, 4.0, true)
-		else:
-			overlay.draw_dashed_line(p["a"], p["b"], YELLOW.darkened(0.25), 2.0, 6.0, true)
+		var pair_selected := not selected_terminal.is_empty() and int(selected_terminal["pair_index"]) == pair_idx
+		var pair_color := BLUE if p["shape"] == &"triangle" else YELLOW
+		var col := GREEN if pair_done else pair_color
+		if pair_done or pair_selected:
+			overlay.draw_line(p["a"], p["b"], Color(col, 0.24), 7.0, true)
+			overlay.draw_line(p["a"], p["b"], Color(col, 0.8), 1.5, true)
 		for side in ["a", "b"]:
-			var is_sel: bool = (not selected_terminal.is_empty()) and int(selected_terminal["pair_index"]) == pair_idx and String(selected_terminal["side"]) == side
+			var is_sel: bool = pair_selected and String(selected_terminal["side"]) == side
 			var t_col := GREEN if (pair_done or is_sel) else (RED if trace_bad else col)
+			if pair_selected and not is_sel:
+				overlay.draw_arc(p[side], 19.0, 0.0, TAU, 28, Color(col, 0.72), 2.0, true)
 			_draw_terminal_node(p[side], p["shape"], p["label"], t_col, pair_done or is_sel)
 
 	if stroke.size() > 1:
 		overlay.draw_polyline(PackedVector2Array(stroke), RED if trace_bad else GREEN, 3.5, true)
-	_draw_badge(bpos, String(op["tag"]), YELLOW)
 
 
-func _draw_terminal_node(pos: Vector2, shape: StringName, label_txt: String, col: Color, filled: bool) -> void:
-	overlay.draw_circle(pos, 15.0, col.darkened(0.72) if not filled else col.darkened(0.42))
-	overlay.draw_arc(pos, 15.0, 0.0, TAU, 22, col, 2.5, true)
-	# Distinct geometric symbol (▲ triangle vs ■ square) + explicit text label ("A" vs "B")
+func _draw_terminal_node(pos: Vector2, shape: StringName, _label_txt: String, col: Color, filled: bool) -> void:
+	overlay.draw_circle(pos, 12.0, Color(0.025, 0.035, 0.045, 0.88))
+	overlay.draw_arc(pos, 12.0, 0.0, TAU, 24, col, 2.0, true)
+	var points := PackedVector2Array()
 	if shape == &"triangle":
-		var tri := PackedVector2Array([
-			pos + Vector2(-4.0, -7.0),
-			pos + Vector2(-10.0, 5.0),
-			pos + Vector2(2.0, 5.0),
-		])
-		overlay.draw_colored_polygon(tri, col)
+		points = PackedVector2Array([pos + Vector2(0, -8), pos + Vector2(-7, 6), pos + Vector2(7, 6)])
 	else:
-		overlay.draw_rect(Rect2(pos + Vector2(-10.0, -5.0), Vector2(10.0, 10.0)), col, true)
-	overlay.draw_string(ThemeDB.fallback_font, pos + Vector2(3.0, 5.0), label_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, INK)
+		points = PackedVector2Array([pos + Vector2(-6, -6), pos + Vector2(6, -6), pos + Vector2(6, 6), pos + Vector2(-6, 6)])
+	if filled:
+		overlay.draw_colored_polygon(points, col)
+	else:
+		overlay.draw_colored_polygon(points, Color(col, 0.16))
+	points.append(points[0])
+	overlay.draw_polyline(points, col, 2.5, true)
 
 
 func _draw_badge(pos: Vector2, text: String, col: Color) -> void:
@@ -960,20 +887,3 @@ func _draw_badge(pos: Vector2, text: String, col: Color) -> void:
 	overlay.draw_rect(rect, Color(0.05, 0.08, 0.12, 0.88), true)
 	overlay.draw_rect(rect, col, false, 1.5)
 	overlay.draw_string(ThemeDB.fallback_font, clamped + Vector2(6.0, 14.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, INK)
-
-
-func _draw_operation_pills(ops: Array, full: bool) -> void:
-	var pill_w := 160.0
-	var gap := 10.0
-	var start_x := (BOARD.x - (pill_w * 3.0 + gap * 2.0)) * 0.5
-	for i in range(ops.size()):
-		var op: Dictionary = ops[i]
-		var is_done := full or (i < active_op_index)
-		var is_act := (not full) and (i == active_op_index)
-		var col := GREEN if is_done else (BLUE if is_act else INK.darkened(0.55))
-		var rect := Rect2(Vector2(start_x + float(i) * (pill_w + gap), 4.0), Vector2(pill_w, 19.0))
-		overlay.draw_rect(rect, Color(0.06, 0.09, 0.14, 0.90), true)
-		overlay.draw_rect(rect, col, false, 2.0 if is_act else 1.0)
-		var status_suffix := " ✓" if is_done else (" •" if is_act else "")
-		var txt := "%d. %s%s" % [i + 1, String(op["short"]), status_suffix]
-		overlay.draw_string(ThemeDB.fallback_font, rect.position + Vector2(7.0, 14.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, INK if (is_done or is_act) else INK.darkened(0.35))

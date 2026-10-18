@@ -3,7 +3,7 @@ extends RefCounted
 # Distances are world units; durations are real seconds unless stated otherwise.
 const PLAYER = {"speed": 6.0, "health": 100.0, "visual_scale": 1.3, "tool_scale": 1.25}
 const MOVEMENT = {"acceleration": 48.0, "braking": 80.0, "reversal": 72.0}
-const VIEW = {"camera_size": 22.0, "showcase_size": 18.0, "blue_assist_pixels": 22.0,
+const VIEW = {"fov": 52.0, "camera_size": 22.0, "showcase_size": 18.0, "blue_assist_pixels": 22.0,
 	"yellow_assist_pixels": 20.0}
 const SLOW = {"scale": 0.18, "drain": 1.0}
 const RING = {"range": 14.0, "length": 22.0, "minimum_length": 0.6,
@@ -13,6 +13,9 @@ const BEAM = {"range": 35.0, "radius": 0.35, "min_damage": 30.0, "max_damage": 1
 	"charge_time": 0.9, "speed": 42.0, "cooldown": 0.25, "max_pulses": 8}
 const CONE = {"range": 5.0, "half_angle": 0.65, "damage_per_second": 16.0}
 const ENEMIES = {
+	"ranged": {"health": 110.0, "speed": 1.35, "radius": 0.65, "damage": 10.0},
+	"loop_boss": {"health": 840.0, "speed": 0.85, "radius": 1.45, "damage": 22.0, "mechanism": "pattern"},
+	"sequence_boss": {"health": 780.0, "speed": 1.0, "radius": 1.4, "damage": 20.0, "mechanism": "pattern"},
 	"loop": {"health": 300.0, "speed": 1.15, "radius": 1.0, "damage": 9.0},
 	"zigzag": {"health": 300.0, "speed": 1.05, "radius": 1.15, "damage": 9.0},
 	"pair": {"health": 240.0, "speed": 1.35, "radius": 1.0, "damage": 8.0},
@@ -49,10 +52,10 @@ const ARENA_HALF_SIZE = 20.0
 
 # Generous first-pass service intervals, measured in actual use, not wall time.
 const GEAR = {
-	"ring": {"capacity": 32.0, "unit": "launches"},
+	"ring": {"capacity": 18.0, "unit": "launches"},
 	"beam": {"capacity": 48.0, "unit": "shots"},
-	"cone": {"capacity": 45.0, "unit": "seconds"},
-	"clock": {"capacity": 24.0, "unit": "seconds"},
+	"cone": {"capacity": 18.0, "unit": "seconds"},
+	"clock": {"capacity": 12.0, "unit": "seconds"},
 }
 const REPAIR_STEPS = 4
 const CONTROL = {"pulse_interval": 1.2, "pulse_cost": 1.5, "pulse_impulse": 22.0,

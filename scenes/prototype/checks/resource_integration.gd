@@ -428,7 +428,7 @@ func run() -> void:
 	expect(weapons.ring_phase == "idle", "Already-launched ring completes its flight after switching tools")
 
 	# 7. R clears active state (popup, partial repair stage, wear, active weapons, slow, health, roster)
-	gear.spend(&"ring", 20.0)
+	gear.spend(&"ring", maxf(0,gear.remaining(&"ring")-gear.capacity(&"ring")*.375))
 	gear.spend(&"beam", 15.0)
 	gear.spend(&"cone", 10.0)
 	gear.spend(&"clock", 8.0)

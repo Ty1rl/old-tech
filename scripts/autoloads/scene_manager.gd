@@ -18,6 +18,7 @@ const POPUPS: Dictionary[StringName, String] = {
 	&"PauseMenu": "uid://c1f3c6w6w2oy0",
 	&"Settings": "res://scenes/ui/settings.tscn",
 	&"RunResult": "res://scenes/ui/run_result.tscn",
+	&"Developer": "res://scenes/ui/encounter_menu.tscn",
 	&"Repair": "res://scenes/prototype/repair.tscn"
 }
 
@@ -33,6 +34,7 @@ var popup_dim_color: Color = Color(0.0, 0.0, 0.0, 0.5)
 ## Data handed to the next scene. Replaced on every change, read it in _ready().
 var params: Dictionary = {}
 
+var developer_tools: bool = true # One switch removes the jam encounter backdoor.
 var _transitioning: bool = false
 var _fade_rect: ColorRect
 var _popup_layer: CanvasLayer

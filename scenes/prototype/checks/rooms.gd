@@ -74,12 +74,12 @@ func run() -> void:
 
 	var expected_room_ids: Array[StringName] = [&"gallery", &"collections", &"restoration", &"burial"]
 	var expected_lessons: Array[StringName] = [
-		&"move", &"cut", &"heat", &"shot", &"slow", &"repair",
-		&"charge", &"opening", &"pair", &"loop", &"zigzag", &"rewind", &"final"
+		&"cut", &"heat", &"shot", &"slow", &"repair",
+		&"charge", &"opening", &"pair", &"loop", &"zigzag", &"rewind"
 	]
 	var valid_enemies: Array[StringName] = [
 		&"blue", &"yellow", &"orange", &"side_guard", &"front_guard",
-		&"pair", &"loop", &"zigzag", &"final_boss"
+		&"pair", &"loop", &"zigzag", &"ranged", &"loop_boss", &"sequence_boss", &"final_boss"
 	]
 	var valid_formations: Array[StringName] = [&"curve", &"line", &"cluster", &"mixed"]
 
@@ -111,7 +111,7 @@ func run() -> void:
 		expect(spawn_clear, "%s player_spawn has >= 1.5m clearance from all cover rectangles" % String(rid))
 
 		var r_lessons: Array[StringName] = room.get("lessons", [])
-		expect(not r_lessons.is_empty(), "%s defines lessons list" % String(rid))
+		expect(not r_lessons.is_empty() or bool(room.get("is_boss_room",false)), "%s defines teaching or a final examination" % String(rid))
 		for l_id in r_lessons:
 			expect(expected_lessons.has(l_id), "%s lesson %s is in required lesson ID set" % [String(rid), String(l_id)])
 			seen_lessons[l_id] = true
@@ -126,49 +126,37 @@ func run() -> void:
 			var w_count: int = int(w.get("count", 0))
 			var w_rec: float = float(w.get("recovery", -1.0))
 
-			expect(expected_lessons.has(w_lesson), "%s wave %d has valid lesson ID" % [String(rid), w_idx])
+			expect((w_lesson==&"" or expected_lessons.has(w_lesson)), "%s wave %d has valid lesson ID" % [String(rid), w_idx])
 			expect(valid_formations.has(w_form), "%s wave %d has valid formation ID" % [String(rid), w_idx])
-			expect(not w_enemies.is_empty() and w_count >= 1, "%s wave %d has positive count and enemies" % [String(rid), w_idx])
+			expect((not w_enemies.is_empty() and w_count >= 1) or (w_lesson==&"repair" and w_count==0), "%s wave %d has positive count and enemies" % [String(rid), w_idx])
 			expect(w_rec >= 0.0, "%s wave %d has non-negative recovery" % [String(rid), w_idx])
-			seen_lessons[w_lesson] = true
+			if not w_lesson.is_empty(): seen_lessons[w_lesson] = true
 			seen_formations[w_form] = true
 			for e_kind in w_enemies:
 				expect(valid_enemies.has(e_kind), "%s wave %d enemy %s is valid" % [String(rid), w_idx, String(e_kind)])
 				seen_enemies[e_kind] = true
 
-	expect(seen_lessons.size() == expected_lessons.size(), "All 13 required Lesson IDs are covered across the 4 rooms")
-	expect(seen_enemies.size() == valid_enemies.size(), "All 9 Enemy IDs are scheduled across the 4 rooms")
+	expect(seen_lessons.size() == expected_lessons.size(), "All required Lesson IDs are covered across the 4 rooms")
+	expect(seen_enemies.size() == valid_enemies.size(), "All campaign Enemy IDs are scheduled across the 4 rooms")
 	expect(seen_formations.size() == valid_formations.size(), "All 4 Formation IDs are used across the 4 rooms")
 
-	# Verify specific progression rules from PLAYTEST-BRIEF.txt:
-	# - Room 1 (gallery): simple blue/orange/yellow only
-	var r1_enemies: Dictionary = {}
-	for w in defs[0]["waves"]:
-		for e in w["enemies"]:
-			r1_enemies[e] = true
-	expect(
-		r1_enemies.has(&"blue") and r1_enemies.has(&"yellow") and r1_enemies.has(&"orange") and r1_enemies.size() == 3,
-		"Room 1 (gallery) uses only simple blue, yellow, and orange enemies"
-	)
-
-	# - Room 2 (collections): opening combos + A/B pair introduced solo before mixed wave
-	var r2_waves: Array[Dictionary] = defs[1]["waves"]
-	var pair_intro_solo := false
-	for w in r2_waves:
-		if w["lesson"] == &"pair" and w["enemies"] == [&"pair"] and int(w["count"]) == 1:
-			pair_intro_solo = true
-	expect(pair_intro_solo, "Room 2 (collections) introduces A/B pair solo (count=1) before crowding")
-
-	# - Room 3 (restoration): loop then zigzag introduced separately before crowding
-	var r3_waves: Array[Dictionary] = defs[2]["waves"]
-	expect(
-		r3_waves[0]["lesson"] == &"loop" and r3_waves[0]["enemies"] == [&"loop"] and int(r3_waves[0]["count"]) == 1,
-		"Room 3 (restoration) Wave 1 introduces loop solo"
-	)
-	expect(
-		r3_waves[1]["lesson"] == &"zigzag" and r3_waves[1]["enemies"] == [&"zigzag"] and int(r3_waves[1]["count"]) == 1,
-		"Room 3 (restoration) Wave 2 introduces zigzag solo separately from loop"
-	)
+	# Verify equipment and boss teaching order, independent of roster size tuning.
+	var acquired: Array[int] = []
+	var bosses: Array[StringName] = []
+	var taught: Dictionary = {}
+	for room: Dictionary in defs:
+		for wave: Dictionary in room.waves:
+			if int(wave.get("acquire",0))>0: acquired.append(int(wave.acquire))
+			if not String(wave.lesson).is_empty(): taught[wave.lesson]=true
+			for kind: StringName in wave.enemies:
+				if kind==&"blue": expect(1 in acquired,"Blue combat follows cutter acquisition")
+				if kind==&"orange": expect(3 in acquired,"Orange combat follows cone acquisition")
+				if String(kind).ends_with("_boss"): bosses.append(kind)
+				if kind==&"loop_boss": expect(taught.has(&"loop"),"Loop boss follows loop teaching")
+				if kind==&"sequence_boss": expect(taught.has(&"pair"),"Sequence boss follows paired-shot teaching")
+	expect(acquired==[2,3,1,4],"Equipment is found in yellow orange blue purple order")
+	expect(bosses==[&"loop_boss",&"sequence_boss",&"final_boss"],"Complete arc has three ordered bosses")
+	expect(defs[0].waves[0].enemies==[&"yellow"],"Opening encounter uses the initial yellow tool")
 
 	# - Room 4 (burial): familiar pressure wave then ONE final_boss wave
 	var r4_waves: Array[Dictionary] = defs[3]["waves"]

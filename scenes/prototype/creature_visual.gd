@@ -57,6 +57,9 @@ var cable: Node3D
 var core: Node3D
 var plate: Node3D
 var shield_rim: Node3D
+var core_marker: MeshInstance3D
+var cable_marker: MeshInstance3D
+var split_companion: Array[MeshInstance3D] = []
 var phase := 0.0
 var gait_phase := 0.0
 var playback_rate := 1.0
@@ -96,8 +99,49 @@ func build(p_kind: StringName) -> void:
 	_flash.albedo_color = Color(1, 1, 1, .45)
 	for mesh: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		if mesh not in [cable, core, plate, shield_rim]: _meshes.append(mesh)
+		if kind == &"blue" and String(mesh.name).begins_with("B_"): split_companion.append(mesh)
+	_build_readable_parts()
 	set_process(false)
 	set_physics_process(false)
+
+
+func _build_readable_parts() -> void:
+	# These accents sit on the authoritative query anchors. Unlit spheres remain
+	# readable from behind the chassis, and never move independently of hit tests.
+	var host := get_parent().get_parent()
+	if core:
+		core_marker = MeshInstance3D.new()
+		var mesh := SphereMesh.new()
+		mesh.radius = .34
+		mesh.height = .68
+		core_marker.mesh = mesh
+		core_marker.position = Vector3(0, 1.75, -.49) if kind == &"front_guard" else Vector3(0, 1.75, 0)
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = Color("ffe538")
+		material.no_depth_test = true
+		core_marker.material_override = material
+		add_child(core_marker)
+	if cable:
+		var points: Array[Vector3] = host.cable_world_points()
+		if points.size() >= 2:
+			var orientation := Basis.looking_at(host.facing, Vector3.UP)
+			var a: Vector3 = orientation.inverse() * (points[0] - host.position)
+			var b: Vector3 = orientation.inverse() * (points[1] - host.position)
+			cable_marker = MeshInstance3D.new()
+			var mesh := CylinderMesh.new()
+			mesh.top_radius = .16
+			mesh.bottom_radius = .16
+			mesh.height = a.distance_to(b)
+			cable_marker.mesh = mesh
+			cable_marker.position = (a + b) * .5
+			cable_marker.quaternion = Quaternion(Vector3.UP, (b - a).normalized())
+			var material := StandardMaterial3D.new()
+			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			material.albedo_color = Color("168eff")
+			material.no_depth_test = true
+			cable_marker.material_override = material
+			add_child(cable_marker)
 
 
 func _cache_body_groups() -> void:
@@ -142,9 +186,12 @@ func set_attack_phase(p_phase: StringName) -> void:
 
 func sync(cut: bool, exposed: bool, broken: bool, _heat_ratio: float) -> void:
 	if cable: cable.visible = not cut
+	if cable_marker: cable_marker.visible = not cut
 	if core: core.visible = exposed and not broken
+	if core_marker: core_marker.visible = exposed and not broken
 	if plate: plate.visible = not exposed
 	if shield_rim: shield_rim.visible = not exposed
+	for companion in split_companion: companion.visible = not cut
 
 
 func _resolve_attack_phase(motion_state: Variant) -> StringName:

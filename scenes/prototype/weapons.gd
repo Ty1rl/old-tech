@@ -28,6 +28,7 @@ var equipment: RefCounted
 var cover: RefCounted
 
 var selected_tool: int = 1
+var available_tools: Array[int] = [1, 2, 3, 4]
 
 # Tool 1 (Ring) state
 var ring_drawing: bool = false
@@ -98,8 +99,17 @@ func _setup_visuals() -> void:
 	presentation.attach(self)
 
 
+func set_loadout(tools: Array[int], preferred: int = 2) -> void:
+	available_tools.assign(tools)
+	if available_tools.is_empty():
+		cancel_input()
+		return
+	select_tool(preferred if preferred in available_tools else available_tools[0])
+
+
 func select_tool(tool_index: int) -> void:
 	var target_tool := clampi(tool_index, 1, 4)
+	if target_tool not in available_tools: return
 	if target_tool == selected_tool:
 		return
 	var held_before := mouse_held

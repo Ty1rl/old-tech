@@ -1,0 +1,174 @@
+{
+  "units": "metres",
+  "axes": "Godot +Y up / -Z forward; Blender +Z up / -Y forward",
+  "runtime_mapping": {
+    "patient": "yellow / shot",
+    "conjoined": "blue / cut",
+    "bellows_belly": "orange / heat"
+  },
+  "part_nodes": {
+    "patient": {
+      "node": "YellowCore",
+      "position_godot_m": [
+        0,
+        1.75,
+        0
+      ],
+      "lens_radius_m": 0.224,
+      "lens_height_m": 0.18,
+      "placeholder_sphere_radius_m": 0.3,
+      "adaptation": "Chest drum feeds raised spinal lens for the existing elevated marker and overhead readability."
+    },
+    "conjoined": {
+      "node": "BlueConnector",
+      "position_godot_m": [
+        0,
+        0.85,
+        0
+      ],
+      "anchors": {
+        "CableStart": [
+          -0.4,
+          0.85,
+          0
+        ],
+        "CableEnd": [
+          0.4,
+          0.85,
+          0
+        ]
+      },
+      "hose_radius_m": [
+        0.125,
+        0.13
+      ],
+      "placeholder_radius_m": 0.19
+    },
+    "bellows_belly": {
+      "node": "OrangePlate",
+      "root_position_godot_m": [
+        0,
+        0.12,
+        -0.95
+      ],
+      "reference_radius_m": 0.7,
+      "front_envelope_m": [
+        1.435,
+        1,
+        0.14
+      ],
+      "mantle_top_y_m": 1.37,
+      "adaptation": "Oval front and upper mantle differ from the simple rectangle, preserving its placement and improving overhead visibility."
+    }
+  },
+  "marker_position_mismatches": [],
+  "hit_tests_changed": false,
+  "collision_changed": false,
+  "root_travel": false,
+  "models": {
+    "patient": {
+      "kind": "patient",
+      "triangles": 14015,
+      "meshes": 8,
+      "materials": [
+        "Brass",
+        "Cloth",
+        "Leather",
+        "Metal",
+        "Recess",
+        "Skin",
+        "Wrap",
+        "Yellow"
+      ],
+      "bones": 18,
+      "source": "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/projects/old-tech/seats/jam-5/repo/art-source/enemies/patient.blend",
+      "export": "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/projects/old-tech/seats/jam-5/repo/assets/enemies/patient.glb",
+      "animations": [
+        "Idle",
+        "Walk"
+      ],
+      "skins": 1,
+      "exported_clips": [
+        "Idle",
+        "Walk"
+      ]
+    },
+    "conjoined": {
+      "kind": "conjoined",
+      "triangles": 18159,
+      "meshes": 15,
+      "materials": [
+        "Blue",
+        "Cloth",
+        "Leather",
+        "Metal",
+        "Recess",
+        "Skin",
+        "Wrap"
+      ],
+      "bones": 35,
+      "source": "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/projects/old-tech/seats/jam-5/repo/art-source/enemies/conjoined.blend",
+      "export": "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/projects/old-tech/seats/jam-5/repo/assets/enemies/conjoined.glb",
+      "animations": [
+        "Idle",
+        "Walk"
+      ],
+      "skins": 1,
+      "exported_clips": [
+        "Idle",
+        "Walk"
+      ]
+    },
+    "bellows_belly": {
+      "kind": "bellows_belly",
+      "triangles": 12958,
+      "meshes": 10,
+      "materials": [
+        "Cloth",
+        "Leather",
+        "Metal",
+        "Orange",
+        "Recess",
+        "Skin",
+        "Wrap"
+      ],
+      "bones": 18,
+      "source": "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/projects/old-tech/seats/jam-5/repo/art-source/enemies/bellows_belly.blend",
+      "export": "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/projects/old-tech/seats/jam-5/repo/assets/enemies/bellows_belly.glb",
+      "animations": [
+        "Idle",
+        "Walk"
+      ],
+      "skins": 1,
+      "exported_clips": [
+        "Idle",
+        "Walk"
+      ]
+    }
+  },
+  "animation_durations_s": {
+    "Idle": 2,
+    "Walk": 1.2
+  },
+  "walk_reference_unscaled_m_per_s": 0.35,
+  "integration": "Attach whole imported scene under the existing facing pivot; keep internal transforms and current part-state/time logic. Hide the named part group as a whole.",
+  "engine_verified_markers": {
+    "bellows_belly": [
+      -8.30516384553448e-08,
+      0.119999997317791,
+      -0.949999988079071
+    ],
+    "conjoined": [
+      0.0,
+      0.850000023841858,
+      0.0
+    ],
+    "patient": [
+      0.0,
+      1.75,
+      0.0
+    ]
+  },
+  "engine_verified_four_facing_visibility": true,
+  "engine_verified_removal_states": true
+}

@@ -48,6 +48,7 @@ func create_museum() -> Node3D:
 
 func _ready() -> void:
 	super._ready()
+	museum.combat_event.connect(feedback.cue)
 	tutorial.setup(player.camera)
 	if not tutorial.blocking_changed.is_connected(_on_teaching_block):
 		tutorial.blocking_changed.connect(_on_teaching_block)

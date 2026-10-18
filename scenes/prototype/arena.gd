@@ -79,6 +79,9 @@ func _ready() -> void:
 	feedback = CombatFeedback.new()
 	add_child(feedback)
 	weapons.combat_event.connect(feedback.cue)
+	weapons.resolved_hit.connect(_on_weapon_resolved_hit)
+	director.enemy_event.connect(feedback.enemy_cue)
+	feedback.set_music_playing(true)
 	equipment.repaired.connect(_on_repaired)
 	player.wounded.connect(_on_player_wounded)
 	_build_hud()
@@ -642,6 +645,7 @@ func _on_emergency_confirmed(age_seconds: float, state: Dictionary) -> void:
 	if not state.is_empty():
 		_restore_world(state, false)
 	feedback.step(0.0, 0.0, 1.0, false, 0.0, weapons, equipment)
+	feedback.cue(&"recovery_confirm", player.global_position)
 	_last_emergency_age = 0.0
 	if age_seconds == EmergencyRewind.CHECKPOINT_AGE:
 		time_feedback = "Rewound to checkpoint"
@@ -669,7 +673,14 @@ func _on_attempt_exhausted() -> void:
 	_update_hud()
 
 
+func _on_ui_clicked() -> void:
+	feedback.cue(&"ui_click", player.global_position)
+
+
 func _on_popup_opened(_key: StringName, _popup: Node) -> void:
+	for button: BaseButton in _popup.find_children("*", "BaseButton", true, false):
+		if not button.pressed.is_connected(_on_ui_clicked):
+			button.pressed.connect(_on_ui_clicked)
 	weapons.cancel_input()
 	if _key == &"RunResult":
 		_close_repair()
@@ -714,8 +725,20 @@ func _notification(what: int) -> void:
 		GameState.pause()
 
 
-func _on_repaired(_tool: StringName, restored: float) -> void:
-	feedback.cue(&"repair_step", player.global_position, clampf(restored / 6.0, 0.3, 1.0))
+func _on_weapon_resolved_hit(tool: StringName, result: Dictionary, context: Dictionary, enemy_id: int) -> void:
+	if tool != &"beam" or not bool(context.get("piercing", false)):
+		return
+	if not bool(result.get("connected", false)) and float(result.get("dealt", 0.0)) <= 0:
+		return
+	for enemy in director.enemies:
+		if is_instance_valid(enemy) and enemy.combat_id() == enemy_id:
+			feedback.cue(&"pierce_hit", enemy.global_position, .8)
+			return
+
+
+func _on_repaired(tool: StringName, restored: float) -> void:
+	var cue: StringName = &"repair_full" if equipment.is_full(tool) else &"repair_step"
+	feedback.cue(cue, player.global_position, clampf(restored / 6.0, 0.3, 1.0))
 
 
 func _update_hud() -> void:

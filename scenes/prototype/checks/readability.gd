@@ -51,15 +51,15 @@ func run() -> void:
 	await physics_frame
 	root.get_node("GameState").resume()
 	arena.set_physics_process(false)
-	expect(is_equal_approx(arena.player.camera.size, 22), "Default view is closer")
+	expect(is_equal_approx(arena.zoom, 22), "Default view is closer")
 	key(KEY_EQUAL)
-	expect(is_equal_approx(arena.player.camera.size, 20), "Plus zooms in")
+	expect(is_equal_approx(arena.zoom, 20), "Plus zooms in")
 	key(KEY_MINUS)
-	expect(is_equal_approx(arena.player.camera.size, 22), "Minus zooms out")
+	expect(is_equal_approx(arena.zoom, 22), "Minus zooms out")
 	key(KEY_F9)
-	expect(is_equal_approx(arena.player.camera.size, 18), "Showcase uses closer view")
+	expect(is_equal_approx(arena.zoom, 18), "Showcase uses closer view")
 	key(KEY_R)
-	expect(is_equal_approx(arena.player.camera.size, 22), "Reset restores default view")
+	expect(is_equal_approx(arena.zoom, 22), "Reset restores default view")
 
 	for facing in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
 		var enemy := fresh(&"yellow")
@@ -123,6 +123,7 @@ func run() -> void:
 	arena.feedback.reset_state()
 	arena.queue_free()
 	await process_frame
-	await create_timer(.1).timeout
+	# Native compressed playback is released on the audio mixer thread.
+	await create_timer(.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

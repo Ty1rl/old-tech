@@ -1,10 +1,7 @@
 extends SceneTree
-## A-base consumer check. capability_time.gd is a disposable flags-only fixture
-## in this seat's receipt directory, NOT a production fallback or time engine.
-const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-7/exports/round-o"
+## Integrated UI checks use the real TimeController capability implementation.
 var checks := 0
 var failures: Array[String] = []
-var capability_script: Script
 func _initialize() -> void: call_deferred("run")
 func expect(value: bool, message: String) -> void:
 	checks += 1
@@ -18,10 +15,6 @@ func release(code: Key) -> void:
 	var event := InputEventKey.new();event.keycode=code;event.physical_keycode=code;root.push_input(event)
 func pad_down() -> void:
 	var event := InputEventJoypadButton.new();event.button_index=JOY_BUTTON_DPAD_DOWN;event.pressed=true;root.push_input(event)
-func _fixture_capabilities(node: Node) -> void:
-	# Actual start transitions into the unchanged campaign. Supply ONLY the two
-	# forthcoming flags to its real controller before its consumers bind it.
-	if node is TimeController: node.set_script(capability_script)
 func transition_done(manager: Node) -> void:
 	for i in range(30):
 		await create_timer(.02).timeout
@@ -29,8 +22,6 @@ func transition_done(manager: Node) -> void:
 func run() -> void:
 	create_timer(25,true).timeout.connect(func():
 		failures.append("UI O watchdog"); print(JSON.stringify({"status":"failed","checks":checks,"failures":failures}));quit(1))
-	capability_script=load(OUT+"/capability_time.gd")
-	node_added.connect(_fixture_capabilities)
 	var scenes = root.get_node("SceneManager");var state = root.get_node("GameState")
 	var saved: Dictionary=state.preferences(); var old_size:=root.size;var old_fade:float=scenes.fade_duration
 	state.set_setting("fullscreen",false);state.set_setting("tutorial",false);scenes.fade_duration=.01
@@ -125,7 +116,7 @@ func run() -> void:
 	expect(other.capture_state()==condition_before and other.repaired.get_connections().is_empty(),"Unbind neither changes balance nor leaves signals")
 	view.bind_equipment(other,&"beam");view.queue_free();await settle()
 	expect(other.repaired.get_connections().is_empty(),"Freeing bound repair view releases its equipment connection")
-	# Real emergency session while fixture capability flags satisfy Round O contract.
+	# Real emergency session with the integrated capability controller.
 	var rewind:EmergencyRewind=arena.emergency_rewind
 	var emergency=arena.emergency_view
 	controller.begin_attempt();rewind.history.clear()

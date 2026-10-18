@@ -92,5 +92,7 @@ func run() -> void:
 	expect(arena.mode==&"won","Taught progression reaches final boss win")
 	root.get_node("SceneManager").clear_popups();state.start_game();state.set_setting("tutorial",old)
 	arena.feedback.reset_state();arena.queue_free();await process_frame
+	# Allow the native audio mixer to release compressed playback before exit.
+	await create_timer(.3).timeout
 	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures}))
 	quit(0 if failures.is_empty() else 1)

@@ -116,6 +116,7 @@ func cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:
 				voice.remaining = 0.0
 				upgraded_launch = true
 				break
+	if kind == &"room_complete": kind = &"room_open"
 	if kind == &"link_cut": kind = &"cable_cut"
 	if kind == &"valve_b": kind = &"flash_ready"
 	if not _cues.has(kind): return

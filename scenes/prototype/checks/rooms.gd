@@ -327,6 +327,7 @@ func run() -> void:
 	preview.arena.feedback.reset_state()
 	preview.queue_free()
 	await process_frame
-	await create_timer(0.1).timeout
+	# Allow the native audio mixer to release compressed playback before exit.
+	await create_timer(0.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

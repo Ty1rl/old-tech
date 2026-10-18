@@ -62,3 +62,8 @@ Focused evidence / standalone composition
   Private preview: render.py --seat jam-7 --script res://scenes/ui_preview_o/capture.gd
   --name round-o-after --timeout 60. State phase.txt is "before" / "after"; 12 final
   views show menus, locked/unlocked HUD, real checkpoint fill and emergency scrubs.
+
+Merged composition (jam-1, Round O A): ui_o now uses the real TimeController;
+no state-path fixture is required. Actual repair condition mounting, native input,
+room/enemy/repair/recovery audio wiring and music are tested in the integrated
+base. Difficulty balance and taught capability progression still belong to B.

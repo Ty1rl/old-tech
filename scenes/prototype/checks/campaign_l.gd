@@ -109,7 +109,8 @@ func run() -> void:
 			arena._begin_wave()
 			var door: Vector3 = arena.room.exit_door.position
 			expect(arena.mode == &"exit" and arena.museum.exit_open, "Cleared room %d opens green doorway" % index)
-			expect(arena.museum.player_in_exit(door + Vector3(2, 0, 1.7)), "Full doorway width and approach are valid exit region")
+			expect(arena.museum.player_in_exit(door + Vector3(1.8, 0, .6)), "Open doorway threshold is a valid exit region")
+			expect(not arena.museum.player_in_exit(door + Vector3(2.4, 0, .6)), "Exit trigger stays inside the physical doorway")
 	# Check each battle can drain only after every scheduled enemy actually arrives.
 	var total_scheduled := 0
 	for ri in range(4):
@@ -150,7 +151,7 @@ func run() -> void:
 	# A dead shooter does not make its surviving bolt safe or erase healthy history.
 	arena.debug_start(1,0)
 	clear_roster();arena._pending=0
-	arena.history.record(.05,arena.capture_state)
+	arena.history.record(arena.history.sample_interval,arena.capture_state)
 	arena.director.launch_projectile(Vector3(15,0,15),Vector3.LEFT,10,1)
 	tick(.01)
 	expect(arena.mode==&"pressure" and arena.history.snapshot_count>0,"Hostile bolts delay quiet recovery and preserve rewind")

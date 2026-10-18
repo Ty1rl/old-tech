@@ -210,10 +210,6 @@ func set_exit_open(open: bool) -> void:
 		var exit_pos: Vector3 = active_definition.get("exit_door", {}).get("position", Vector3(0.0, 0.0, -19.5))
 		room_completed.emit(active_room_id)
 		combat_event.emit(&"room_complete", exit_pos, 1.0)
-		if is_instance_valid(_arena_owner) and "feedback" in _arena_owner:
-			var fb: Variant = _arena_owner.get("feedback")
-			if is_instance_valid(fb) and fb.has_method("cue"):
-				fb.cue(&"room_complete", exit_pos, 1.0)
 
 
 func start_boss_entrance() -> void:

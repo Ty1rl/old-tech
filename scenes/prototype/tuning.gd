@@ -13,6 +13,10 @@ const BEAM = {"range": 35.0, "radius": 0.35, "min_damage": 30.0, "max_damage": 1
 	"charge_time": 0.9, "speed": 42.0, "cooldown": 0.25, "max_pulses": 8}
 const CONE = {"range": 5.0, "half_angle": 0.65, "damage_per_second": 16.0}
 const ENEMIES = {
+	"loop": {"health": 300.0, "speed": 1.15, "radius": 1.0, "damage": 9.0},
+	"zigzag": {"health": 300.0, "speed": 1.05, "radius": 1.15, "damage": 9.0},
+	"pair": {"health": 240.0, "speed": 1.35, "radius": 1.0, "damage": 8.0},
+	"final_boss": {"health": 1200.0, "speed": 0.8, "radius": 1.4, "damage": 15.0},
 	"target": {"health": 100.0, "speed": 0.0, "radius": 0.7, "damage": 0.0},
 	"swarmer": {"health": 32.0, "speed": 2.8, "radius": 0.4, "damage": 5.0},
 	"brute": {"health": 180.0, "speed": 1.2, "radius": 1.0, "damage": 12.0},
@@ -24,6 +28,10 @@ const ENEMIES = {
 	"side_guard": {"health": 500.0, "speed": 1.6, "radius": 0.8, "damage": 10.0, "mechanism": "open", "layout": "side"},
 	"front_guard": {"health": 500.0, "speed": 1.6, "radius": 0.8, "damage": 10.0, "mechanism": "open", "layout": "front"},
 }
+# Pattern windows and attack timing use WORLD seconds.
+const PATTERNS = {"window": 3.0, "pair_window": 2.4, "core_charge": 0.85,
+	"body_armored": 0.12, "body_bare": 0.3, "windup": 0.8, "commit": 0.18,
+	"recovery": 1.9, "link_radius": 0.16, "target_radius": 0.28}
 const MATCHUPS = {"body_damage": 0.12, "heat_seconds": 0.9, "heat_decay": 0.15,
 	"cut_radius": 0.28, "core_radius": 0.38, "attack_windup": 0.5, "attack_recovery": 1.7,
 	"push_light": 1.25, "push_heavy": 0.15, "stagger_scale": 2.4}

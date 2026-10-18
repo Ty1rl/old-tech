@@ -1,4 +1,46 @@
-# Combat prototype
+# Old Tech — playable museum run
+
+Launch the project from your Ubuntu host, then choose **Play**:
+
+```sh
+~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo
+```
+
+Play follows Public Galleries → Connected Collections → Restoration Rooms →
+Burial Exhibition and the final boss. The first appearance of each mechanic
+freezes the world, marks the actual targets, then gives a safe attempt. Real
+success unlocks pressure. Completed lessons persist when retrying a room.
+
+WASD moves; mouse aims; 1–4/Tab selects equipment. Hold Space to slow movement
+and attacks while drawing/aiming stays responsive. With 4 equipped, hold Space
+and scroll down to go back, up toward now; release commits, Escape cancels.
+Campaign history retains up to 12 seconds / 240 samples, with the same 64 KiB
+per-snapshot bound (at most one extra backup payload during review). Only combat
+values are encoded. History clears at lesson/wave/room boundaries. No mesh data.
+
+Hold E to repair the selected tool; release to return. Four tool backdrops now
+have Spin, Trace and matching-contact operations. Completed capacity checkpoints
+survive interruption. A fully charged yellow pulse pierces actual enemies on its
+line, respecting solid cover. Pattern units reward a charged core finisher;
+quick taps remain useful for simple yellow targets and A/B sequences.
+
+Only the most recent wound can regenerate after five quiet seconds, at 12 HP/s.
+Another hit resets that wait. Room retry/entry fully restores health and gear.
+Lethal injury leaves six real seconds to start a rewind; otherwise use room retry.
+During review the health readout shows the selected return's health. Regeneration
+never revives a dead player. R retries the current room; Escape pauses. Pause,
+settings, retry, return to main and the result screen use the teammate's managers.
+Sound/volume, fullscreen, teaching and HUD settings persist. Tutorial off skips
+its gates; the sandbox remains available through SceneManager.start_play(true).
+
+The final boss uses A/B → zigzag → loop → final core. Incomplete pattern timers
+restore links/shutters but retain body damage and destroyed orange. Successful
+cut patterns stay open. Ordinary damage always remains a slower kill route.
+No optional intermediate bosses in this pass. Audio is still synthesized/stubbed;
+movement and crowd balance need human playtesting. Rendered doorway thresholds
+are floor cues, not solid cover; actual raised cover shares collision/query data.
+
+## Sandbox mechanics and controls
 
 Godot 4.7.2 Standard / Compatibility. From the Ubuntu host:
 
@@ -104,7 +146,8 @@ retains range information. The effect uses one batched mesh rather than spawning
 objects for each wisp. The held camera kicks slightly and the bellows flutters.
 
 Flash has a 35-unit range, 30–100 damage over 0.9 seconds of charge, and a short
-cooldown. Visible pulses hit the first enemy or cover. Cone damages multiple
+cooldown. Quick pulses hit the first enemy; fully charged pulses pierce intervening
+enemies once each, stopping at cover. Cone damages multiple
 enemies and shoves/staggers at 1.2-world-second intervals while held. Brutes
 travel less but still visibly stagger. All tools can kill every archetype; correct colored-part contacts are much
 more efficient than ordinary body damage.
@@ -113,11 +156,11 @@ Starting condition: 32 ring launches, 48 flash shots, 45 cone firing-seconds,
 24 clock slow-seconds. Cone pulses add wear. Clock has no passive recharge.
 These are generous initial values to tune through play, not final balance.
 
-Wear progressively erases the repair path. Trace the missing portion from
-contact 1 through the marked end, then release the mouse. Each section restores
-the next quarter boundary. Slight damage needs a shorter trace; completed
-capacity survives interruption. Full repair closes automatically. Only an
-unfinished gesture is lost on E release, damage, pause or focus loss.
+Wear determines which repair operations remain. Each tool has a Spin, a Trace,
+and a matching-contact operation on its modeled backdrop. Light damage skips
+completed operations; the existing capacity checkpoints survive interruption.
+Full repair closes automatically. Only the unfinished gesture is lost on E
+release, damage, pause or focus loss. The repair panel stays beside the player.
 Movement/enemies continue during repairs. Repairing ring/flash/cone automatically
 uses clock-powered slow, spending clock condition at its normal real-time rate.
 An empty clock leaves repairs at normal speed; the clock cannot power its own
@@ -184,7 +227,8 @@ python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
 resource_integration, integration, parts, feedback, scrub_view, presentation,
 player_visual, variants, readability, weapon_presentation, presentation_j,
-art_integration, foot_plant.
+art_integration, foot_plant, combat_k, flow_k, patterns, pattern_weapons,
+rooms, tutorial_ui, campaign, complete_run, review_regressions.
 Use import after script/scene changes.
 The shared lab runner bounds execution and saves full logs in seat state.
 On another machine: `timeout 60s godot --headless --path . --script

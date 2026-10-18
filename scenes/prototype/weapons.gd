@@ -1,5 +1,7 @@
 extends Node3D
 
+signal resolved_hit(tool: StringName, result: Dictionary, context: Dictionary, enemy_id: int)
+
 signal combat_event(kind: StringName, point: Vector3, strength: float)
 
 const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
@@ -903,9 +905,13 @@ func _step_beam_pulses(w_delta: float, enemies: Array) -> void:
 			if not _is_live_enemy(hit.node): continue
 			# The authoritative swept segment is clipped at the wall, with no
 			# target search beyond this straight pulse or bonus chain targeting.
+			var direction3 := Vector3(direction.x,0,direction.y)
+			var query_distance := minf(remaining, maxf(distance,(hit.node.global_position-start).dot(direction3) + 2.0*float(hit.node.radius)))
+			var mechanism_end := start + direction3*query_distance
+			if cover != null: mechanism_end = cover.clip_segment(start,mechanism_end).position
 			var result := _attack_enemy(hit.node, &"beam", float(pulse.damage), hit.contact,
 				{"segment_start": start, "segment_end": end, "radius": float(pulse.radius),
-				"charge": float(pulse.get("charge", 0)), "piercing": piercing})
+				"charge": float(pulse.get("charge", 0)), "piercing": piercing, "mechanism_end": mechanism_end, "prior_hits": hit_ids.size()})
 			hit_ids.append(int(hit.id))
 			beam_flash_timer = 0.14
 			_record_hit_feedback("Piercing flash" if piercing else "Flash", result)
@@ -1066,6 +1072,7 @@ func _attack_enemy(enemy: Node3D, tool: StringName, amount: float, contact: Vect
 		combat_event.emit(cue, contact, 1.0)
 	elif float(result.get("dealt", 0.0)) > 0.0:
 		combat_event.emit(&"hit", contact, clampf(float(result.dealt) / 80.0, 0.15, 1.2))
+	resolved_hit.emit(tool,result,context,_enemy_combat_id(enemy))
 	return result
 
 

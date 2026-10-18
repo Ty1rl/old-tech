@@ -85,7 +85,9 @@ func reload_current_scene(fade: bool = true) -> bool:
 ## Popups stack and each blocks input to those below it.
 ## Returns the instance or null if it couldn't be shown.
 func push_popup(key: StringName, popup_params: Dictionary = {}) -> Node:
-	if _transitioning or has_popup(key):
+	# Repair panels carry generation tokens; explicit replacement sessions may
+	# coexist briefly while an older panel exits. Menus/settings stay unique.
+	if _transitioning or (has_popup(key) and key != &"Repair"):
 		return null
 	if not POPUPS.has(key):
 		push_error("SceneManager: unknown popup key '%s'" % key)

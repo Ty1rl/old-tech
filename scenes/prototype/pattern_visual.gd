@@ -4,6 +4,8 @@ const BLUE := Color("168eff")
 const ORANGE := Color("f58024")
 const YELLOW := Color("ffe538")
 const STONE := Color("92918b")
+var lit_valve: StandardMaterial3D
+var dim_valve: StandardMaterial3D
 var links: Array[MeshInstance3D] = []
 var link_labels: Array[Label3D] = []
 var plates: Array[MeshInstance3D] = []
@@ -79,6 +81,8 @@ func rod(parent: Node3D, a: Vector3, b: Vector3, thickness: float, color: Color)
 	return node
 
 func build(mode: StringName, is_boss: bool) -> void:
+	lit_valve = mat(YELLOW,true)
+	dim_valve = mat(Color("343b41"),true)
 	pattern = mode
 	boss = is_boss
 	# Heavy feet, ribbed burial-machine body, small stone head; no new art assets.
@@ -146,7 +150,7 @@ func sync(mask: int, opened: bool, bare: bool, progress: int, timer: float, phas
 	core.visible = opened and pattern != &"pair" and alive
 	for i in range(valves.size()):
 		valves[i].visible = pattern == &"pair" and alive and not opened
-		valves[i].material_override = mat(YELLOW if i == progress else Color("343b41"), true)
+		valves[i].material_override = lit_valve if i == progress else dim_valve
 	if pattern == &"pair" and opened: core.visible = alive
 	for i in range(sections.size()): sections[i].visible = i >= phase and alive
 	warning.visible = attack in [&"windup", &"commit"] and alive

@@ -142,11 +142,16 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 		for i in range(points.size() / 2):
 			if _segment_distance(start, finish, points[i * 2], points[i * 2 + 1]) <= width + float(Tuning.PATTERNS.link_radius):
 				cuts |= 1 << i
+	var target_finish: Vector3 = context.get("mechanism_end", finish)
 	var valve_hit := -1
 	if tool == &"beam" and segmented and active_pattern() == &"pair" and not pattern_open:
-		for i in range(2):
-			if _point_segment_distance(valve_world_position(i), start, finish) <= width + float(Tuning.PATTERNS.target_radius): valve_hit = i
-	var core_hit := tool == &"beam" and segmented and _point_segment_distance(core_world_position(), start, finish) <= width + float(Tuning.PATTERNS.target_radius)
+		# Aim assistance selects the currently open valve. A ray crossing both
+		# sensors must not overwrite that valid hit with the closed sensor.
+		for i in [pair_progress, 1-pair_progress]:
+			if _point_segment_distance(valve_world_position(i), start, target_finish) <= width + float(Tuning.PATTERNS.target_radius):
+				valve_hit = i
+				break
+	var core_hit := tool == &"beam" and segmented and _point_segment_distance(core_world_position(), start, target_finish) <= width + float(Tuning.PATTERNS.target_radius)
 	# Preserve exact swept endpoints: a blocked/short segment cannot hit beyond it.
 	if not body and cuts == 0 and not core_hit and valve_hit == -1: return miss
 	var cue: StringName = &""
@@ -257,6 +262,8 @@ func capture_state() -> Dictionary:
 	return state
 
 func restore_state(data: Dictionary) -> void:
+	var previous_phase := phase
+	var previous_kind := kind
 	phase = clampi(int(data.get("phase", 0)), 0, 3)
 	link_mask = int(data.get("link_mask", 0)) & 15
 	pair_progress = clampi(int(data.get("pair_progress", 0)), 0, 2)
@@ -266,5 +273,5 @@ func restore_state(data: Dictionary) -> void:
 	super.restore_state(data)
 	# Same-kind rewind may cross a boss phase; geometry must follow the snapshot.
 	if handles(kind):
-		_build_visuals()
+		if phase != previous_phase and kind == previous_kind: _build_visuals()
 		_sync_derived_visuals(String(data.get("feedback_text", "")), data.get("feedback_color", Color.WHITE))

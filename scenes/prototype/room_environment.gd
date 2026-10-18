@@ -567,15 +567,15 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 		_add_box_mesh(
 			north_door,
 			"ExitJamb_%s" % ("L" if side < 0.0 else "R"),
-			Vector3(1.2, 1.95, 1.2),
-			Vector3(pier_x, 0.975, 0.0),
+			Vector3(1.2, .08, 1.2),
+			Vector3(pier_x, .04, 0.0),
 			jamb_mat
 		)
 		_add_box_mesh(
 			north_door,
 			"ExitJambCap_%s" % ("L" if side < 0.0 else "R"),
-			Vector3(1.32, 0.14, 1.32),
-			Vector3(pier_x, 2.02, 0.0),
+			Vector3(1.32, .035, 1.32),
+			Vector3(pier_x, .10, 0.0),
 			jamb_cap_mat
 		)
 	_add_box_mesh(
@@ -597,15 +597,15 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	_north_gate_left = _add_box_mesh(
 		north_door,
 		"NorthGateLeft",
-		Vector3(_north_door_width * 0.5, 1.35, 0.22),
-		Vector3(-_north_door_width * 0.25, 0.675, 0.0),
+		Vector3(_north_door_width * 0.5, .06, 0.22),
+		Vector3(-_north_door_width * 0.25, .045, 0.0),
 		gate_mat
 	)
 	_north_gate_right = _add_box_mesh(
 		north_door,
 		"NorthGateRight",
-		Vector3(_north_door_width * 0.5, 1.35, 0.22),
-		Vector3(_north_door_width * 0.25, 0.675, 0.0),
+		Vector3(_north_door_width * 0.5, .06, 0.22),
+		Vector3(_north_door_width * 0.25, .045, 0.0),
 		gate_mat
 	)
 
@@ -624,15 +624,15 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 		_add_box_mesh(
 			south_door,
 			"EntranceJamb_%s" % ("L" if side < 0.0 else "R"),
-			Vector3(1.2, 1.55, 1.2),
-			Vector3(s_pier_x, 0.775, 0.0),
+			Vector3(1.2, .08, 1.2),
+			Vector3(s_pier_x, .04, 0.0),
 			jamb_mat
 		)
 		_add_box_mesh(
 			south_door,
 			"EntranceJambCap_%s" % ("L" if side < 0.0 else "R"),
-			Vector3(1.32, 0.12, 1.32),
-			Vector3(s_pier_x, 1.61, 0.0),
+			Vector3(1.32, .035, 1.32),
+			Vector3(s_pier_x, .10, 0.0),
 			jamb_cap_mat
 		)
 	_add_box_mesh(
@@ -645,15 +645,15 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	_south_gate_left = _add_box_mesh(
 		south_door,
 		"SouthGateLeft",
-		Vector3(_south_door_width * 0.5, 1.15, 0.22),
-		Vector3(-_south_door_width * 0.25, 0.575, 0.0),
+		Vector3(_south_door_width * 0.5, .06, 0.22),
+		Vector3(-_south_door_width * 0.25, .045, 0.0),
 		gate_mat
 	)
 	_south_gate_right = _add_box_mesh(
 		south_door,
 		"SouthGateRight",
-		Vector3(_south_door_width * 0.5, 1.15, 0.22),
-		Vector3(_south_door_width * 0.25, 0.575, 0.0),
+		Vector3(_south_door_width * 0.5, .06, 0.22),
+		Vector3(_south_door_width * 0.25, .045, 0.0),
 		gate_mat
 	)
 

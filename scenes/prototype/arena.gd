@@ -82,7 +82,7 @@ func _ready() -> void:
 
 
 func _build_cover() -> void:
-	for rectangle in Cover.RECTANGLES:
+	for rectangle in cover.rectangles:
 		var body := StaticBody3D.new()
 		var shape := CollisionShape3D.new()
 		var box := BoxShape3D.new()

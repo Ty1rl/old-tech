@@ -36,7 +36,8 @@ func run() -> void:
 	current_scene = main
 	state.open_menu()
 	await settle()
-	expect(scenes.play_key() == &"Prototype", "Missing campaign safely chooses sandbox")
+	var expected_play: StringName = &"Campaign" if ResourceLoader.exists("res://scenes/prototype/campaign.tscn") else &"Prototype"
+	expect(scenes.play_key() == expected_play, "Play chooses available campaign with sandbox fallback")
 	expect(scenes.play_key(true) == &"Prototype", "Explicit sandbox path stays available")
 	for i in range(3):
 		var settings: Control = scenes.push_popup(&"Settings")

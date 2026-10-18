@@ -6,6 +6,13 @@ const SAMPLE_INTERVAL: float = 1.0 / SAMPLE_RATE
 const MAX_SNAPSHOTS: int = 100
 const MAX_PAYLOAD_BYTES: int = 65536
 
+var window_seconds: float = MAX_SECONDS
+var snapshot_limit: int = MAX_SNAPSHOTS
+
+func _init(seconds: float = MAX_SECONDS, samples: int = MAX_SNAPSHOTS) -> void:
+	window_seconds = clampf(seconds, 1.0, 12.0)
+	snapshot_limit = clampi(samples, 20, 240)
+
 var inspecting: bool = false
 var selected_seconds_ago: float = 0.0
 var encoded_bytes: int = 0
@@ -17,10 +24,10 @@ var available_seconds: float:
 		if inspecting:
 			if _entries.size() <= 1:
 				return 0.0
-			return minf(MAX_SECONDS, maxf(0.0, _inspection_time - float(_entries[0]["time"])))
+			return minf(window_seconds, maxf(0.0, _inspection_time - float(_entries[0]["time"])))
 		if _entries.is_empty():
 			return 0.0
-		return minf(MAX_SECONDS, maxf(0.0, _current_time - float(_entries[0]["time"])))
+		return minf(window_seconds, maxf(0.0, _current_time - float(_entries[0]["time"])))
 
 var snapshot_count: int:
 	get:
@@ -217,13 +224,13 @@ func clear() -> void:
 
 
 func _evict_expired(reference_time: float) -> void:
-	while not _entries.is_empty() and (reference_time - float(_entries[0]["time"])) > MAX_SECONDS + 0.000001:
+	while not _entries.is_empty() and (reference_time - float(_entries[0]["time"])) > window_seconds + 0.000001:
 		var removed: Dictionary = _entries.pop_front()
 		encoded_bytes = maxi(0, encoded_bytes - int(removed["size"]))
 
 
 func _evict_overflow() -> void:
-	while _entries.size() > MAX_SNAPSHOTS:
+	while _entries.size() > snapshot_limit:
 		var removed: Dictionary = _entries.pop_front()
 		encoded_bytes = maxi(0, encoded_bytes - int(removed["size"]))
 

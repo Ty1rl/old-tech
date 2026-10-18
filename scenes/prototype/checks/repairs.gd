@@ -127,11 +127,11 @@ func run() -> void:
 	expect(panel.model_instances["ring"].visible and not panel.model_instances["beam"].visible,
 		"3D SubViewport backdrop matches the selected Ring tool model")
 	expect(not has_button_child(panel), "Repair panel has no Resume/Close button ceremony")
-	var view_rect := Rect2(Vector2.ZERO, Vector2(960, 600))
+	var view_rect: Rect2 = root.get_visible_rect()
 	var panel_rect: Rect2 = panel.panel.get_global_rect()
-	expect(view_rect.encloses(panel_rect) and panel_rect.get_area() < view_rect.get_area() * 0.25,
-		"Repair panel is compact and fits cleanly inside 960x600")
-	expect(not panel_rect.has_point(Vector2(480, 300)),
+	expect(view_rect.encloses(panel_rect) and panel_rect.get_area() < view_rect.get_area() * 0.32,
+		"Repair panel is readable and fits within the actual viewport")
+	expect(not panel_rect.has_point(view_rect.get_center()),
 		"Repair panel is offset so player surroundings at viewport center remain visible")
 	var holder_dim_alpha := 0.0
 	for sibling in panel.get_parent().get_children():

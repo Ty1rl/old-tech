@@ -277,10 +277,10 @@ func _update_layout() -> void:
 	var view_size := size if size.x > 0.0 and size.y > 0.0 else get_viewport_rect().size
 	if view_size.x <= 0.0 or view_size.y <= 0.0:
 		view_size = Vector2(960, 600)
-	var safe_size := Vector2(minf(view_size.x, 960.0), minf(view_size.y, 600.0))
+	var safe_size := view_size
 	var target_size := Vector2(
-		clampf(safe_size.x * 0.42, 340.0, 404.0),
-		clampf(safe_size.y * 0.38, 210.0, 228.0)
+		minf(safe_size.x - 32, clampf(safe_size.x * 0.46, 420.0, 620.0)),
+		minf(safe_size.y - 32, clampf(safe_size.y * 0.46, 280.0, 380.0))
 	)
 	var edge_margin := 16.0
 	panel.size = target_size

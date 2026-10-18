@@ -1,5 +1,7 @@
 extends "res://scenes/player.gd"
 
+signal wounded(amount: float)
+
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const PlayerVisual = preload("res://scenes/prototype/player_visual.gd")
 var equipment: RefCounted
@@ -125,7 +127,9 @@ func _step_slow(delta: float, held: bool, automatic: bool = false) -> void:
 
 
 func take_damage(amount: float) -> void:
+	var before := health
 	health = maxf(0.0, health - maxf(0.0, amount))
+	if before > health: wounded.emit(before-health)
 
 
 func reset_state() -> void:

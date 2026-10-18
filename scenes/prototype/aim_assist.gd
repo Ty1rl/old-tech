@@ -20,13 +20,20 @@ static func target(screen: Vector2, camera: Camera3D, enemies: Array, tool: int,
 		if tool == 1:
 			if not enemy.has_cuttable_part(): continue
 			var points: Array = enemy.cable_world_points()
-			if camera.is_position_behind(points[0]) or camera.is_position_behind(points[-1]): continue
-			var start := camera.unproject_position(points[0])
-			var finish := camera.unproject_position(points[-1])
-			var delta := finish - start
-			var fraction := clampf((screen - start).dot(delta) / maxf(0.001, delta.length_squared()), 0, 1)
-			distance = screen.distance_to(start.lerp(finish, fraction))
-			point = (points[0] as Vector3).lerp(points[-1], fraction)
+			if points.size() < 2: continue
+			var paired: bool = enemy.has_method("lesson_state")
+			var step := 2 if paired else 1
+			distance = INF
+			for i in range(0, points.size()-1, step):
+				if camera.is_position_behind(points[i]) or camera.is_position_behind(points[i+1]): continue
+				var start := camera.unproject_position(points[i])
+				var finish := camera.unproject_position(points[i+1])
+				var delta := finish - start
+				var fraction := clampf((screen-start).dot(delta)/maxf(.001,delta.length_squared()),0,1)
+				var candidate := screen.distance_to(start.lerp(finish,fraction))
+				if candidate < distance:
+					distance = candidate
+					point = (points[i] as Vector3).lerp(points[i+1],fraction)
 		else:
 			if not enemy.is_core_exposed() or enemy.core_broken: continue
 			point = enemy.core_world_position()

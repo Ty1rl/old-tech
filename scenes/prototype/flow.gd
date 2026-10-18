@@ -57,6 +57,7 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 			var kind := StringName(kinds[i])
 			var radius := float(Tuning.ENEMIES.get(String(kind), {}).get("radius", 0.8))
 			if not safe(point, radius, player_position, cover): continue
+			if formation == &"line" and cover.clip_segment(player_position,point).blocked: continue
 			var crowded := false
 			for node in occupied:
 				if is_instance_valid(node) and node.health > 0 and point.distance_to(node.position) < radius + float(node.radius) + 0.25:

@@ -94,8 +94,8 @@ func run() -> void:
 	current_scene.get_node("MainMenu").get_node("%PlayButton").pressed.emit()
 	for frame in range(12):
 		await process_frame
-	expect(current_scene.scene_file_path == "res://scenes/prototype/arena.tscn" and state.is_playing(),
-		"Main-menu Play launches current combat build instead of legacy 3D test")
+	expect(current_scene.scene_file_path == "res://scenes/prototype/campaign.tscn" and state.is_playing(),
+		"Main-menu Play launches the taught museum campaign")
 	scenes.fade_duration = old_fade
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

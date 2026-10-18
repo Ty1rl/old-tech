@@ -2,6 +2,7 @@ extends Node3D
 
 # Arena drives this director with world time; there is no independent clock.
 const Tuning = preload("res://scenes/prototype/tuning.gd")
+const PatternEnemy = preload("res://scenes/prototype/pattern_enemy.gd")
 const EnemyNode = preload("res://scenes/prototype/enemy.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 const Flow = preload("res://scenes/prototype/flow.gd")
@@ -135,7 +136,7 @@ func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
 		return null
 	if cover == null:
 		cover = CoverScript.new()
-	var enemy := EnemyNode.new()
+	var enemy: Node3D = PatternEnemy.new() if PatternEnemy.handles(kind) else EnemyNode.new()
 	enemy.cover = cover
 	_spawn_counter += 1
 	enemy.rewind_id = _spawn_counter
@@ -316,7 +317,7 @@ func restore_state(data: Dictionary) -> void:
 			enemy = existing_by_id[eid]
 			existing_by_id.erase(eid)
 		else:
-			enemy = EnemyNode.new()
+			enemy = PatternEnemy.new() if PatternEnemy.handles(StringName(entry.get("kind", "target"))) else EnemyNode.new()
 			enemy.cover = cover
 			enemy.rewind_id = eid
 			add_child(enemy)

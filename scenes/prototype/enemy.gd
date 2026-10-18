@@ -130,8 +130,11 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 		impulse_resist = _part("push_resistance", 0.25)
 		stagger_resist = _part("stagger_resistance", 0.8)
 	if mechanism() != &"":
-		impulse_resist = float(Tuning.MATCHUPS.push_heavy if mechanism() in [&"heat", &"open"] else Tuning.MATCHUPS.push_light)
+		impulse_resist = float(Tuning.MATCHUPS.push_heavy if mechanism() in [&"heat", &"open", &"pattern"] else Tuning.MATCHUPS.push_light)
 		stagger_resist = float(Tuning.MATCHUPS.stagger_scale)
+	if kind == &"final_boss":
+		impulse_resist *= .35
+		stagger_resist *= .35
 	var eff_impulse := maxf(0.0, impulse) * impulse_resist
 	var eff_stagger := maxf(0.0, stagger_seconds) * stagger_resist
 
@@ -647,7 +650,7 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 	_step_enemy(world_delta, player, neighbors)
 	if is_instance_valid(part_visual) and world_delta > 0 and health > 0:
 		var speed := position.distance_to(before) / world_delta
-		part_visual.step_visual(world_delta, speed, stagger_timer > 0, flash_timer > 0)
+		part_visual.step_visual(world_delta, speed, stagger_timer > 0, flash_timer > 0, attack_phase)
 
 
 func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
@@ -828,7 +831,7 @@ func overlaps_cover(margin: float = -0.01) -> bool:
 	if cover == null:
 		return false
 	var pt := Vector2(position.x, position.z)
-	for rect: Rect2 in cover.RECTANGLES:
+	for rect: Rect2 in cover.rectangles:
 		if rect.grow(maxf(0.0, radius + margin)).has_point(pt):
 			return true
 	return false
@@ -843,7 +846,7 @@ func _resolve_cover_overlap(pos: Vector3) -> Vector3:
 	if cover == null:
 		return pos
 	var out := Vector3(pos.x, 0.0, pos.z)
-	for rect: Rect2 in cover.RECTANGLES:
+	for rect: Rect2 in cover.rectangles:
 		var expanded := rect.grow(radius + 0.003)
 		if expanded.has_point(Vector2(out.x, out.z)):
 			var d_left := absf(out.x - expanded.position.x)
@@ -907,7 +910,7 @@ func _steer_around_cover(self_xz: Vector3, desired_dir: Vector3, goal_xz: Vector
 	# Evaluate expanded corners of the two cover rectangles to pick a clean detour around the box
 	var best_dir := Vector3.ZERO
 	var best_cost := INF
-	for rect: Rect2 in cover.RECTANGLES:
+	for rect: Rect2 in cover.rectangles:
 		var wp_rect := rect.grow(radius + 0.32)
 		var corners: Array[Vector3] = [
 			Vector3(wp_rect.position.x, 0.0, wp_rect.position.y),

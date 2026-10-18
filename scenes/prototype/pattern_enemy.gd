@@ -156,6 +156,7 @@ func debug_set_phase(value: int) -> void:
 	attack_timer = float(Tuning.PATTERNS.recovery)
 	_build_visuals()
 	_sync_derived_visuals("", Color.WHITE)
+	_sync_pattern_attack_warning()
 
 func receive_attack(tool: StringName, amount: float, contact_world: Vector3, context: Dictionary = {}) -> Dictionary:
 	if not handles(kind): return super.receive_attack(tool, amount, contact_world, context)
@@ -263,21 +264,50 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 	if is_instance_valid(pattern_visual):
 		_update_warden_visuals()
 		pattern_visual.pose(motion_clock, speed if attack_phase == &"approach" else 0, attack_phase, attack_timer)
+		_sync_pattern_attack_warning()
+
+func hostile_shot_directions() -> Array[Vector3]:
+	var directions: Array[Vector3] = []
+	if not is_boss() or active_pattern() == &"loop": return directions
+	# Three broad, fixed rays. At a 3m dodge radius each gap is >1.7m clear
+	# of the .24m bolt heads: space for a 1m player plus lateral margin.
+	for angle: float in [-.78, 0.0, .78]:
+		directions.append(ranged_aim.rotated(Vector3.UP, angle))
+	return directions
+
+
+func _sync_pattern_attack_warning() -> void:
+	var ranged_boss := is_boss() and active_pattern() != &"loop"
+	if ranged_boss or is_instance_valid(ranged_warning):
+		_sync_attack_warning(hostile_shot_directions(), 11, ranged_boss and attack_phase in [&"windup", &"commit"])
+	# Keep the existing visual-family warning node/API, but show the exact
+	# authoritative shot lanes instead of its old, mismatched 5-ray overlay.
+	if ranged_boss and is_instance_valid(pattern_visual):
+		for child in pattern_visual.warning.get_children(): child.visible = false
+
 
 func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> void:
 	if not handles(kind):
 		super._step_part_attack(world_delta, player, distance)
 		return
+	if health <= 0 or world_delta <= 0 or not is_instance_valid(player) or float(player.health) <= 0: return
 	var mode := active_pattern()
 	var reach := 4.1 if is_boss() and mode == &"loop" else radius + PLAYER_CONTACT_RADIUS + 0.2
 	var trigger := 9.5 if is_boss() and mode in [&"pair", &"zigzag", &"core"] else reach
 	if attack_phase == &"approach":
 		if distance <= trigger:
+			ranged_aim = facing.normalized()
 			attack_phase = &"windup"
 			attack_timer = 1.1 if is_boss() else float(Tuning.PATTERNS.windup)
+			var director := get_parent()
+			if is_boss() and director != null and director.has_method("hostile_cue"):
+				director.hostile_cue(&"hostile_warning", projectile_origin(ranged_aim), .7)
+		_sync_pattern_attack_warning()
 		return
 	attack_timer = maxf(0, attack_timer - world_delta)
-	if attack_timer > 0: return
+	if attack_timer > 0:
+		_sync_pattern_attack_warning()
+		return
 	if attack_phase == &"windup":
 		attack_phase = &"commit"
 		attack_timer = float(Tuning.PATTERNS.commit)
@@ -285,23 +315,28 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 		if is_boss() and mode != &"loop":
 			var director := get_parent()
 			if director != null and director.has_method("launch_projectile"):
-				var fan := [-.3, 0.0, .3] if mode == &"pair" else [-.55, -.27, 0.0, .27, .55]
-				for angle: float in fan:
-					var direction := facing.rotated(Vector3.UP, angle)
-					director.launch_projectile(position + direction * (radius + .2), direction, contact_damage, 6.4 + phase * .5)
+				var emitted := false
+				for direction in hostile_shot_directions():
+					emitted = director.launch_projectile(projectile_origin(direction), direction, contact_damage, 5.6, combat_id()) or emitted
+				if emitted and director.has_method("hostile_cue"): director.hostile_cue(&"hostile_fire", projectile_origin(ranged_aim), 1.0)
 		elif distance <= reach and player.health > 0:
-			# Loops sweep the whole red circle; ordinary patterns strike forward.
 			var toward: Vector3 = player.position - position
-			if is_boss() or toward.normalized().dot(facing) > .2: player.take_damage(contact_damage)
+			if is_boss() or toward.normalized().dot(facing) > .2:
+				var before := float(player.health)
+				player.take_damage(contact_damage)
+				var director := get_parent()
+				if float(player.health) < before and director != null and director.has_method("hostile_cue"):
+					director.hostile_cue(&"player_hurt", player.position, 1)
 		attack_phase = &"recover"
 		attack_timer = 2.3 if is_boss() else float(Tuning.PATTERNS.recovery)
 	else:
 		attack_phase = &"approach"
+	_sync_pattern_attack_warning()
 
 func capture_state() -> Dictionary:
 	var state := super.capture_state()
 	state.merge({"phase": phase, "link_mask": link_mask, "pair_progress": pair_progress,
-		"window_timer": window_timer, "pattern_open": pattern_open, "motion_clock": motion_clock})
+		"window_timer": window_timer, "pattern_open": pattern_open, "motion_clock": motion_clock, "hostile_aim": ranged_aim})
 	return state
 
 func restore_state(data: Dictionary) -> void:
@@ -314,7 +349,9 @@ func restore_state(data: Dictionary) -> void:
 	pattern_open = bool(data.get("pattern_open", false))
 	motion_clock = float(data.get("motion_clock", 0))
 	super.restore_state(data)
+	ranged_aim = Vector3(data.get("hostile_aim", facing)).normalized()
 	# Same-kind rewind may cross a boss phase; geometry must follow the snapshot.
 	if handles(kind):
 		if phase != previous_phase and kind == previous_kind: _build_visuals()
 		_sync_derived_visuals(String(data.get("feedback_text", "")), data.get("feedback_color", Color.WHITE))
+		_sync_pattern_attack_warning()

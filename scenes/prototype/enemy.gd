@@ -8,6 +8,9 @@ const PartVisual = preload("res://scenes/prototype/part_visual.gd")
 const CreatureVisual = preload("res://scenes/prototype/creature_visual.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
 const MAX_KNOCKBACK_SPEED := 32.0
+const HOSTILE_RADIUS := 0.24
+const RANGED_WINDUP := 0.95
+const RANGED_RECOVERY := 1.8
 
 var cover: RefCounted
 
@@ -357,15 +360,10 @@ func _build_visuals() -> void:
 		lens.radius = .3
 		lens.height = .6
 		ranged_lens.mesh = lens
-		ranged_lens.position = Vector3(0, 1.8, -.65)
-		ranged_lens.material_override = _make_mat(Color("ffe538"), true)
+		ranged_lens.position = Vector3(0, 1.0, -radius - .22)
+		ranged_lens.material_override = _make_mat(Color("ff584b"), true)
 		visual_root.add_child(ranged_lens)
-		ranged_warning = MeshInstance3D.new()
-		var strip := BoxMesh.new()
-		strip.size = Vector3(.14, .035, 9.0)
-		ranged_warning.mesh = strip
-		ranged_warning.material_override = _make_mat(Color("f67757"), true)
-		add_child(ranged_warning)
+		_ensure_attack_warning()
 		_sync_ranged_visual()
 
 	# Forward facing marker (-Z in local visual_root space aligns with `facing`)
@@ -826,34 +824,102 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 				skirmish_strafe_sign = -skirmish_strafe_sign
 
 
+func projectile_origin(direction: Vector3) -> Vector3:
+	return position + Vector3(direction.x, 0, direction.z).normalized() * (radius + .22) + Vector3.UP
+
+
+func _ensure_attack_warning() -> void:
+	if is_instance_valid(ranged_warning): return
+	ranged_warning = MeshInstance3D.new()
+	ranged_warning.name = "HostileCommittedLanes"
+	ranged_warning.mesh = ImmediateMesh.new()
+	ranged_warning.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.vertex_color_use_as_albedo = true
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ranged_warning.material_override = material
+	add_child(ranged_warning)
+
+
+func _warning_triangle(mesh: ImmediateMesh, a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
+	for point in [a, b, c]:
+		mesh.surface_set_color(color)
+		mesh.surface_add_vertex(point)
+
+
+func _warning_ribbon(mesh: ImmediateMesh, start: Vector3, finish: Vector3, width: float, color: Color) -> void:
+	var side := (finish - start).cross(Vector3.UP).normalized() * width
+	_warning_triangle(mesh, start - side, start + side, finish - side, color)
+	_warning_triangle(mesh, start + side, finish + side, finish - side, color)
+
+
+func _sync_attack_warning(directions: Array[Vector3], length: float, shown: bool) -> void:
+	_ensure_attack_warning()
+	ranged_warning.visible = shown and health > 0 and not directions.is_empty()
+	var mesh := ranged_warning.mesh as ImmediateMesh
+	mesh.clear_surfaces()
+	if not ranged_warning.visible: return
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for direction in directions:
+		var origin := projectile_origin(direction) - position
+		if cover != null and cover.clip_segment(position, position + origin, HOSTILE_RADIUS).blocked: continue
+		origin.y = .045
+		var side := direction.cross(Vector3.UP).normalized()
+		# Dashed arrows say incoming motion rather than an instant damaging beam.
+		for i in range(9):
+			var start := origin + direction * (float(i) * length / 9)
+			var end := origin + direction * ((float(i) + .58) * length / 9)
+			if cover != null:
+				var wall: Dictionary = cover.clip_segment(position + origin, position + end, HOSTILE_RADIUS)
+				if wall.blocked:
+					end = wall.position - position
+					if (end - start).dot(direction) <= 0: break
+			_warning_ribbon(mesh, start, end, HOSTILE_RADIUS + .035, Color(.12, .035, .035, .8))
+			_warning_ribbon(mesh, start, end, HOSTILE_RADIUS, Color(1, .24, .20, .60))
+			var tip := end + direction * .13
+			_warning_triangle(mesh, end - direction * .20 - side * .16, tip, end - direction * .20 + side * .16, Color(1, .93, .79, .9))
+	# Some ports may all face directly into cover. Avoid an empty surface.
+	# A degenerate triangle is invisible and keeps ImmediateMesh valid.
+	_warning_triangle(mesh, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Color.TRANSPARENT)
+	mesh.surface_end()
+
+
 func _sync_ranged_visual() -> void:
-	if not is_instance_valid(ranged_warning): return
-	ranged_warning.visible = attack_phase == &"windup" and health > 0
-	ranged_warning.position = ranged_aim * 4.5 + Vector3.UP * .04
-	ranged_warning.basis = Basis.looking_at(ranged_aim, Vector3.UP)
+	if kind != &"ranged": return
+	var directions: Array[Vector3] = [ranged_aim]
+	_sync_attack_warning(directions, 10.0, attack_phase == &"windup")
 	if is_instance_valid(ranged_lens):
-		ranged_lens.scale = Vector3.ONE * (1.0 + .65 * clampf(1.0 - attack_timer / .95, 0, 1) if attack_phase == &"windup" else 1.0)
+		var winding := attack_phase == &"windup"
+		var released := attack_phase == &"recover" and attack_timer > RANGED_RECOVERY - .16
+		ranged_lens.scale = Vector3.ONE * (1.5 if released else (1.0 + .5 * clampf(1 - attack_timer / RANGED_WINDUP, 0, 1) if winding else 1.0))
 
 
 func _step_ranged(dt: float, player: Node3D, distance: float) -> void:
+	if health <= 0 or dt <= 0 or not is_instance_valid(player) or float(player.health) <= 0: return
 	if attack_phase == &"approach":
 		if distance <= 11.5:
 			ranged_aim = Vector3(player.position.x - position.x, 0, player.position.z - position.z).normalized()
 			if ranged_aim.length_squared() < .001: ranged_aim = facing
 			facing = ranged_aim
 			attack_phase = &"windup"
-			attack_timer = .95
-			feedback_label.text = "SHOT INCOMING"
-			feedback_timer = 1.0
+			attack_timer = RANGED_WINDUP
+			feedback_label.text = "MOVE ASIDE"
+			feedback_label.modulate = Color("ffad95")
+			feedback_timer = RANGED_WINDUP
+			var director := get_parent()
+			if director != null and director.has_method("hostile_cue"): director.hostile_cue(&"hostile_warning", projectile_origin(ranged_aim), .5)
 	else:
 		attack_timer = maxf(0, attack_timer - dt)
 		if attack_timer <= 0:
 			if attack_phase == &"windup":
 				var director := get_parent()
 				if director != null and director.has_method("launch_projectile"):
-					director.launch_projectile(position + ranged_aim * (radius + .22), ranged_aim, contact_damage, 7.5)
+					if director.launch_projectile(projectile_origin(ranged_aim), ranged_aim, contact_damage, 7.5, combat_id()):
+						if director.has_method("hostile_cue"): director.hostile_cue(&"hostile_fire", projectile_origin(ranged_aim), .7)
 				attack_phase = &"recover"
-				attack_timer = 1.8
+				attack_timer = RANGED_RECOVERY
 			else:
 				attack_phase = &"approach"
 	_sync_ranged_visual()

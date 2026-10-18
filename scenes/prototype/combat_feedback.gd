@@ -21,6 +21,8 @@ const CUE_COOLDOWN := 0.08
 const SETTINGS_PATH := "user://combat-audio.cfg"
 const LOOP_KINDS: Array[StringName] = [&"ring_loop", &"charge_loop", &"cone_loop", &"clock_loop"]
 const CUE_KINDS: Array[StringName] = [&"ring_launch", &"ring_return", &"flash_fire", &"cone_pulse", &"hit", &"cable_cut", &"vent", &"core_break", &"repair_step"]
+# Semantic hostile cues reuse the existing small synthesized bank.
+const HOSTILE_CUES := {&"hostile_warning": &"ring_return", &"hostile_fire": &"flash_fire", &"player_hurt": &"core_break"}
 const RING := Color("60dbde")
 const BEAM := Color("f0d77b")
 const CONE := Color("ed9966")
@@ -94,7 +96,9 @@ func _exit_tree() -> void:
 
 
 func cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:
-	if kind not in CUE_KINDS or not samples.has(kind):
+	if kind not in CUE_KINDS and kind not in HOSTILE_CUES: return
+	var sample_kind: StringName = HOSTILE_CUES.get(kind, kind)
+	if not samples.has(sample_kind):
 		return
 	# Repair feedback stays responsive during world slow/inspection. Other cues
 	# must originate in actual gameplay; browsing itself cannot create them.
@@ -117,7 +121,7 @@ func cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:
 		if float(voice.remaining) > 0.0 or voice.player.playing:
 			continue
 		var player: AudioStreamPlayer = voice.player
-		player.stream = samples[kind]
+		player.stream = samples[sample_kind]
 		voice.responsive = kind == &"repair_step"
 		voice.strength = strength
 		voice.gain = 0.0
@@ -353,8 +357,10 @@ func _add_effect(kind: StringName, point: Vector3, strength: float) -> void:
 		color = CONE
 	elif kind in [&"core_break", &"repair_step"]:
 		color = CLOCK
+	elif kind in HOSTILE_CUES:
+		color = Color("ff6458")
 	_effects.append({"kind": kind, "point": to_local(point) + Vector3.UP * 0.12,
-		"age": 0.0, "life": 0.40 if kind == &"core_break" else 0.22,
+		"age": 0.0, "life": 0.48 if kind == &"player_hurt" else (0.40 if kind == &"core_break" else 0.22),
 		"color": color, "strength": strength})
 	_rebuild_effects()
 
@@ -370,13 +376,15 @@ func _rebuild_effects() -> void:
 		color.a = (1.0 - fraction) * 0.8
 		var center: Vector3 = effect.point
 		var radius := (0.12 + fraction * 0.8) * float(effect.strength)
-		if effect.kind in [&"ring_launch", &"ring_return", &"cone_pulse", &"vent", &"repair_step"]:
+		if effect.kind == &"player_hurt": radius = (.72 + fraction * .6) * float(effect.strength)
+		if effect.kind in [&"ring_launch", &"ring_return", &"cone_pulse", &"vent", &"repair_step", &"player_hurt"]:
 			for index in range(20):
 				var a := TAU * float(index) / 20.0
 				var b := TAU * float(index + 1) / 20.0
 				var direction_a := Vector3(cos(a), 0, sin(a))
 				var direction_b := Vector3(cos(b), 0, sin(b))
 				var width := 0.035 * (1.0 - fraction)
+				if effect.kind == &"player_hurt": width = .09 * (1.0 - fraction)
 				_triangle(center + direction_a * radius, center + direction_b * radius, center + direction_a * (radius + width), color)
 				_triangle(center + direction_b * radius, center + direction_b * (radius + width), center + direction_a * (radius + width), color)
 		else:

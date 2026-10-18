@@ -1,5 +1,7 @@
 extends Node3D
 
+signal combat_event(kind: StringName, point: Vector3, strength: float)
+
 # Arena drives this director with world time; there is no independent clock.
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const PatternEnemy = preload("res://scenes/prototype/pattern_enemy.gd")
@@ -8,6 +10,32 @@ const CoverScript = preload("res://scenes/prototype/cover.gd")
 const Flow = preload("res://scenes/prototype/flow.gd")
 const MAX_LIVE_ENEMIES := 32
 const MAX_PROJECTILES := 24
+const PROJECTILE_RADIUS := EnemyNode.HOSTILE_RADIUS
+const PROJECTILE_LIFETIME := 6.0
+const MAX_OWNER_PROJECTILES := 6
+var _projectile_material: StandardMaterial3D
+var _trail_mesh: ImmediateMesh
+var _projectile_sequence := 0
+var _repair_head_layer: CanvasLayer
+
+
+class RepairShotHeads extends Control:
+	var director: Node3D
+	var had_shots := false
+	func _process(_delta: float) -> void:
+		var has_shots: bool = is_instance_valid(director) and not director.projectiles.is_empty()
+		if has_shots or had_shots: queue_redraw()
+		had_shots = has_shots
+	func _draw() -> void:
+		if not is_instance_valid(director): return
+		for head: Dictionary in director.repair_head_projections():
+			# The same projected head/trail, drawn above the opaque repair prop.
+			# Input passes through; no targeting, HUD controls or simulation here.
+			draw_line(head.tail, head.point, Color("241318"), head.radius * .9, true)
+			draw_line(head.tail, head.point, Color("fa5547"), head.radius * .6, true)
+			draw_circle(head.point, head.radius, Color("201518"))
+			draw_circle(head.point, head.radius * .83, Color("ff4e41"))
+			draw_circle(head.point, head.radius * .46, Color("fff5d9"))
 var projectiles: Array[Dictionary] = []
 var _projectile_visuals: Array[MeshInstance3D] = []
 var flow: RefCounted = Flow.new()
@@ -62,6 +90,7 @@ func _total_scheduled_waves() -> int:
 
 func step(world_delta: float, player: Node3D) -> void:
 	_prune_dead_enemies()
+	_discard_orphaned_projectiles()
 	_step_projectiles(maxf(0, world_delta), player)
 
 	if encounter_state == &"running":
@@ -84,7 +113,7 @@ func step(world_delta: float, player: Node3D) -> void:
 		snapshot = enemies.duplicate()
 	var holds: Dictionary = flow.advance(world_delta, snapshot, player)
 	for enemy in snapshot:
-		if is_instance_valid(enemy) and enemy.health > 0.0:
+		if is_instance_valid(enemy) and enemy.health > 0.0 and (not is_instance_valid(player) or float(player.health) > 0):
 			var hold := float(holds.get(int(enemy.combat_id()), 0.0))
 			if hold > 0:
 				var speed := float(enemy.move_speed)
@@ -268,6 +297,7 @@ func capture_state() -> Dictionary:
 				break
 	return {
 		"projectiles": projectiles.duplicate(true),
+		"projectile_sequence": _projectile_sequence,
 		"flow": flow.capture_state(),
 		"spawn_counter": int(_spawn_counter),
 		"encounter_active": bool(encounter_active),
@@ -282,12 +312,18 @@ func restore_state(data: Dictionary) -> void:
 	if cover == null:
 		cover = CoverScript.new()
 	projectiles.clear()
+	_projectile_sequence = maxi(0, int(data.get("projectile_sequence", 0)))
 	for raw: Variant in data.get("projectiles", []):
 		if projectiles.size() >= MAX_PROJECTILES: break
-		if raw is Dictionary and raw.get("position") is Vector3 and raw.get("velocity") is Vector3:
-			projectiles.append({"position": raw.position, "velocity": raw.velocity,
+		if raw is Dictionary and raw.get("position") is Vector3 and raw.get("velocity") is Vector3 and raw.position.is_finite() and raw.velocity.is_finite():
+			var velocity := Vector3(raw.velocity.x, 0, raw.velocity.z).limit_length(9)
+			if velocity.length_squared() < .0001 or float(raw.get("life", 0)) <= 0: continue
+			projectiles.append({"position": raw.position, "velocity": velocity,
 				"damage": clampf(float(raw.get("damage", 10)), 0, 100),
-				"life": clampf(float(raw.get("life", 0)), 0, 6)})
+				"life": clampf(float(raw.get("life", 0)), 0, PROJECTILE_LIFETIME),
+				"age": clampf(float(raw.get("age", 0)), 0, PROJECTILE_LIFETIME),
+				"radius": PROJECTILE_RADIUS, "owner_id": maxi(0, int(raw.get("owner_id", 0))),
+				"id": maxi(0, int(raw.get("id", 0)))})
 	_sync_projectile_visuals()
 
 	var state_str := String(data.get("encounter_state", "sandbox"))
@@ -354,6 +390,8 @@ func restore_state(data: Dictionary) -> void:
 	var saved_counter: int = maxi(0, int(data.get("spawn_counter", _spawn_counter)))
 	_spawn_counter = maxi(saved_counter, max_restored_id)
 	flow.restore_state(data.get("flow", {}))
+	_discard_orphaned_projectiles()
+	_sync_projectile_visuals()
 	_draw_arrivals()
 
 
@@ -373,65 +411,212 @@ func status_text() -> String:
 			return "Sandbox"
 
 
-# Value-only hostile shots belong to the director, including after their owner dies.
-# World time drives both their sweep and lifetime; rewind restores the whole list.
-func launch_projectile(origin: Vector3, direction: Vector3, damage: float, speed := 7.5) -> bool:
-	if projectiles.size() >= MAX_PROJECTILES or direction.length_squared() < .0001: return false
-	projectiles.append({"position": Vector3(origin.x, 1.0, origin.z),
-		"velocity": Vector3(direction.x, 0, direction.z).normalized() * speed,
-		"damage": maxf(0, damage), "life": 6.0})
+# Emissions are actor-owned; flight/visuals/snapshots are director-owned values.
+# Owner=0 is reserved for explicit standalone probes, not live enemy emissions.
+func launch_projectile(origin: Vector3, direction: Vector3, damage: float, speed := 7.5, owner_id: int = 0) -> bool:
+	var flat := Vector3(direction.x, 0, direction.z)
+	if projectiles.size() >= MAX_PROJECTILES or not origin.is_finite() or not flat.is_finite() or flat.length_squared() < .0001 or speed <= 0: return false
+	if owner_id > 0:
+		var owner_alive := false
+		var owner_position := origin
+		var owned := 0
+		for enemy in enemies:
+			if is_instance_valid(enemy) and enemy.combat_id() == owner_id and enemy.health > 0:
+				owner_alive = true
+				owner_position = enemy.position
+		for shot: Dictionary in projectiles:
+			if int(shot.get("owner_id", 0)) == owner_id: owned += 1
+		if not owner_alive or owned >= MAX_OWNER_PROJECTILES: return false
+		if cover == null: cover = CoverScript.new()
+		if cover.clip_segment(owner_position, origin, PROJECTILE_RADIUS).blocked: return false
+	_projectile_sequence += 1
+	projectiles.append({"position": origin, "velocity": flat.normalized() * clampf(speed, 1, 9),
+		"damage": maxf(0, damage), "life": PROJECTILE_LIFETIME, "age": 0.0,
+		"radius": PROJECTILE_RADIUS, "owner_id": owner_id, "id": _projectile_sequence})
 	_sync_projectile_visuals()
 	return true
 
 
+func hostile_cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:
+	combat_event.emit(kind, point, strength)
+	# Existing arena/campaign feedback is optional for standalone probes. Route
+	# through its established cue method without adding another audio system.
+	var stage := get_parent()
+	if stage != null and "feedback" in stage:
+		var feedback: Variant = stage.get("feedback")
+		if is_instance_valid(feedback) and feedback.has_method("cue"):
+			var callback := Callable(feedback, "cue")
+			if not combat_event.is_connected(callback): callback.call(kind, point, strength)
+
+
+func _discard_orphaned_projectiles() -> void:
+	var living := {}
+	for enemy in enemies:
+		if is_instance_valid(enemy) and enemy.health > 0: living[int(enemy.combat_id())] = true
+	var live: Array[Dictionary] = []
+	for shot: Dictionary in projectiles:
+		if int(shot.get("owner_id", 0)) == 0 or living.has(int(shot.owner_id)): live.append(shot)
+	projectiles = live
+
+
+func _player_entry(start: Vector3, finish: Vector3, point: Vector3, radius: float) -> float:
+	var a := Vector2(start.x - point.x, start.z - point.z)
+	var movement := Vector2(finish.x - start.x, finish.z - start.z)
+	if a.length_squared() <= radius * radius: return 0.0
+	var length_sq := movement.length_squared()
+	if length_sq < .000001: return -1.0
+	var linear := 2 * a.dot(movement)
+	var discriminant := linear * linear - 4 * length_sq * (a.length_squared() - radius * radius)
+	if discriminant < 0: return -1.0
+	var entry := (-linear - sqrt(discriminant)) / (2 * length_sq)
+	return entry if entry >= 0 and entry <= 1 else -1.0
+
+
 func _step_projectiles(dt: float, player: Node3D) -> void:
-	if dt <= 0: return
+	if is_instance_valid(player) and float(player.health) <= 0:
+		projectiles.clear()
+		_sync_projectile_visuals()
+		return
+	if dt <= 0:
+		_sync_projectile_visuals()
+		return
 	if cover == null: cover = CoverScript.new()
 	var live: Array[Dictionary] = []
 	for shot: Dictionary in projectiles:
+		if float(shot.life) <= 0: continue
+		var travel_dt := minf(dt, float(shot.life))
 		var start: Vector3 = shot.position
-		var end: Vector3 = start + shot.velocity * minf(dt, shot.life)
-		var obstacle: Dictionary = cover.clip_segment(start, end, .18)
-		var fraction := float(obstacle.fraction)
-		var hit_player := false
-		if is_instance_valid(player) and float(player.health) > 0:
-			var a := Vector2(start.x, start.z)
-			var b := Vector2(end.x, end.z)
-			var p := Vector2(player.position.x, player.position.z)
-			var movement := b - a
-			var offset := a - p
-			var length_sq := movement.length_squared()
-			# Earliest segment/circle entry, so cover behind the player cannot absorb it.
-			var discriminant := pow(2 * offset.dot(movement), 2) - 4 * length_sq * (offset.length_squared() - .68 * .68)
-			if offset.length_squared() <= .68 * .68:
-				hit_player = true
-			elif length_sq > .000001 and discriminant >= 0:
-				var entry := (-2 * offset.dot(movement) - sqrt(discriminant)) / (2 * length_sq)
-				hit_player = entry >= 0 and entry <= fraction and entry <= 1
-		if hit_player:
+		var end: Vector3 = start + shot.velocity * travel_dt
+		var radius := float(shot.get("radius", PROJECTILE_RADIUS))
+		var obstacle: Dictionary = cover.clip_segment(start, end, radius)
+		var entry := -1.0
+		if is_instance_valid(player): entry = _player_entry(start, end, player.position, EnemyNode.PLAYER_CONTACT_RADIUS + radius)
+		# Cover wins exact ties and also shields a player already overlapping a
+		# blocked muzzle. A wall behind the player cannot absorb an earlier hit.
+		if entry >= 0 and (not obstacle.blocked or entry < float(obstacle.fraction) - .000001):
+			var before := float(player.health)
 			player.take_damage(float(shot.damage))
+			if float(player.health) < before:
+				hostile_cue(&"player_hurt", player.position, clampf((before - float(player.health)) / 15, .65, 1.25))
+			if float(player.health) <= 0:
+				live.clear()
+				break
 			continue
 		shot.life = maxf(0, float(shot.life) - dt)
 		if obstacle.blocked or shot.life <= 0: continue
 		shot.position = end
+		shot.age = minf(PROJECTILE_LIFETIME, float(shot.get("age", 0)) + travel_dt)
 		live.append(shot)
 	projectiles = live
 	_sync_projectile_visuals()
 
 
+func _head_material() -> StandardMaterial3D:
+	if _projectile_material != null: return _projectile_material
+	# A single procedural camera-facing head: dark rim, hostile warm red,
+	# ivory centre. Its world-space diameter is exactly the collision diameter.
+	var image := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	for y in range(64):
+		for x in range(64):
+			var d := Vector2(float(x) + .5 - 32, float(y) + .5 - 32).length() / 32
+			var color := Color.TRANSPARENT
+			if d < 1.0:
+				color = Color("201518") if d > .83 else (Color("ff4e41") if d > .46 else Color("fff5d9"))
+			image.set_pixel(x, y, color)
+	_projectile_material = StandardMaterial3D.new()
+	_projectile_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_projectile_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_projectile_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	_projectile_material.alpha_scissor_threshold = .1
+	_projectile_material.albedo_texture = ImageTexture.create_from_image(image)
+	_projectile_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return _projectile_material
+
+
+func repair_head_projections() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if get_tree().paused or projectiles.is_empty(): return result
+	var stage := get_parent()
+	if stage == null or not "equipment" in stage or stage.get("equipment").repairing == &"": return result
+	var manager := get_node_or_null("/root/SceneManager")
+	if manager == null or not manager.has_popup(&"Repair"): return result
+	for key in manager.POPUPS:
+		if key != &"Repair" and manager.has_popup(key): return result
+	var camera := get_viewport().get_camera_3d()
+	if camera == null: return result
+	for shot: Dictionary in projectiles:
+		var point: Vector3 = shot.position
+		if camera.is_position_behind(point): continue
+		if cover != null and "player" in stage and cover.clip_segment(point, stage.get("player").position).blocked: continue
+		var screen := camera.unproject_position(point)
+		if not get_viewport().get_visible_rect().has_point(screen): continue
+		var radius := screen.distance_to(camera.unproject_position(point + camera.global_basis.x * float(shot.get("radius", PROJECTILE_RADIUS))))
+		var velocity: Vector3 = shot.velocity
+		var tail := point - velocity.normalized() * minf(.8, velocity.length() * float(shot.get("age", 0)))
+		result.append({"point": screen, "radius": radius, "tail":camera.unproject_position(tail)})
+	return result
+
+
+func _trail_triangle(a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
+	for point in [a, b, c]:
+		_trail_mesh.surface_set_color(color)
+		_trail_mesh.surface_add_vertex(point)
+
+
+func _trail_ribbon(start: Vector3, finish: Vector3, half_width: float, color: Color) -> void:
+	var side := (finish - start).cross(Vector3.UP).normalized() * half_width
+	_trail_triangle(start - side, start + side, finish - side, color)
+	_trail_triangle(start + side, finish + side, finish - side, color)
+
+
 func _sync_projectile_visuals() -> void:
+	if _repair_head_layer == null:
+		_repair_head_layer = CanvasLayer.new()
+		_repair_head_layer.name = "HostileHeadsDuringRepair"
+		var manager := get_node_or_null("/root/SceneManager")
+		_repair_head_layer.layer = int(manager.POPUP_LAYER) + 1 if manager != null else 101
+		var heads := RepairShotHeads.new()
+		heads.director = self
+		heads.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		heads.process_mode = Node.PROCESS_MODE_ALWAYS
+		_repair_head_layer.add_child(heads)
+		add_child(_repair_head_layer)
 	while _projectile_visuals.size() < projectiles.size():
 		var node := MeshInstance3D.new()
-		var mesh := SphereMesh.new()
-		mesh.radius = .2
-		mesh.height = .4
+		var mesh := QuadMesh.new()
+		mesh.size = Vector2.ONE * PROJECTILE_RADIUS * 2
 		node.mesh = mesh
-		var material := StandardMaterial3D.new()
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		material.albedo_color = Color("ff684d")
-		node.material_override = material
+		node.material_override = _head_material()
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(node)
 		_projectile_visuals.append(node)
 	for i in range(_projectile_visuals.size()):
 		_projectile_visuals[i].visible = i < projectiles.size()
-		if i < projectiles.size(): _projectile_visuals[i].position = projectiles[i].position
+		if i < projectiles.size():
+			_projectile_visuals[i].position = projectiles[i].position
+			_projectile_visuals[i].mesh.size = Vector2.ONE * float(projectiles[i].get("radius", PROJECTILE_RADIUS)) * 2
+	if _trail_mesh == null:
+		_trail_mesh = ImmediateMesh.new()
+		var node := MeshInstance3D.new()
+		node.name = "HostileShortTrails"
+		node.mesh = _trail_mesh
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.vertex_color_use_as_albedo = true
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		node.material_override = material
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(node)
+	_trail_mesh.clear_surfaces()
+	if projectiles.is_empty(): return
+	_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for shot: Dictionary in projectiles:
+		var head: Vector3 = shot.position
+		var velocity: Vector3 = shot.velocity
+		var direction := velocity.normalized()
+		var tail := head - direction * minf(.8, velocity.length() * float(shot.get("age", 0)))
+		_trail_ribbon(tail, head, .11, Color("241318"))
+		_trail_ribbon(tail, head, .075, Color("fa5547"))
+		_trail_ribbon(tail, head, .022, Color("fff1cf"))
+	_trail_mesh.surface_end()

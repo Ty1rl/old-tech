@@ -46,6 +46,19 @@ func run() -> void:
 	plant.apply(skeleton)
 	plant.reset()
 	expect(plant.contacts.is_empty(), "Reset clears planted contacts")
+	skeleton.position = Vector3.ZERO
+	skeleton.reset_bone_poses()
+	plant.apply(skeleton, 0.28, 0.24)
+	var soft_origin := (skeleton.global_transform * skeleton.get_bone_global_pose(3).origin).x
+	skeleton.position.x = 0.06
+	skeleton.reset_bone_poses()
+	plant.apply(skeleton, 0.28, 0.24)
+	var soft_x := (skeleton.global_transform * skeleton.get_bone_global_pose(3).origin).x - soft_origin
+	expect(soft_x > 0.01 and soft_x < 0.055, "Soft foot plant cushions stance without rigid pinning; delta %.4f" % soft_x)
+	skeleton.position.x = 0.40
+	skeleton.reset_bone_poses()
+	plant.apply(skeleton, 0.28, 0.24)
+	expect(not plant.contacts.is_empty(), "Soft foot plant glides anchor instead of dropping contact mid-stride")
 	skeleton.queue_free()
 	await process_frame
 	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures}))

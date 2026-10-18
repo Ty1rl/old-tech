@@ -11,9 +11,13 @@ func reset() -> void:
 	_forward = Vector3.ZERO
 
 
-func apply(skeleton: Skeleton3D) -> void:
+func apply(skeleton: Skeleton3D, strength: float = 1.0, max_hold: float = 0.7) -> void:
+	if strength <= .001:
+		contacts.clear()
+		return
 	var forward := skeleton.global_basis.z.normalized()
-	if not _forward.is_zero_approx() and _forward.dot(forward) < .985:
+	var turn_dot := .985 if strength >= .999 else .94
+	if not _forward.is_zero_approx() and _forward.dot(forward) < turn_dot:
 		contacts.clear() # A sharp aim turn must not cross or twist planted legs.
 	_forward = forward
 	if _legs.is_empty():
@@ -25,31 +29,47 @@ func apply(skeleton: Skeleton3D) -> void:
 			_legs.append({"foot":foot, "shin":shin, "thigh":thigh,
 				"height":skeleton.get_bone_global_rest(foot).origin.y})
 	skeleton.force_update_all_bone_transforms()
+	var soft := strength < .999
 	for leg in _legs:
 		var foot: int = leg.foot
 		var local_foot := skeleton.get_bone_global_pose(foot)
-		if local_foot.origin.y > float(leg.height) + .025:
+		var lift_margin := .020 if soft else .025
+		if local_foot.origin.y > float(leg.height) + lift_margin:
 			contacts.erase(foot)
 			continue
 		var world_foot := skeleton.global_transform * local_foot.origin
 		if not contacts.has(foot): contacts[foot] = world_foot
 		var anchor: Vector3 = contacts[foot]
+		var slip := world_foot.distance_to(anchor)
 		# Teleports, rewind or a large shove must never leave a leg behind.
-		if world_foot.distance_to(anchor) > .7:
+		if slip > 1.2 or (not soft and slip > max_hold):
 			contacts.erase(foot)
 			continue
-		var target := skeleton.global_transform.affine_inverse() * anchor
+		if soft and slip > max_hold:
+			# Allow gentle ground slide instead of pinning and snapping mid-stride.
+			anchor = world_foot + (anchor - world_foot).normalized() * max_hold
+			contacts[foot] = anchor
+		var raw_target := skeleton.global_transform.affine_inverse() * anchor
 		# Retain heel/toe lift from the clip while holding its ground position.
-		target.y = local_foot.origin.y
+		raw_target.y = local_foot.origin.y
+		if soft:
+			# Prevent lateral leg crossing/twisting during sideways strafes.
+			raw_target.x = local_foot.origin.x + clampf(raw_target.x - local_foot.origin.x, -.055, .055)
+			raw_target.z = local_foot.origin.z + clampf(raw_target.z - local_foot.origin.z, -max_hold, max_hold)
+		var target := local_foot.origin.lerp(raw_target, clampf(strength, 0.0, 1.0))
 		var hip := skeleton.get_bone_global_pose(leg.thigh).origin
 		var knee := skeleton.get_bone_global_pose(leg.shin).origin
 		var ankle := local_foot.origin
 		var upper := hip.distance_to(knee)
 		var lower := knee.distance_to(ankle)
 		var reach := target - hip
-		if reach.length() >= (upper + lower) * .995:
-			contacts.erase(foot)
-			continue
+		var max_ext := .945 if soft else .995
+		if reach.length() >= (upper + lower) * max_ext:
+			if not soft:
+				contacts.erase(foot)
+				continue
+			reach = reach.normalized() * ((upper + lower) * max_ext)
+			target = hip + reach
 		var axis := reach.normalized()
 		var bend := knee - hip
 		bend -= axis * bend.dot(axis)

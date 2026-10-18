@@ -27,10 +27,16 @@ var tool_id: StringName = &"ring"
 var walk_phase := 0.0
 var idle_phase := 0.0
 var stride_blend := 0.0
+var cadence_hz := 0.0
+var playback_rate := 1.0
+var _run_blend := 0.0
+var _strafe_blend := 0.0
+var _forward_blend := 0.0
 var _holds: Array[Dictionary] = []
 var _sockets: Dictionary = {}
 var _prop_sockets: Dictionary = {}
 var _bones: Dictionary = {}
+var _rest_rot: Dictionary = {}
 var _equipped_index := 0
 var _kick := 0.0
 var _air_active := false
@@ -55,10 +61,18 @@ func build() -> void:
 	skeleton = character.find_children("*", "Skeleton3D", true, false)[0]
 	animation = character.find_children("*", "AnimationPlayer", true, false)[0]
 	animation.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	for bone_name in ["root", "pelvis", "spine", "chest", "neck", "head"]:
+		var b_idx := skeleton.find_bone(bone_name)
+		if b_idx >= 0:
+			_bones[bone_name] = b_idx
+			_rest_rot[b_idx] = skeleton.get_bone_rest(b_idx).basis.get_rotation_quaternion()
 	for side in ["L", "R"]:
-		for part in ["upper_arm", "forearm", "hand"]:
+		for part in ["upper_arm", "forearm", "hand", "thigh", "shin", "foot"]:
 			var id: String = part + "." + side
-			_bones[id] = skeleton.find_bone(id)
+			var b_idx := skeleton.find_bone(id)
+			_bones[id] = b_idx
+			if b_idx >= 0:
+				_rest_rot[b_idx] = skeleton.get_bone_rest(b_idx).basis.get_rotation_quaternion()
 		var socket: Node3D = character.find_child("Grip_" + side, true, false)
 		_sockets[side] = socket.transform
 	_cache_holds()
@@ -85,7 +99,7 @@ func _cache_holds() -> void:
 			if path.get_subname_count() != 1 or source.track_get_type(track) != Animation.TYPE_ROTATION_3D:
 				continue
 			var bone := String(path.get_subname(0))
-			if bone in _bones:
+			if bone in _bones and (bone.begins_with("upper_arm.") or bone.begins_with("forearm.") or bone.begins_with("hand.")):
 				pose[_bones[bone]] = source.track_get_key_value(track, 0)
 		_holds.append(pose)
 
@@ -107,6 +121,11 @@ func reset_pose() -> void:
 	walk_phase = 0
 	idle_phase = 0
 	stride_blend = 0
+	cadence_hz = 0
+	playback_rate = 1.0
+	_run_blend = 0
+	_strafe_blend = 0
+	_forward_blend = 0
 	_kick = 0
 	_air_active = false
 	animation.play("Idle")
@@ -121,21 +140,95 @@ func step_visual(world_delta: float, planar_speed: float, max_speed: float = 6.0
 	var dt := minf(world_delta, .25)
 	var ratio := clampf(planar_speed / maxf(.001, max_speed), 0, 1)
 	stride_blend = move_toward(stride_blend, ratio, dt * 8)
-	var moving := stride_blend > .05
-	var backing := movement.z > .1
+	var moving := stride_blend > .05 and planar_speed > .05
+	var local_dir := Vector3(movement.x, 0, movement.z)
+	if local_dir.length_squared() < .0001 and moving:
+		local_dir = Vector3(0, 0, -planar_speed)
+	var norm_dir := local_dir.normalized() if local_dir.length_squared() > .0001 else Vector3.FORWARD
+	var backing := moving and norm_dir.z > .22
+	var mostly_strafe := moving and absf(norm_dir.x) > .72 and absf(norm_dir.z) < .55
+	var run_target := clampf((planar_speed - 3.2) / maxf(.5, max_speed - 3.2), 0, 1) if (moving and not backing and not mostly_strafe) else 0.0
+	_run_blend = move_toward(_run_blend, run_target, dt * 6.0)
+	_strafe_blend = move_toward(_strafe_blend, norm_dir.x * stride_blend if moving else 0.0, dt * 7.5)
+	_forward_blend = move_toward(_forward_blend, -norm_dir.z * stride_blend if moving else 0.0, dt * 7.5)
 	var clip := "Idle"
-	if moving: clip = "BackWalk" if backing else ("Run" if planar_speed > 4.0 else "Walk")
+	if moving:
+		clip = "BackWalk" if backing else ("Run" if (planar_speed > 3.8 and not mostly_strafe) else "Walk")
 	if animation.current_animation != clip:
-		animation.play(clip, .12)
-	# Match cadence to authored scaled stride length (metres per clip cycle).
-	var stride := 1.248 if backing else (1.976 if clip == "Run" else 1.456)
+		animation.play(clip, .14)
 	var cycle := animation.get_animation(clip).length
-	var rate := clampf(planar_speed * cycle / stride, .05, 6.0) if moving else 1.0
-	animation.advance(dt * rate)
-	foot_plant.apply(skeleton)
-	if moving: walk_phase += dt * rate * TAU
-	else: idle_phase += dt
+	if moving:
+		if backing:
+			cadence_hz = lerpf(.85, 1.48, ratio)
+		elif clip == "Run":
+			cadence_hz = lerpf(1.36, 1.76, run_target)
+		else:
+			cadence_hz = lerpf(.88, 1.52, ratio)
+		playback_rate = clampf(cadence_hz * cycle, .35, 1.85)
+	else:
+		cadence_hz = 0.0
+		playback_rate = 1.0
+	skeleton.reset_bone_poses()
+	animation.advance(dt * playback_rate)
+	if moving:
+		walk_phase += dt * cadence_hz * TAU
+		_apply_gait_shaping()
+		var plant_weight := .26 * stride_blend * (1.0 - .65 * absf(_strafe_blend)) * (1.0 - .35 * _run_blend)
+		foot_plant.apply(skeleton, plant_weight, .24)
+	else:
+		idle_phase += dt
+		foot_plant.reset()
 	_fit_equipment()
+
+
+func _apply_gait_shaping() -> void:
+	var root_idx: int = _bones.get("root", -1)
+	if root_idx >= 0:
+		var root_pos := skeleton.get_bone_pose_position(root_idx)
+		# Replace steep double-frequency pogo bounce with a settled crouch and modest step bob.
+		var base_crouch := lerpf(-.018, -.042, _run_blend) * stride_blend
+		var bob_damp := lerpf(.32, .40, _run_blend)
+		root_pos.y = base_crouch + (root_pos.y - base_crouch) * bob_damp
+		root_pos.x = root_pos.x * .55 + sin(walk_phase) * .022 * stride_blend - _strafe_blend * .024
+		skeleton.set_bone_pose_position(root_idx, root_pos)
+	# Amplify thigh/shin swing excursion so capped cadence covers longer apparent ground strides.
+	var thigh_warp := lerpf(1.0, 1.32, stride_blend) + .12 * absf(_strafe_blend)
+	var shin_warp := lerpf(1.0, 1.16, stride_blend)
+	for side in ["L", "R"]:
+		var thigh_idx: int = _bones.get("thigh." + side, -1)
+		if thigh_idx >= 0:
+			var r_rest: Quaternion = _rest_rot[thigh_idx]
+			var r_cur := skeleton.get_bone_pose_rotation(thigh_idx)
+			skeleton.set_bone_pose_rotation(thigh_idx, r_rest.slerp(r_cur, thigh_warp).normalized())
+		var shin_idx: int = _bones.get("shin." + side, -1)
+		if shin_idx >= 0:
+			var s_rest: Quaternion = _rest_rot[shin_idx]
+			var s_cur := skeleton.get_bone_pose_rotation(shin_idx)
+			skeleton.set_bone_pose_rotation(shin_idx, s_rest.slerp(s_cur, shin_warp).normalized())
+	# Steer pelvis into lateral strafe in model space while counter-twisting spine/chest so upper body stays aimed forward.
+	var strafe_sign := -1.0 if _forward_blend < -.1 else 1.0
+	var strafe_yaw := clampf(-_strafe_blend * strafe_sign * .44, -.42, .42)
+	var step_sway := sin(walk_phase) * .042 * stride_blend
+	var forward_lean := -_forward_blend * (.045 + .045 * _run_blend)
+	var pelvis_idx: int = _bones.get("pelvis", -1)
+	if pelvis_idx >= 0:
+		var p_model := Quaternion(Vector3.UP, strafe_yaw) * Quaternion(Vector3.BACK, -_strafe_blend * .045 + step_sway) * Quaternion(Vector3.RIGHT, forward_lean * .55)
+		_rotate_bone_model_space(pelvis_idx, p_model)
+	var spine_idx: int = _bones.get("spine", -1)
+	if spine_idx >= 0:
+		var sp_model := Quaternion(Vector3.UP, -strafe_yaw * .55) * Quaternion(Vector3.BACK, -_strafe_blend * .03 - step_sway * .5) * Quaternion(Vector3.RIGHT, forward_lean * .65)
+		_rotate_bone_model_space(spine_idx, sp_model)
+	var chest_idx: int = _bones.get("chest", -1)
+	if chest_idx >= 0:
+		var ch_model := Quaternion(Vector3.UP, -strafe_yaw * .45) * Quaternion(Vector3.BACK, -_strafe_blend * .025 - step_sway * .4) * Quaternion(Vector3.RIGHT, forward_lean * .60)
+		_rotate_bone_model_space(chest_idx, ch_model)
+	skeleton.force_update_all_bone_transforms()
+
+
+func _rotate_bone_model_space(bone: int, model_q: Quaternion) -> void:
+	var g_q := skeleton.get_bone_global_pose(bone).basis.get_rotation_quaternion()
+	var local_q := skeleton.get_bone_pose_rotation(bone)
+	skeleton.set_bone_pose_rotation(bone, (local_q * g_q.inverse() * model_q * g_q).normalized())
 
 
 func set_combat_pose(flash_timer: float, air_active: bool) -> void:

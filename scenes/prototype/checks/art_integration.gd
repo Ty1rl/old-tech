@@ -35,6 +35,21 @@ func run() -> void:
 		expect(visual.phase == before, "Frozen world and engine frames cannot advance enemy art")
 		enemy.step_enemy(.1, arena.player)
 		expect(visual.phase > before, "World tick advances enemy art")
+		visual.step_visual(0.08, 2.1, false, false, &"approach")
+		expect(visual.leg_cycling and visual.animation.current_animation == "Walk" and visual.cadence_hz <= 1.55, String(kind) + " caps walk cadence below frantic shuffle")
+		var approach_chest: Quaternion = visual.skeleton.get_bone_global_pose(visual._body_groups[0]["chest"]).basis.get_rotation_quaternion()
+		for tick in range(5):
+			visual.step_visual(0.08, 2.1, false, false, &"windup")
+		var windup_chest: Quaternion = visual.skeleton.get_bone_global_pose(visual._body_groups[0]["chest"]).basis.get_rotation_quaternion()
+		expect(not visual.leg_cycling and visual.animation.current_animation == "Idle" and visual.foot_plant.contacts.is_empty(), String(kind) + " suppresses leg-cycling during windup")
+		expect(approach_chest.angle_to(windup_chest) > 0.08, String(kind) + " shows readable upper-body windup anticipation")
+		enemy.attack_phase = &"recover"
+		for tick in range(4):
+			visual.step_visual(0.08, 1.8, false, false)
+		expect(not visual.leg_cycling and visual.animation.current_animation == "Idle", String(kind) + " suppresses leg-cycling during recovery via host attack_phase")
+		visual.step_visual(0.08, 2.0, true, false)
+		expect(not visual.leg_cycling and visual.animation.current_animation == "Idle", String(kind) + " suppresses leg-cycling during stun/stagger")
+		enemy.attack_phase = &"approach"
 		if visual.cable:
 			expect(visual.cable.visible, "Intact cable visible")
 			enemy.cable_cut = true

@@ -89,6 +89,21 @@ func run() -> void:
 	player.restore_state(snap)
 	expect(player.position.is_equal_approx(snap.position) and player.model.basis.is_equal_approx(snap.facing), "Snapshot restores original facing and position")
 	expect(visual.grip_error("L") < .025 and visual.grip_error("R") < .025, "Sockets remain aligned after root restoration")
+	player.reset_state()
+	for tick in range(8):
+		visual.step_visual(0.05, 6.0, 6.0, Vector3(0, 0, -6.0))
+	var forward_pelvis_yaw := bone_pose(visual, "pelvis").basis.get_euler().y
+	var root_y: float = visual.skeleton.get_bone_pose_position(visual.skeleton.find_bone("root")).y
+	expect(visual.cadence_hz <= 1.85 and visual.playback_rate <= 1.85, "Forward run caps cadence below frantic shuffle: %.3f Hz" % visual.cadence_hz)
+	expect(absf(root_y) < 0.06, "Forward gait keeps vertical root bob modest: %.4f" % root_y)
+	for tick in range(8):
+		visual.step_visual(0.05, 6.0, 6.0, Vector3(6.0, 0, 0))
+	var strafe_pelvis_yaw := bone_pose(visual, "pelvis").basis.get_euler().y
+	expect(absf(strafe_pelvis_yaw - forward_pelvis_yaw) > 0.08, "Sideways strafe steers pelvis into movement direction")
+	expect(visual.cadence_hz <= 1.65 and visual.grip_error("L") < 0.025 and visual.grip_error("R") < 0.025, "Sideways strafe preserves capped cadence and hand grips")
+	for tick in range(6):
+		visual.step_visual(0.05 * 0.18, 6.0, 6.0, Vector3(0, 0, 6.0))
+	expect(visual.animation.current_animation == "BackWalk" and visual.cadence_hz <= 1.65 and visual.grip_error("L") < 0.025 and visual.grip_error("R") < 0.025, "Slow-time backwalk keeps natural cadence and exact hand sockets")
 	arena.feedback.reset_state()
 	arena.queue_free()
 	await process_frame

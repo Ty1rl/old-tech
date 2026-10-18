@@ -119,14 +119,16 @@ func step_visual(real_delta: float, planar_speed: float, max_speed: float = 6.0,
 	var ratio := clampf(planar_speed / maxf(.001, max_speed), 0, 1)
 	stride_blend = move_toward(stride_blend, ratio, dt * 8)
 	var moving := stride_blend > .05
-	var clip := "Walk" if moving else "Idle"
+	var backing := movement.z > .1
+	var clip := "Idle"
+	if moving: clip = "BackWalk" if backing else ("Run" if planar_speed > 4.0 else "Walk")
 	if animation.current_animation != clip:
 		animation.play(clip, .12)
-	var rate := lerpf(.8, 2.2, stride_blend) if moving else 1.0
-	# Reverse the planted gait when backing away, rather than walking forward
-	# while sliding backwards. A dedicated strafe/run clip remains an art task.
-	var direction := -1.0 if movement.z > .1 else 1.0
-	animation.advance(dt * rate * direction)
+	# Match cadence to authored scaled stride length (metres per clip cycle).
+	var stride := 1.248 if backing else (1.976 if clip == "Run" else 1.456)
+	var cycle := animation.get_animation(clip).length
+	var rate := clampf(planar_speed * cycle / stride, .5, 2.5) if moving else 1.0
+	animation.advance(dt * rate)
 	if moving: walk_phase += dt * rate * TAU
 	else: idle_phase += dt
 	_fit_equipment()

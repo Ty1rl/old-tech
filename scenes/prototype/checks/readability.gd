@@ -64,7 +64,7 @@ func run() -> void:
 	for facing in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
 		var enemy := fresh(&"yellow")
 		enemy.facing = facing
-		var core: MeshInstance3D = enemy.part_visual.core
+		var core: Node3D = enemy.part_visual.core
 		expect(core.visible and enemy.core_world_position().y > 1.6, "Core is raised and visible facing " + str(facing))
 		fire_at_screen(arena.player.camera.unproject_position(enemy.core_world_position()))
 		expect(enemy.health <= 0 and enemy.core_broken, "Clicking visible core kills from facing " + str(facing))

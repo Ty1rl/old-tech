@@ -5,6 +5,7 @@ const Tuning = preload("res://scenes/prototype/tuning.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 const WardenVisual = preload("res://scenes/prototype/warden_visual.gd")
 const PartVisual = preload("res://scenes/prototype/part_visual.gd")
+const CreatureVisual = preload("res://scenes/prototype/creature_visual.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
 const MAX_KNOCKBACK_SPEED := 32.0
 
@@ -363,9 +364,10 @@ func _build_visuals() -> void:
 	if mechanism() != &"":
 		for old in visual_root.get_children():
 			old.visible = false
-		part_visual = PartVisual.new()
+		part_visual = CreatureVisual.new()
 		visual_root.add_child(part_visual)
-		part_visual.build(mechanism(), part_layout(), radius, body_material)
+		part_visual.build(kind)
+		body_height = part_visual.height
 		_update_warden_visuals()
 
 	# Overhead health bar (kept unrotated in world space on self)
@@ -471,7 +473,10 @@ func _local_part_world(local: Vector3) -> Vector3:
 func cable_world_points() -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	if mechanism() != &"":
-		for point: Vector3 in PartVisual.cable_points(part_layout(), radius):
+		var local_points := PartVisual.cable_points(part_layout(), radius)
+		if kind == &"front_guard":
+			local_points = [Vector3(0, 1.47, -.48), Vector3(0, 1.32, -1.02)]
+		for point: Vector3 in local_points:
 			points.append(_local_part_world(point))
 		return points
 	for point: Vector3 in [Vector3(radius * 0.9, 0.0, -0.48), Vector3(radius + 0.38, 0.0, -0.48), Vector3(radius + 0.38, 0.0, 0.48), Vector3(radius * 0.9, 0.0, 0.48)]:
@@ -480,6 +485,7 @@ func cable_world_points() -> Array[Vector3]:
 
 
 func core_world_position() -> Vector3:
+	if kind == &"front_guard": return _local_part_world(Vector3(0, 1.75, -.49))
 	return _local_part_world(PartVisual.core_point(radius) if mechanism() != &"" else Vector3(0.0, 1.05, -0.74))
 
 
@@ -636,6 +642,14 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 
 
 func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> void:
+	var before := position
+	_step_enemy(world_delta, player, neighbors)
+	if is_instance_valid(part_visual) and world_delta > 0 and health > 0:
+		var speed := position.distance_to(before) / world_delta
+		part_visual.step_visual(world_delta, speed, stagger_timer > 0, flash_timer > 0)
+
+
+func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 	if health <= 0.0:
 		return
 	if mechanism() != &"" and world_delta > 0.0:

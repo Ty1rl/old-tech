@@ -36,7 +36,7 @@ func run() -> void:
 		and visual.animation.callback_mode_process == AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL,
 		"Cosmetic animation has no independent engine clock")
 	expect(absf(visual.global_position.y-player.global_position.y) < .01 and visual.scale.is_equal_approx(Vector3.ONE * 1.3), "Feet align with collider bottom and model retains readability scale")
-	for clip in ["Idle", "Walk", "RingHold", "FlashHold", "ConeHold", "ClockHold"]:
+	for clip in ["Idle", "Walk", "Run", "BackWalk", "RingHold", "FlashHold", "ConeHold", "ClockHold"]:
 		expect(visual.animation.has_animation(clip), "Imported clip exists: " + clip)
 	for index in range(1,5):
 		player.set_visual_tool(index)
@@ -70,7 +70,7 @@ func run() -> void:
 	player.step(.01, player.global_position + Vector3(10,0,0), false)
 	player.step(.05, player.global_position + Vector3(10,0,0), true)
 	expect(visual.held_tool.global_position.x > player.global_position.x, "Facing +X carries real equipment forward")
-	expect(player.world_scale < 1 and visual.animation.current_animation in ["Idle","Walk"], "World slow leaves real-time art animation enabled")
+	expect(player.world_scale < 1 and visual.animation.current_animation in ["Idle","Walk","Run","BackWalk"], "World slow leaves real-time art animation enabled")
 
 	var snap: Dictionary = player.capture_state()
 	expect(snap.size() == 4 and snap.has("position") and snap.has("velocity") and snap.has("health") and snap.has("facing"), "History schema still excludes rig/mesh/animation state")

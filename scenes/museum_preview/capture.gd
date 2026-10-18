@@ -114,8 +114,11 @@ func _run() -> void:
 		var mesh: ArrayMesh = museum._shared_meshes.get(key)
 		expect(mesh != null and mesh.get_surface_count() > 0, "Shared mesh loaded for " + key)
 		if mesh != null and mesh.get_surface_count() > 0:
-			var mat := mesh.surface_get_material(0) as StandardMaterial3D
-			var tex_path := mat.albedo_texture.resource_path if (mat and mat.albedo_texture) else ""
+			var mat := mesh.surface_get_material(0)
+			var texture: Texture2D
+			if mat is ShaderMaterial: texture = mat.get_shader_parameter("floor_texture")
+			elif mat is StandardMaterial3D: texture = mat.albedo_texture
+			var tex_path := texture.resource_path if texture else ""
 			expect(tex_path == EXPECTED_TEXTURES[key],
 				"%s uses texture %s (got %s)" % [key, EXPECTED_TEXTURES[key], tex_path])
 

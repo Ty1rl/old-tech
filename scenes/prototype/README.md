@@ -70,9 +70,11 @@ the holding pose. Art remains 30% enlarged for readability. Animation advances
 only through the arena's real-time tick, so pause and inspection freeze it.
 Tools are another 25% larger relative to the player. Collision and history roots
 are unchanged; meshes and bones never enter snapshots. Stopping and reversal
-are quicker without changing maximum speed; backing away reverses the walk cycle.
-The current gait is a stylized in-place cycle, with some knee/cloth compression
-and foot sliding at high movement speed. Detailed fingers are not animated.
+are quicker without changing maximum speed; backing away uses BackWalk.
+The rig now uses Idle, Walk, Run and BackWalk clips. Playback follows authored
+stride lengths; the equipment arm pose stays fitted over the gait. These remain
+stylized in-place cycles with some cloth compression and foot sliding. Fingers
+are not animated.
 
 Tool colors are shared across HUD, parts and effects. Placeholder sounds include
 weapon loops, impacts, mechanism breaks, repair clicks and clock speed ramps.
@@ -169,7 +171,7 @@ with three blues, adds yellow/orange at 12 seconds and guards at 24 seconds.
 There are no new arrivals at the 36-second checkpoint; reinforcements resume
 at 48 seconds. Clear current enemies to earn that breathing room. The encounter
 lasts 75 world seconds and caps live enemies at eight; clear survivors to win.
-Final art, bosses and authored levels are later work.
+Bosses and authored levels are later work.
 Tests establish behavior and state restoration, not enjoyable balance.
 
 ```sh
@@ -178,12 +180,32 @@ python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 
 Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
 resource_integration, integration, parts, feedback, scrub_view, presentation,
-player_visual, variants, readability, weapon_presentation, presentation_j.
+player_visual, variants, readability, weapon_presentation, presentation_j,
+art_integration.
 Use import after script/scene changes.
 The shared lab runner bounds execution and saves full logs in seat state.
 On another machine: `timeout 60s godot --headless --path . --script
 res://scenes/prototype/checks/rewind.gd` (one shell line).
 
-Teammate museum floor/wall/column assets from upstream d785266 are included.
-The original scenes/game.tscn demonstrates them; the combat-arena museum wrapper
-is assigned separately to jam-4. Current ownership is in shared COORDINATION.txt.
+## Current models and museum
+
+All five colored-part roles now use the completed Blender models:
+
+- F2 blue: Conjoined, joined by the cuttable blue connector.
+- F3 yellow: Patient, with a raised yellow lens.
+- F4 orange: Bellows Belly, with an orange covering.
+- F8 side guard: Borrowed Heart and its attached crawler.
+- F9 front guard showcase: False Face and its face-shaped shield.
+
+F5 adds a mixed group; Backspace clears it. The models use the existing enemy
+behavior and part rules. Removed cables/covers stay removed until rewind/reset.
+Animation advances in world time and freezes during inspection. The crawler
+belongs to one guard rig and has no independent AI. No attack/death clips yet;
+silhouettes can extend beyond the unchanged movement collider.
+
+The arena now uses the teammate's museum floor, walls and columns, with lower
+floor contrast for weak-point readability. Existing floor/cover physics still
+control movement and attack blocking; the museum adds visual geometry only.
+The original menu/game scenes remain separate. Editable .blend sources stay
+under art-source; only explicit GLBs enter the game. Twelve verified duplicate
+wall/floor textures were removed; their referenced originals remain.

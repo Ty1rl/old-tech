@@ -79,11 +79,11 @@ func run() -> void:
 	expect(is_equal_approx(player.velocity.x,6), "Movement still caps at original maximum speed")
 	player.visual.reset_pose()
 	player.visual.step_visual(.1,6,6,Vector3.FORWARD*6)
-	var forward: float = player.visual.animation.current_animation_position
+	var forward_clip: String = player.visual.animation.current_animation
 	player.visual.reset_pose()
 	player.visual.step_visual(.1,6,6,Vector3.BACK*6)
-	var backward: float = player.visual.animation.current_animation_position
-	expect(forward < .5 and backward > .5, "Backing away reverses the looping gait")
+	var backward_clip: String = player.visual.animation.current_animation
+	expect(forward_clip == "Run" and backward_clip == "BackWalk", "Forward run and backing away use their authored gait clips")
 	for index in range(1,5):
 		player.set_visual_tool(index)
 		expect(player.visual.tool_attachments[player.visual.tool_id].scale.is_equal_approx(Vector3.ONE*1.25), "Tool is larger relative to player")

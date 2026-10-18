@@ -1,5 +1,6 @@
 extends Node3D
 
+const MuseumEnvironment = preload("res://scenes/prototype/museum_environment.gd")
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const PlayerScene = preload("res://scenes/player.tscn")
 const PlayerController = preload("res://scenes/prototype/player.gd")
@@ -14,6 +15,7 @@ const ScrubView = preload("res://scenes/prototype/scrub_view.gd")
 const History = preload("res://scenes/prototype/history.gd")
 const StatusHud = preload("res://scenes/prototype/status_hud.gd")
 
+var museum: Node3D
 var equipment: RefCounted = Equipment.new()
 var cover: RefCounted = Cover.new()
 
@@ -41,6 +43,10 @@ var _scrub_speed := 0.0
 func _ready() -> void:
 	_build_floor()
 	_build_cover()
+	museum = MuseumEnvironment.new()
+	museum.name = "MuseumEnvironment"
+	museum.build()
+	museum.apply_to_arena(self)
 	player = PlayerScene.instantiate()
 	player.set_script(PlayerController)
 	player.equipment = equipment

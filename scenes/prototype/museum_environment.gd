@@ -185,7 +185,24 @@ func _prepare_mesh(src_mesh: Mesh, flip_inside_out: bool, tint: Color, roughness
 				mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 				mat.albedo_color = tint
 				mat.roughness = roughness_val
-				out_mesh.surface_set_material(s, mat)
+				if flatten_up_normals:
+					# Keep the teammate's tile pattern, with lower contrast so small
+					# colored mechanisms and aim paths remain readable above it.
+					var shader := Shader.new()
+					shader.code = """shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D floor_texture : source_color;
+void fragment() {
+	ALBEDO = mix(vec3(0.20, 0.22, 0.24), texture(floor_texture, UV).rgb, 0.16);
+	ROUGHNESS = 0.94;
+}
+"""
+					var floor_material := ShaderMaterial.new()
+					floor_material.shader = shader
+					floor_material.set_shader_parameter("floor_texture", mat.albedo_texture)
+					out_mesh.surface_set_material(s, floor_material)
+				else:
+					out_mesh.surface_set_material(s, mat)
 			else:
 				out_mesh.surface_set_material(s, src_mat)
 	return out_mesh

@@ -10,22 +10,7 @@ static func scale_for(node: Node) -> float:
 	return clampf(node.get_viewport().get_visible_rect().size.x / maxf(1, pixels), 1, 1.5)
 
 static func skin() -> Theme:
-	var theme := Theme.new()
-	theme.default_font_size = 19
-	theme.set_color("font_color", "Label", PAPER)
-	for state in ["normal", "hover", "pressed", "focus"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color("2b2821") if state == "normal" else Color("494133")
-		style.border_color = ACCENT if state != "normal" else Color("5b5140")
-		style.set_border_width_all(2 if state == "focus" else 1)
-		style.set_corner_radius_all(4)
-		style.content_margin_top = 12
-		style.content_margin_bottom = 12
-		style.content_margin_left = 18
-		style.content_margin_right = 18
-		theme.set_stylebox(state, "Button", style)
-		theme.set_color("font_color" if state == "normal" else "font_" + state + "_color", "Button", PAPER)
-	return theme
+	return preload("res://scenes/ui/museum_theme.tres").duplicate()
 
 static func label(parent: Node, text: String, font_size: int = 19) -> Label:
 	var node := Label.new()

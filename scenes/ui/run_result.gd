@@ -1,14 +1,20 @@
-extends Control
-const UI = preload("res://scenes/ui/ui_style.gd")
+extends "res://scenes/ui/menu_layout.gd"
 var won := false
-
+@onready var retry: Button = %RetryButton
+@onready var title: Label = %Title
+@onready var subtitle: Label = %Subtitle
 func setup(data: Dictionary) -> void:
 	won = bool(data.get("won", false))
-
 func _ready() -> void:
-	var column := UI.shell(self, "The museum is quiet" if won else "Another chance", "The burial device is dismantled. You made it out." if won else "A poor position need not be the end. Retry this room and choose a different opening.", 420)
-	var first := UI.button(column, "Play again" if won else "Retry room", func(): SceneManager.start_play() if won else SceneManager.request_restart_room())
-	UI.button(column, "Settings", func(): SceneManager.push_popup(&"Settings"))
-	UI.button(column, "Return to main menu", func(): SceneManager.return_main())
-	UI.button(column, "Quit", func(): get_tree().quit())
-	UI.focus_on_open(self, first)
+	super._ready()
+	if won:
+		title.text = "The museum is quiet"
+		subtitle.text = "The burial device is dismantled. You made it out."
+		retry.text = "Play again"
+	UI.focus_on_open(self, retry)
+func _on_retry() -> void:
+	if won: SceneManager.start_play()
+	else: SceneManager.request_restart_room()
+func _on_settings() -> void: SceneManager.push_popup(&"Settings")
+func _on_main() -> void: SceneManager.return_main()
+func _on_quit() -> void: get_tree().quit()

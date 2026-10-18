@@ -1,62 +1,133 @@
-[gd_scene format=3 uid="uid://cb25v8pyc2pe1"]
-
-[ext_resource type="Script" uid="uid://dmei3rw5iansg" path="res://scenes/ui/main_menu.gd" id="1_sl1te"]
-
-[node name="MainMenu" type="Control" unique_id=1271498089]
-layout_mode = 3
+[gd_scene load_steps=4 format=3 uid="uid://cb25v8pyc2pe1"]
+[ext_resource type="Script" path="res://scenes/ui/main_menu.gd" id="1"]
+[ext_resource type="Theme" path="res://scenes/ui/museum_theme.tres" id="2"]
+[ext_resource type="Script" path="res://scenes/ui/menu_backdrop.gd" id="3"]
+[node name="MainMenu" type="Control"]
+layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_sl1te")
-
-[node name="CenterVBox" type="VBoxContainer" parent="." unique_id=1584724884]
+script = ExtResource("1")
+theme = ExtResource("2")
+[node name="MuseumBackdrop" type="Node3D" parent="."]
+script = ExtResource("3")
+[node name="Shade" type="ColorRect" parent="."]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -20.0
-offset_right = 20.0
-offset_bottom = 20.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.02, 0.018, 0.014, 0.62)
+[node name="Margin" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="TitleLabel" type="Label" parent="CenterVBox" unique_id=427797194]
+[node name="Scroll" type="ScrollContainer" parent="Margin"]
+layout_mode = 2
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="Column" type="VBoxContainer" parent="Margin/Scroll"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="Eyebrow" type="Label" parent="Margin/Scroll/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "AFTER HOURS / THE MUSEUM"
+autowrap_mode = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+metadata/base_font_size = 14
+modulate = Color(0.796, 0.651, 0.424, 1)
+
+[node name="TopSpace" type="Control" parent="Margin/Scroll/Column"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Heading" type="Label" parent="Margin/Scroll/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SOME ASSEMBLY\nREQUIRED"
+autowrap_mode = 3
+mouse_filter = 2
 theme_override_font_sizes/font_size = 48
-text = "Old Tech"
+metadata/base_font_size = 48
 
-[node name="HSeparator" type="HSeparator" parent="CenterVBox" unique_id=1675007993]
-layout_mode = 2
-
-[node name="ButtonMargin" type="MarginContainer" parent="CenterVBox" unique_id=146721637]
-layout_mode = 2
-theme_override_constants/margin_left = 60
-theme_override_constants/margin_right = 60
-
-[node name="ButtonVBox" type="VBoxContainer" parent="CenterVBox/ButtonMargin" unique_id=1806043784]
-layout_mode = 2
-
-[node name="PlayButton" type="Button" parent="CenterVBox/ButtonMargin/ButtonVBox" unique_id=1186531768]
+[node name="Tagline" type="Label" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Play"
+text = "A museum of unfinished things."
+autowrap_mode = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 20
+metadata/base_font_size = 20
 
-[node name="SettingsButton" type="Button" parent="CenterVBox/ButtonMargin/ButtonVBox" unique_id=567546274]
+[node name="PlayButton" type="Button" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Settings"
+text = "NEW GAME"
+theme_type_variation = &"MuseumMenuButton"
+size_flags_horizontal = 0
+alignment = 0
+metadata/base_button_font = 24
 
-[node name="ExitButton" type="Button" parent="CenterVBox/ButtonMargin/ButtonVBox" unique_id=22128580]
+[node name="SettingsButton" type="Button" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Exit"
+text = "SETTINGS"
+theme_type_variation = &"MuseumMenuButton"
+size_flags_horizontal = 0
+alignment = 0
+metadata/base_button_font = 24
 
-[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/PlayButton" to="." method="_on_play_button_pressed"]
-[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/SettingsButton" to="." method="_on_settings_button_pressed"]
-[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/ExitButton" to="." method="_on_exit_button_pressed"]
+[node name="ExitButton" type="Button" parent="Margin/Scroll/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "QUIT"
+theme_type_variation = &"MuseumMenuButton"
+size_flags_horizontal = 0
+alignment = 0
+metadata/base_button_font = 24
+
+[node name="DeveloperButton" type="Button" parent="Margin/Scroll/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Encounter select · F10"
+theme_type_variation = &"MuseumMenuButton"
+size_flags_horizontal = 0
+alignment = 0
+metadata/base_button_font = 14
+
+[node name="BottomSpace" type="Control" parent="Margin/Scroll/Column"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Footer" type="Label" parent="Margin/Scroll/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "WASD Move · Mouse Aim · E Toggle repair · Hold Space Slow"
+autowrap_mode = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+metadata/base_font_size = 14
+
+[connection signal="pressed" from="Margin/Scroll/Column/PlayButton" to="." method="_on_play_button_pressed"]
+
+[connection signal="pressed" from="Margin/Scroll/Column/SettingsButton" to="." method="_on_settings_button_pressed"]
+
+[connection signal="pressed" from="Margin/Scroll/Column/ExitButton" to="." method="_on_exit_button_pressed"]
+
+[connection signal="pressed" from="Margin/Scroll/Column/DeveloperButton" to="." method="_on_developer"]

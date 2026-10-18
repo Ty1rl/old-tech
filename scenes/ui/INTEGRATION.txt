@@ -1,3 +1,59 @@
+ROUND N WAVE2 — JAM-7 (base N1 8b38209)
+
+TimeStatusHUD replaces the four-tool/health/manual-clock HUD. The stable caller
+remains update_status(player, weapons, equipment). bind_time_controller(controller)
+must receive arena's ONE TimeController. No time/charge values are cached here;
+normal and repair rendering both read that controller. Equipment.condition and
+presentation_state are the public equipment/weapon display APIs. Four segments
+match Tuning.REPAIR_STEPS. IDs are still ring=1, beam=2, cone=3.
+
+JAM-3 / JAM-1 arena integration required (arena is exclusively JAM-3-owned):
+  - After StatusHud.new() is added to the HUD layer, call
+    status_hud.bind_time_controller(time_controller).
+  - Remove the old status_hud.update_timeline(...) call, recorded clock selection
+    caption/index overrides, clock_after/cost text and legacy health/clock readout.
+    A separate emergency view now owns the timeline presentation.
+  - Remove status_hud.visible = not repair_open. update_status sets camera
+    visibility and keeps the passive HUD available during repair. The HUD's
+    authored repair_time_overlay.tscn draws the SAME time gauge above layer 100
+    repair art at the upper right. It hides during native pause/emergency and
+    optional normal HUD-number hiding does not suppress repair readability.
+    If popup layers change, adjust RepairTimeOverlay.layer in the scene inspector.
+  - Instantiate scenes/ui/emergency_view.tscn in a CanvasLayer below popup layer
+    100 and above the world HUD (e.g. layer 60). After add_child, call
+    view.bind_emergency_rewind(emergency_rewind). Binding before ready also works.
+  - Arena consumes wheel down/up and calls emergency_rewind.step_selection(+1/-1).
+    Consume click/Enter and call confirm() BEFORE weapon input. This view has no
+    input handler and intentionally ignores GUI mouse events. Do not add another
+    input handler to the view. World freeze/preview restore/history are arena's
+    responsibility; finish any ScrubView display easing before capture/commit.
+  - Unbind with bind_emergency_rewind(null) when reusing a view for another arena.
+    New attempts, abandonment, confirm and freed views clean up display signals.
+    Empty history displays NOW; checkpoint and recorded ages come from the core.
+  - Keep HUD under pause/result popups. The repair overlay hides on native pause;
+    disable/hide world HUD as appropriate while a blocking tutorial/menu owns play.
+
+Editable screens:
+  main_menu, settings, pause_menu, run_result and encounter_menu .tscn files own
+  their actual controls, node names, text and signal connections. _ready does not
+  delete or regenerate their child trees. Shared styling: museum_theme.tres.
+  Popup roots inherit menu_layout.gd and expose panel_width/panel_height.
+  Example: open settings.tscn, change its panel_height or Body separation, edit the
+  TeachingNote text, or reorder the named controls without editing gameplay code.
+  Font scaling uses each authored Label's base_font_size metadata. Unique names
+  keep @onready bindings valid when container paths are rearranged. Preserve UIDs
+  on main_menu/pause_menu: the existing scene registry references them.
+  ui_style.shell remains for the independently owned tutorial; no tutorial edits.
+
+Verification: check.py --seat jam-7 --suite ui_n (51 GUI/core checks, plus timing
+samples). render.py --seat jam-7 --script res://scenes/ui_preview_n/capture.gd
+--name round-n-wave2-ui --timeout 60. Preview uses real museum/player/repair assets
+and actual TimeCore sessions, with small display fixtures for player/weapon data.
+It is not a merged arena, repair-input migration or complete campaign playtest.
+
+Earlier tutorial/menu integration notes follow for reference; JAM-4 owns current
+Round N tutorial changes, so obsolete clock/rewind lesson wording below is theirs.
+
 ROUND K — JAM-7: TUTORIAL, MENUS AND SETTINGS
 
 Base: 6b35d16. No arena, player, weapon, enemy, status HUD, history or campaign

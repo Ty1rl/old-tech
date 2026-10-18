@@ -1,8 +1,124 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 [ext_resource type="Script" path="res://scenes/ui/run_result.gd" id="1"]
+[ext_resource type="Theme" path="res://scenes/ui/museum_theme.tres" id="2"]
+
 [node name="RunResult" type="Control"]
-layout_mode = 3
+layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+process_mode = 3
 script = ExtResource("1")
+theme = ExtResource("2")
+panel_height = 420.0
+
+[node name="Shade" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.035, 0.03, 0.025, 0.78)
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="Center" type="CenterContainer" parent="Margin"]
+layout_mode = 2
+
+[node name="Panel" type="PanelContainer" parent="Margin/Center"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Stack" type="VBoxContainer" parent="Margin/Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="VBoxContainer" parent="Margin/Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Eyebrow" type="Label" parent="Margin/Center/Panel/Stack/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "MUSEUM AFTER HOURS"
+autowrap_mode = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 13
+metadata/base_font_size = 13
+modulate = Color(0.796, 0.651, 0.424, 1)
+
+[node name="Title" type="Label" parent="Margin/Center/Panel/Stack/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Another chance"
+autowrap_mode = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 34
+metadata/base_font_size = 34
+
+[node name="Subtitle" type="Label" parent="Margin/Center/Panel/Stack/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Retry this room with a fresh time meter and rewind budget."
+autowrap_mode = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 17
+metadata/base_font_size = 17
+modulate = Color(0.706, 0.671, 0.6, 1)
+
+[node name="Separator" type="HSeparator" parent="Margin/Center/Panel/Stack/Header"]
+layout_mode = 2
+
+[node name="Scroll" type="ScrollContainer" parent="Margin/Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="Body" type="VBoxContainer" parent="Margin/Center/Panel/Stack/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="RetryButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Retry room"
+
+[node name="SettingsButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Settings"
+
+[node name="MainButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Return to main menu"
+
+[node name="QuitButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Quit"
+
+[connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/RetryButton" to="." method="_on_retry"]
+
+[connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/SettingsButton" to="." method="_on_settings"]
+
+[connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/MainButton" to="." method="_on_main"]
+
+[connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/QuitButton" to="." method="_on_quit"]

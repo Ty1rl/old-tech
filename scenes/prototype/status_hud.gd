@@ -1,84 +1,75 @@
+class_name TimeStatusHUD
 extends Control
-
+## Display only. Arena supplies its ONE TimeController through bind_time_controller.
+## Weapon IDs remain 1=ring, 2=beam, 3=cone. Time is never equipment.
 const UI = preload("res://scenes/ui/ui_style.gd")
-const Tuning = preload("res://scenes/prototype/tuning.gd")
 const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
-# Screen-space geometry keeps these small gauges readable at any camera zoom.
-# Leave the center empty: neither a filled disc nor a label covers the player.
-const TOOLS: Array[StringName] = [&"ring", &"beam", &"cone", &"clock"]
-const COLORS: Array[Color] = [ToolStyle.RING, ToolStyle.BEAM, ToolStyle.CONE, ToolStyle.CLOCK]
-const NAMES: Array[String] = ["Ring", "Flash", "Cone", "Clock"]
-const KEYS: Array[String] = ["1", "2", "3", "4"]
-const RADIUS := 51.0
-const WIDTH := 5.0
-const GAP := 0.16
+const TOOLS: Array[StringName] = [&"ring", &"beam", &"cone"]
+const COLORS: Array[Color] = [ToolStyle.RING, ToolStyle.BEAM, ToolStyle.CONE]
+const NAMES: Array[String] = ["Ring", "Flash", "Cone"]
+const TIME_COLOR := Color("bf92e8")
+const CHECKPOINTS: int = preload("res://scenes/prototype/tuning.gd").REPAIR_STEPS
 const READOUT_FILE := "user://combat-hud.cfg"
 const READOUT_ALPHA: Array[float] = [1.0, 0.25, 0.0]
 
-var readout_mode: int = 1 # Start dim; the local gauges should carry normal play.
+var time_controller: TimeController
+var tracked_player: Node3D
 var center := Vector2.ZERO
-var fractions: Array[float] = [1.0, 1.0, 1.0, 1.0]
-var selected: int = 0
-var health_fraction := 1.0
-var slowing := false
+var fractions: Array[float] = [1.0, 1.0, 1.0]
+var available_tools: Array[int] = []
+var selected := 0
 var repairing := false
 var caption := ""
-var available_tools: Array[int] = [1,2,3,4]
-var charge_fraction := 0.0
 var charging := false
-var damage_bright := 0.0
+var charge_fraction := 0.0
+var readout_mode := 1
 var key_hint: Label
-var tracked_player: Node3D
-var inspecting := false
-var history_seconds := 0.0
-var selected_age := 0.0
-var jump_cost := 0.0
-var time_feedback := ""
-var legend: RichTextLabel
 var _scale := 1.0
-var _hint_state := -1
 var _font: Font
-
-
+var _hit_light := 0.0
+var _hint_state := -1
+var _repair_overlay: CanvasLayer
+var _repair_gauge: Control
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_font = ThemeDB.fallback_font
-	var settings := ConfigFile.new()
-	if settings.load(READOUT_FILE) == OK:
-		readout_mode = clampi(int(settings.get_value("hud", "readout", 1)), 0, 2)
+	var config := ConfigFile.new()
+	if config.load(READOUT_FILE) == OK:
+		readout_mode = clampi(int(config.get_value("hud", "readout", 1)), 0, 2)
 	key_hint = Label.new()
-	key_hint.text = "F7 · numbers: full / dim / hidden"
-	key_hint.add_theme_font_size_override("font_size", 13)
-	key_hint.modulate = Color(1, 1, 1, 0.55)
 	key_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	key_hint.modulate = Color(1, 1, 1, .65)
 	add_child(key_hint)
+	_scale = UI.scale_for(self)
+	key_hint.add_theme_font_size_override("font_size", roundi(13 * _scale))
 	key_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	key_hint.offset_left = 16
-	key_hint.offset_top = -28
-	key_hint.offset_right = 360
-	key_hint.offset_bottom = -8
-	legend = RichTextLabel.new()
-	legend.bbcode_enabled = true
-	legend.scroll_active = false
-	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	legend.add_theme_font_size_override("normal_font_size", 12)
-	add_child(legend)
-	legend.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	legend.offset_left = 16
-	legend.offset_right = -16
-	legend.offset_top = -52
-	legend.offset_bottom = -30
-	legend.text = "[center][color=#%s]Cut blue[/color] · [color=#%s]Heat orange[/color] · [color=#%s]Shoot yellow[/color][/center]" % [ToolStyle.RING.to_html(false), ToolStyle.CONE.to_html(false), ToolStyle.BEAM.to_html(false)]
+	set_combat_hint(false)
+	# Authored overlay lives above the transparent repair popup's layer (100).
+	# It reads this same controller; it owns no meter/charge state or input.
+	_repair_overlay = preload("res://scenes/ui/repair_time_overlay.tscn").instantiate()
+	add_child(_repair_overlay)
+	_repair_gauge = _repair_overlay.get_node("Gauge")
+	_repair_gauge.draw.connect(_draw_repair_time)
 
+func bind_time_controller(controller: TimeController) -> void:
+	if is_instance_valid(time_controller) and time_controller.hit_taken.is_connected(_on_hit):
+		time_controller.hit_taken.disconnect(_on_hit)
+	time_controller = controller
+	if is_instance_valid(time_controller):
+		time_controller.hit_taken.connect(_on_hit)
+	queue_redraw()
+
+func _on_hit(cost: float) -> void:
+	if cost > 0: _hit_light = 1.0
 
 func cycle_readout() -> void:
 	readout_mode = (readout_mode + 1) % READOUT_ALPHA.size()
-	var settings := ConfigFile.new()
-	settings.set_value("hud", "readout", readout_mode)
-	settings.save(READOUT_FILE)
-
+	var config := ConfigFile.new()
+	config.set_value("hud", "readout", readout_mode)
+	config.save(READOUT_FILE)
 
 func set_combat_hint(muted: bool) -> void:
 	var manager := get_node_or_null("/root/SceneManager")
@@ -89,147 +80,108 @@ func set_combat_hint(muted: bool) -> void:
 	key_hint.text = "E toggle repair · hold Space: slow · M sound: %s · F7 numbers" % ("off" if muted else "on")
 	if developer: key_hint.text += " · F10 encounters"
 
-
-
 func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> void:
 	tracked_player = player
 	var camera: Camera3D = player.camera
 	visible = not camera.is_position_behind(player.global_position)
-	selected = clampi(weapons.selected_tool - 1, 0, 3)
+	selected = clampi(weapons.selected_tool - 1, 0, 2)
 	repairing = equipment.repairing != &""
-	if repairing:
+	if repairing and equipment.repairing in TOOLS:
 		selected = TOOLS.find(equipment.repairing)
-	var next_health := clampf(player.health / Tuning.PLAYER.health, 0.0, 1.0)
-	if next_health < health_fraction: damage_bright = 1.0
-	health_fraction = next_health
-	available_tools.assign(weapons.available_tools)
-	charging = weapons.beam_charging
-	charge_fraction = weapons.beam_charge
-	slowing = player.world_scale < 1.0
+	available_tools.clear()
+	for tool: int in weapons.available_tools:
+		if tool in [1, 2, 3]: available_tools.append(tool)
+	var presentation: Dictionary = weapons.presentation_state()
+	charging = bool(presentation.get("charging", false))
+	charge_fraction = clampf(float(presentation.get("charge", 0.0)), 0, 1)
 	for i in range(TOOLS.size()):
-		fractions[i] = clampf(equipment.remaining(TOOLS[i]) / equipment.capacity(TOOLS[i]), 0.0, 1.0)
-	caption = NAMES[selected] if not available_tools.is_empty() else "Find the illuminated exhibit"
-	if available_tools.is_empty():
-		queue_redraw()
-		return
-	if not selected + 1 in available_tools:
-		caption += " · locked"
-	elif repairing:
-		caption += " · full · E close" if fractions[selected] >= 0.999 else " · repairing · E close"
-		if slowing: caption += " · Space slow"
-	elif not equipment.can_use(TOOLS[selected], 1.0 if selected < 2 else 0.000001):
-		caption += " · empty · E toggle repair"
-	elif selected == 0 and weapons.ring_drawing:
-		caption += " · draw %.0f%%" % (100.0 * weapons.preview_length / Tuning.RING.length)
-	elif selected == 0 and weapons.ring_phase != "idle":
-		caption += " · " + weapons.ring_phase
-	elif selected == 1 and weapons.beam_charging:
-		caption += " · charge %.0f%%" % (weapons.beam_charge * 100.0)
-	elif selected == 1 and weapons.beam_cooldown > 0.0:
-		caption += " · %.1fs" % weapons.beam_cooldown
-	elif selected == 2 and weapons.cone_active:
-		caption += " · firing"
-	elif selected == 2 and weapons.cone_burst_cooldown > 0.0:
-		caption += " · shove %.1fs" % weapons.cone_burst_cooldown
-	elif selected == 3:
-		caption += " · Space slow · wheel rewind"
-	elif fractions[selected] < 0.999:
-		caption += " · %.0f%% · E toggle repair" % (fractions[selected] * 100)
-	else:
-		caption += " · full"
-
+		fractions[i] = clampf(equipment.condition(TOOLS[i]), 0, 1)
+	caption = "Find the illuminated exhibit"
+	if selected + 1 in available_tools:
+		caption = NAMES[selected]
+		if repairing: caption += " · repairing · E close"
+		elif fractions[selected] <= .00001: caption += " · empty · E repair"
+		elif fractions[selected] < .999: caption += " · %.0f%% · E repair" % (fractions[selected] * 100)
+		else: caption += " · full"
 	queue_redraw()
 
-
-func _process(_delta: float) -> void:
-	damage_bright = maxf(0.0, damage_bright - _delta * 1.6)
-	legend.visible = get_window().size.y >= 480
-	var factor := UI.scale_for(self)
-	if not is_equal_approx(_scale, factor):
-		_scale = factor
-		key_hint.add_theme_font_size_override("font_size", roundi(13 * factor))
-		key_hint.offset_top = -28 * factor
-		key_hint.offset_bottom = -6 * factor
-		key_hint.offset_right = size.x - 16
-		legend.add_theme_font_size_override("normal_font_size", roundi(12 * factor))
-		legend.offset_top = -52 * factor
-		legend.offset_bottom = -30 * factor
-	if not is_instance_valid(tracked_player):
-		return
-	# Camera and player both interpolate. Project their rendered transforms
-	# together so the gauges do not drift during movement or a timeline jump.
-	var camera: Camera3D = tracked_player.camera
-	var point: Vector3 = tracked_player.get_global_transform_interpolated() * (Vector3.UP * 0.5)
-	var view: Vector3 = camera.get_global_transform_interpolated().affine_inverse() * point
-	var clip: Vector4 = camera.get_camera_projection() * Vector4(view.x, view.y, view.z, 1.0)
-	if absf(clip.w) > 0.000001:
-		center = (Vector2(clip.x, -clip.y) / clip.w + Vector2.ONE) * get_viewport_rect().size * 0.5
+func _process(delta: float) -> void:
+	_hit_light = maxf(0.0, _hit_light - delta * 1.6)
+	var scale := UI.scale_for(self)
+	if not is_equal_approx(_scale, scale):
+		_scale = scale
+		key_hint.add_theme_font_size_override("font_size", roundi(13 * _scale))
+	key_hint.position = Vector2(16, size.y - 28 * _scale)
+	key_hint.size.x = size.x - 32
+	var emergency := is_instance_valid(time_controller) and time_controller.emergency_active
+	key_hint.visible = not emergency and not repairing
+	_repair_overlay.visible = repairing and is_visible_in_tree() and not get_tree().paused and not emergency
+	if _repair_overlay.visible: _repair_gauge.queue_redraw()
+	if is_instance_valid(tracked_player):
+		# Project interpolated camera and player together to prevent movement drift.
+		var camera: Camera3D = tracked_player.camera
+		var point: Vector3 = tracked_player.get_global_transform_interpolated() * (Vector3.UP * .5)
+		var view: Vector3 = camera.get_global_transform_interpolated().affine_inverse() * point
+		var clip: Vector4 = camera.get_camera_projection() * Vector4(view.x, view.y, view.z, 1)
+		if absf(clip.w) > .000001:
+			center = (Vector2(clip.x, -clip.y) / clip.w + Vector2.ONE) * get_viewport_rect().size * .5
 	queue_redraw()
-
-
-func update_timeline(history: RefCounted, cost: float, feedback: String, clock_after: float) -> void:
-	inspecting = history.inspecting
-	history_seconds = history.available_seconds
-	selected_age = history.selected_seconds_ago
-	jump_cost = cost
-	time_feedback = feedback
-	if inspecting:
-		caption = "NOW · release Space to resume" if selected_age < 0.000001 else "−%.2fs · cost %.1f · clock %.1f after" % [selected_age, jump_cost, clock_after]
-	queue_redraw()
-
 
 func _draw() -> void:
-	var radius := RADIUS * _scale
-	var width := WIDTH * _scale
 	for i in range(TOOLS.size()):
-		var start := -PI + i * PI * 0.5 + GAP
-		var finish := start + PI * 0.5 - GAP * 2.0
-		var unlocked := i + 1 in available_tools
-		var active := unlocked and (i == selected or (i == 3 and (slowing or inspecting)))
-		var color := COLORS[i] if unlocked else Color("a39b8e")
-		draw_arc(center, radius, start, finish, 32, Color(color, 0.17 if unlocked else 0.09), width + 2 * _scale, true)
-		if fractions[i] > 0.0 and unlocked:
-			draw_arc(center, radius, start, lerpf(start, finish, fractions[i]), 32,
-				Color(color, 0.8 if active else 0.4), width, true)
-		if i == selected and unlocked:
-			draw_arc(center, radius + 6 * _scale, start, finish, 32, Color(color, 0.8), 2 * _scale, true)
-		var middle := (start + finish) * 0.5
-		var direction := Vector2(cos(middle), sin(middle))
-		var label_at := center + direction * (radius + 18 * _scale)
-		_draw_centered(KEYS[i], label_at + Vector2(0, 4 * _scale), 12, Color(color, 0.95 if active else 0.45 if unlocked else 0.22))
-		if unlocked and fractions[i] < 0.25:
-			draw_circle(center + direction * (radius - 9 * _scale), 2 * _scale, Color(color,0.8))
-	var health_start := -PI * 0.4
-	var health_end := health_start + TAU * 0.8
-	var health_radius := radius - 14 * _scale
-	draw_arc(center, health_radius, health_start, health_end, 48, Color("ece4d2",0.15), 3 * _scale,true)
-	if health_fraction > 0:
-		draw_arc(center, health_radius, health_start, lerpf(health_start,health_end,health_fraction),48,
-			Color("ece4d2",0.45+damage_bright*.55),3*_scale,true)
+		if not i + 1 in available_tools: continue
+		var active := i == selected
+		var radius := (62.0 if active else 53.0) * _scale
+		var start := -PI + i * PI / 3.0 + .08
+		var end := -PI + (i + 1) * PI / 3.0 - .08
+		var color := Color(COLORS[i], .92 if active else .22)
+		# Each quarter is one real repair checkpoint, including partial condition.
+		for checkpoint in range(CHECKPOINTS):
+			var a := lerpf(start, end, float(checkpoint) / CHECKPOINTS) + .018
+			var b := lerpf(start, end, float(checkpoint + 1) / CHECKPOINTS) - .018
+			draw_arc(center, radius, a, b, 10, Color(COLORS[i], .14 if active else .06), 7 * _scale, true)
+			var fill := clampf(fractions[i] * CHECKPOINTS - checkpoint, 0, 1)
+			if fill > 0:
+				draw_arc(center, radius, a, lerpf(a, b, fill), 10, color, 6 * _scale, true)
+		if active:
+			draw_arc(center, radius + 8 * _scale, start, end, 24, color, 1.5 * _scale, true)
+		var middle := (start + end) * .5
+		_draw_centered(str(i + 1), center + Vector2(cos(middle), sin(middle)) * (radius + 19 * _scale), 12, color)
+	if not repairing: _draw_time(self, center)
+	if not (is_instance_valid(time_controller) and time_controller.emergency_active):
+		_draw_centered(caption, center + Vector2(0, 125) * _scale, 12, Color("ece4d2", .8))
 	if charging:
-		var pointer := get_viewport().get_mouse_position() + Vector2(0,-24*_scale)
-		pointer = pointer.clamp(Vector2.ONE*16*_scale,get_viewport_rect().size-Vector2.ONE*16*_scale)
-		draw_arc(pointer,12*_scale,-PI*.5,PI*1.5,32,Color(COLORS[1],.2),3*_scale,true)
-		draw_arc(pointer,12*_scale,-PI*.5,-PI*.5+TAU*charge_fraction,32,Color(COLORS[1],.9),3*_scale,true)
-	_draw_centered(caption,center+Vector2(0,radius+39*_scale),13,Color(COLORS[selected],.95))
-	if inspecting:
-		var half_width := minf(100*_scale,(size.x-40)*.5)
-		var timeline_center := Vector2(clampf(center.x,half_width+20,size.x-half_width-20),minf(center.y+radius+57*_scale,size.y-90*_scale))
-		var left := timeline_center-Vector2(half_width,0)
-		var right := timeline_center+Vector2(half_width,0)
-		draw_line(left,right,Color(COLORS[3],.35),3*_scale,true)
-		var fraction := selected_age/history_seconds if history_seconds>0 else 0.0
-		var cursor := right.lerp(left,clampf(fraction,0,1))
-		draw_line(cursor-Vector2(0,5*_scale),cursor+Vector2(0,5*_scale),COLORS[3],2*_scale,true)
-		_draw_centered("−%.1fs" % history_seconds,left+Vector2(0,20*_scale),11,COLORS[3])
-		_draw_centered("NOW",right+Vector2(0,20*_scale),11,COLORS[3])
-		var hint := "Wheel: past / present · Esc cancel" if selected_age < .000001 else "Release Space: jump · Esc: keep present"
-		_draw_centered(time_feedback if not time_feedback.is_empty() else hint,timeline_center+Vector2(0,43*_scale),12,Color(COLORS[3],.9))
+		var pointer := (get_viewport().get_mouse_position() + Vector2(0, -24 * _scale)).clamp(Vector2.ONE * 16 * _scale, size - Vector2.ONE * 16 * _scale)
+		draw_arc(pointer, 12 * _scale, -PI * .5, PI * 1.5, 32, Color(COLORS[1], .2), 3 * _scale, true)
+		draw_arc(pointer, 12 * _scale, -PI * .5, -PI * .5 + TAU * charge_fraction, 32, COLORS[1], 3 * _scale, true)
 
+func _draw_repair_time() -> void:
+	_draw_time(_repair_gauge, Vector2(size.x - 140 * _scale, 120 * _scale))
 
-func _draw_centered(text: String, at: Vector2, font_size: int, color: Color) -> void:
+func _draw_time(surface: Control, origin: Vector2) -> void:
+	if is_instance_valid(time_controller):
+		var radius := 56 * _scale
+		var start := PI * .13
+		var end := PI * .87
+		var fraction := clampf(time_controller.meter / maxf(.00001, time_controller.capacity), 0, 1)
+		surface.draw_arc(origin, radius, start, end, 48, Color(TIME_COLOR, .16), 7 * _scale, true)
+		if fraction > 0:
+			surface.draw_arc(origin, radius, start, lerpf(start, end, fraction), 48, Color(TIME_COLOR.lightened(_hit_light * .35), .9), 6 * _scale, true)
+		# Emergency header carries the charge count above its timeline.
+		if not time_controller.emergency_active:
+			for i in range(time_controller.charges_per_attempt):
+				var at := origin + Vector2((i - (time_controller.charges_per_attempt - 1) * .5) * 15, 79) * _scale
+				var points := PackedVector2Array([at + Vector2(0, -5) * _scale, at + Vector2(4, 0) * _scale, at + Vector2(0, 5) * _scale, at + Vector2(-4, 0) * _scale])
+				if i < time_controller.charges_remaining: surface.draw_colored_polygon(points, TIME_COLOR)
+				else:
+					points.append(points[0]); surface.draw_polyline(points, Color(TIME_COLOR, .4), _scale, true)
+		if (repairing or readout_mode < 2) and not time_controller.emergency_active:
+			_draw_centered("Time %.0f%% · %d rewinds left" % [fraction * 100, time_controller.charges_remaining], origin + Vector2(0, 104) * _scale, 12, Color(TIME_COLOR, 1.0 if repairing else READOUT_ALPHA[readout_mode]), surface)
+
+func _draw_centered(text: String, at: Vector2, font_size: int, color: Color, surface: Control = self) -> void:
 	font_size = roundi(font_size * _scale)
-	var width := _font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size).x
-	var x := clampf(at.x-width*.5,8,maxf(8,size.x-width-8))
-	draw_string(_font,Vector2(x,at.y+_scale),text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size,Color(0,0,0,.65))
-	draw_string(_font,Vector2(x,at.y),text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size,color)
+	var width := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var x := clampf(at.x - width * .5, 8, maxf(8, size.x - width - 8))
+	var y := clampf(at.y, font_size, maxf(font_size, size.y - 52 * _scale))
+	surface.draw_string(_font, Vector2(x, y + _scale), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0, 0, 0, .65))
+	surface.draw_string(_font, Vector2(x, y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)

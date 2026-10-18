@@ -1,33 +1,17 @@
-extends Control
-const UI = preload("res://scenes/ui/ui_style.gd")
+extends "res://scenes/ui/menu_layout.gd"
 const Rooms = preload("res://scenes/prototype/rooms.gd")
 const PatternEnemy = preload("res://scenes/prototype/pattern_enemy.gd")
-var room_picker: OptionButton
-var encounter_picker: OptionButton
-var phase_picker: OptionButton
+@onready var room_picker: OptionButton = %RoomPicker
+@onready var encounter_picker: OptionButton = %EncounterPicker
+@onready var phase_picker: OptionButton = %PhasePicker
 
 func _ready() -> void:
 	if not SceneManager.developer_tools:
 		queue_free()
 		return
-	var column := UI.shell(self, "Encounter select", "Development shortcuts · starts with the equipment needed here.", 560)
-	room_picker = OptionButton.new()
-	room_picker.name = "RoomPicker"
+	super._ready()
 	for room: Dictionary in Rooms.definitions(): room_picker.add_item(room.title)
-	column.add_child(room_picker)
-	encounter_picker = OptionButton.new()
-	encounter_picker.name = "EncounterPicker"
-	column.add_child(encounter_picker)
-	phase_picker = OptionButton.new()
-	phase_picker.name = "PhasePicker"
-	column.add_child(phase_picker)
-	UI.label(column, "Phase selection applies only to boss encounters.", 14).modulate = UI.MUTED
-	room_picker.item_selected.connect(func(_index): _update_encounters())
-	encounter_picker.item_selected.connect(func(_index): _update_phases())
 	_update_encounters()
-	UI.button(column, "Start encounter", _launch, "StartEncounter")
-	UI.button(column, "Prototype sandbox", func(): SceneManager.start_play(true))
-	UI.button(column, "Back", func(): SceneManager.close_popup(&"Developer"))
 	UI.focus_on_open(self, room_picker)
 
 func _update_encounters() -> void:
@@ -59,3 +43,8 @@ func _launch() -> void:
 	if SceneManager.go_to(&"Campaign", {"debug_room": room_picker.selected,
 		"debug_wave": encounter_picker.selected, "debug_phase": phase_picker.selected-1}):
 		GameState.start_game()
+
+func _on_room(_index: int) -> void: _update_encounters()
+func _on_encounter(_index: int) -> void: _update_phases()
+func _on_sandbox() -> void: SceneManager.start_play(true)
+func _on_back() -> void: SceneManager.close_popup(&"Developer")

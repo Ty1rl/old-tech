@@ -10,8 +10,16 @@ var cues: Array[StringName] = []
 var metrics := {}
 
 class PlayerProbe extends Node3D:
-	var health := 100.0
-	func take_damage(amount: float) -> void: health = maxf(0, health - maxf(0, amount))
+	var time_controller: TimeController = TimeController.new()
+	var can_act: bool:
+		get: return not time_controller.emergency_active and not time_controller.exhausted
+	func _init() -> void:
+		time_controller.auto_advance = false
+		add_child(time_controller)
+	func begin_attempt(meter := 100.0) -> void:
+		time_controller.begin_attempt()
+		time_controller.try_spend(time_controller.capacity - meter)
+	func take_damage(amount: float) -> void: time_controller.apply_hit(amount)
 
 
 func _initialize() -> void: call_deferred("run")
@@ -26,7 +34,7 @@ func fresh() -> void:
 	director.clear()
 	director.cover.set_rectangles([])
 	player.position = Vector3.ZERO
-	player.health = 100
+	player.begin_attempt(100)
 	cues.clear()
 
 
@@ -94,26 +102,26 @@ func run() -> void:
 		director.launch_projectile(Vector3(0, 1, -6), Vector3.BACK, 10, 7.5)
 		fly(dt, .25)
 		fly(dt, 1.0, 6.0)
-		expect(player.health == 100, "reaction delay plus ordinary lateral movement dodges shot at dt " + str(dt))
+		expect(player.time_controller.meter == 100, "reaction delay plus ordinary lateral movement dodges shot at dt " + str(dt))
 	fresh()
 	director.launch_projectile(Vector3(0, 1, -6), Vector3.BACK, 10)
 	fly(1.0 / 60, 1.0)
-	expect(player.health == 90 and cues.count(&"player_hurt") == 1, "standing in the actual path deals one visible/audible damage cue")
+	expect(player.time_controller.meter == 90 and cues.count(&"player_hurt") == 1, "standing in the actual path deals one visible/audible damage cue")
 	fresh()
 	director.cover.set_rectangles([Rect2(-2, -4, 4, 1)])
 	director.launch_projectile(Vector3(0, 1, -6), Vector3.BACK, 10)
 	director._step_projectiles(1, player)
-	expect(player.health == 100 and director.projectiles.is_empty(), "cover sweep absorbs projectile before player without tunneling")
+	expect(player.time_controller.meter == 100 and director.projectiles.is_empty(), "cover sweep absorbs projectile before player without tunneling")
 	fresh()
 	director.cover.set_rectangles([Rect2(-2, 1, 4, 1)])
 	director.launch_projectile(Vector3(0, 1, -4), Vector3.BACK, 10)
 	director._step_projectiles(1, player)
-	expect(player.health == 90, "cover behind the player cannot absorb an earlier body entry")
+	expect(player.time_controller.meter == 90, "cover behind the player cannot absorb an earlier body entry")
 	fresh()
 	director.cover.set_rectangles([Rect2(-1, -1, 2, 2)])
 	director.launch_projectile(Vector3(0, 1, 0), Vector3.BACK, 10)
 	director._step_projectiles(.01, player)
-	expect(player.health == 100 and director.projectiles.is_empty(), "overlapping cover wins a zero-time body-entry tie")
+	expect(player.time_controller.meter == 100 and director.projectiles.is_empty(), "overlapping cover wins a zero-time body-entry tie")
 	fresh()
 	shooter = director.spawn(&"ranged", Vector3(0, 0, -6))
 	director.cover.set_rectangles([Rect2(-1, -5.5, 2, .3)])
@@ -124,13 +132,13 @@ func run() -> void:
 	var alive_snapshot: Dictionary = director.capture_state()
 	shooter.health = 0
 	director.step(.8, player)
-	expect(player.health == 100 and director.projectiles.is_empty() and director.enemies.is_empty(), "killing the final emitter prevents a late quiet-room hit")
+	expect(player.time_controller.meter == 100 and director.projectiles.is_empty() and director.enemies.is_empty(), "killing the final emitter prevents a late quiet-room hit")
 	director.restore_state(alive_snapshot)
 	shooter = director.enemies[0]
 	expect(director.projectiles.size() == 1 and director.projectiles[0].owner_id == shooter.combat_id(), "rewind revives owner and its in-flight shot together")
 	director.clear()
 	director._step_projectiles(10, player)
-	expect(player.health == 100 and director._trail_mesh.get_surface_count() == 0, "room clear/retry removes all hostile heads and trails")
+	expect(player.time_controller.meter == 100 and director._trail_mesh.get_surface_count() == 0, "room clear/retry removes all hostile heads and trails")
 	fresh()
 	shooter = director.spawn(&"ranged", Vector3(0, 0, -6))
 	shooter.health = 0
@@ -142,14 +150,15 @@ func run() -> void:
 	shooter = director.spawn(&"ranged", Vector3(0, 0, -6))
 	shooter.attack_phase = &"windup"
 	shooter.attack_timer = .01
-	player.health = 0
+	player.begin_attempt(5)
+	player.take_damage(10)
 	director.step(1, player)
-	expect(director.projectiles.is_empty(), "dead player cannot trigger a late enemy release")
+	expect(director.projectiles.is_empty(), "emergency player cannot trigger a late enemy release")
 	fresh()
-	player.health = 5
+	player.begin_attempt(5)
 	for i in range(3): director.launch_projectile(Vector3(0, 1, -1.5), Vector3.BACK, 10)
 	director._step_projectiles(.2, player)
-	expect(player.health == 0 and director.projectiles.is_empty() and cues.count(&"player_hurt") == 1, "lethal impact clears remaining flight and emits one damage cue")
+	expect(player.time_controller.emergency_active and director.projectiles.size() == 2 and cues.count(&"player_hurt") == 1, "depleting impact freezes remaining flight and emits one damage cue")
 	# Boss warning lanes, committed fan and roomy movement-only gaps.
 	for kind: StringName in [&"sequence_boss", &"final_boss"]:
 		fresh()
@@ -170,7 +179,7 @@ func run() -> void:
 			anchors_agree = anchors_agree and director.projectiles[i].position == boss.projectile_origin(directions[i]) and director.projectiles[i].velocity.normalized().distance_to(directions[i]) < .001
 		expect(anchors_agree, "fan lanes and emitted positions/directions agree " + String(kind))
 		fly(1.0 / 120, 2)
-		expect(player.health == 100, "ordinary player fits gap at 3.2m with no defense ability " + String(kind))
+		expect(player.time_controller.meter == 100, "ordinary player fits gap at 3.2m with no defense ability " + String(kind))
 		var clear_gap := 2 * 3.2 * sin(.39) - 2 * Director.PROJECTILE_RADIUS
 		metrics["boss_clear_gap_m"] = clear_gap
 		expect(clear_gap > 1.6, "boss gap leaves substantial margin beyond a 1m player")

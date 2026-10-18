@@ -6,8 +6,17 @@ var failures: Array[String] = []
 var director: Node3D
 var player: Node3D
 class PlayerProbe extends Node3D:
-	var health := 100.0
-	func take_damage(amount: float) -> void: health = maxf(0, health - amount)
+	var time_controller: TimeController = TimeController.new()
+	var can_act: bool:
+		get: return not time_controller.emergency_active and not time_controller.exhausted
+	func _init() -> void:
+		time_controller.auto_advance = false
+		add_child(time_controller)
+	func begin_attempt(meter := 100.0) -> void:
+		time_controller.begin_attempt()
+		time_controller.try_spend(time_controller.capacity - meter)
+	func take_damage(amount: float) -> void: time_controller.apply_hit(amount)
+
 func _initialize() -> void: call_deferred("run")
 func expect(value: bool, message: String) -> void:
 	checks += 1
@@ -69,7 +78,7 @@ func run() -> void:
 	# A shooter locks its aim before firing and spends only world time.
 	director.clear()
 	player.position = Vector3.ZERO
-	player.health = 100
+	player.begin_attempt(100)
 	var ranged: Node3D = director.spawn(&"ranged", Vector3(0, 0, -8))
 	director.step(.01, player)
 	expect(ranged.kind == &"ranged" and ranged.attack_phase == &"windup" and ranged.ranged_warning.visible, "Ranged has a visible windup")
@@ -99,18 +108,18 @@ func run() -> void:
 	# Swept collision respects cover ordering, player dodge, damage and lifetime.
 	director.cover.set_rectangles([Rect2(-1, -4, 2, 1)])
 	player.position = Vector3.ZERO
-	player.health = 100
+	player.begin_attempt(100)
 	director.launch_projectile(Vector3(0, 0, -6), Vector3.BACK, 10)
 	director.step(1, player)
-	expect(player.health == 100 and director.projectiles.is_empty(), "Cover absorbs swept projectile before player")
+	expect(player.time_controller.meter == 100 and director.projectiles.is_empty(), "Cover absorbs swept projectile before player")
 	director.cover.set_rectangles([])
 	director.launch_projectile(Vector3(0, 0, -6), Vector3.BACK, 10)
 	director.step(1, player)
-	expect(player.health == 90 and director.projectiles.is_empty(), "Swept projectile hits player without tunneling")
+	expect(player.time_controller.meter == 90 and director.projectiles.is_empty(), "Swept projectile hits player without tunneling")
 	director.launch_projectile(Vector3(0, 0, -6), Vector3.BACK, 10)
 	player.position.x = 2
 	director.step(1, player)
-	expect(player.health == 90, "Sidestepping the locked shot avoids damage")
+	expect(player.time_controller.meter == 90, "Sidestepping the locked shot avoids damage")
 	director.clear()
 	for i in range(40): director.launch_projectile(Vector3.ZERO, Vector3.FORWARD, 10)
 	expect(director.projectiles.size() == 24, "Hostile projectiles have a hard live cap")
@@ -119,7 +128,7 @@ func run() -> void:
 	# Boss attacks use distinct footprints, locked facing, and recovery.
 	for kind: StringName in [&"loop_boss", &"sequence_boss", &"final_boss"]:
 		director.clear()
-		player.health = 100
+		player.begin_attempt(100)
 		player.position = Vector3(0, 0, -3)
 		var boss: Node3D = director.spawn(kind, Vector3.ZERO)
 		boss.facing = Vector3.FORWARD
@@ -128,11 +137,11 @@ func run() -> void:
 		var locked: Vector3 = boss.facing
 		player.position.x = 1
 		boss.step_enemy(.5, player)
-		expect(boss.facing == locked and player.health == 100, "Boss locks danger direction during windup: " + String(kind))
+		expect(boss.facing == locked and player.time_controller.meter == 100, "Boss locks danger direction during windup: " + String(kind))
 		boss.step_enemy(.61, player)
 		boss.step_enemy(.19, player)
 		expect(boss.attack_phase == &"recover" and boss.attack_timer >= 2, "Boss grants stationary recovery: " + String(kind))
-		if kind == &"loop_boss": expect(player.health < 100, "Loop boss radial attack matches its marked circle")
+		if kind == &"loop_boss": expect(player.time_controller.meter < 100, "Loop boss radial attack matches its marked circle")
 		else: expect(director.projectiles.size() >= 3, "Sequence boss fan attack spawns dodgeable bolts: " + String(kind))
 	# Model part removal is immediate and derived again on restore.
 	director.clear()

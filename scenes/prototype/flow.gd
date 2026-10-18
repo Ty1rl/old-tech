@@ -221,8 +221,9 @@ func start_pressure(seed: int) -> void:
 
 func next_burst(world_delta: float, player: Node3D) -> Dictionary:
 	if not pressure_active or not is_instance_valid(player): return {}
-	if float(player.health) <= 0:
-		pressure_active = false
+	if not player.can_act:
+		# Emergency pauses the schedule; exhaustion ends this room attempt.
+		if player.time_controller.exhausted: pressure_active = false
 		return {}
 	pressure_elapsed += maxf(0, world_delta)
 	var interval := WARNING_SECONDS + OPPORTUNITY_SECONDS + RECOVERY_SECONDS

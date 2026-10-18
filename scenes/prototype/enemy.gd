@@ -20,6 +20,7 @@ var radius: float = 0.7
 var max_health: float = 100.0
 var health: float = 100.0
 var move_speed: float = 0.0
+# Configured base hostile time cost; the player delegates scaling to TimeController.
 var contact_damage: float = 0.0
 var contact_cooldown: float = 0.0
 var cable_cut: bool = false
@@ -683,8 +684,10 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 
 
 func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> void:
+	if is_instance_valid(player) and not player.can_act: return
 	var before := position
 	_step_enemy(world_delta, player, neighbors)
+	if is_instance_valid(player) and not player.can_act: return
 	if is_instance_valid(part_visual) and world_delta > 0 and health > 0:
 		var speed := position.distance_to(before) / world_delta
 		part_visual.step_visual(world_delta, speed, stagger_timer > 0, flash_timer > 0, attack_phase)
@@ -815,13 +818,14 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 		_step_part_attack(active_ai_delta, player, post_dist)
 		return
 	if stagger_timer <= 0.0 and contact_damage > 0.0 and post_dist <= (radius + PLAYER_CONTACT_RADIUS + 0.05):
-		if float(player.health) > 0.0 and contact_cooldown <= 0.0:
-			player.take_damage(contact_damage)
+		if player.can_act and contact_cooldown <= 0.0:
+			# Commit the attack before a hit can synchronously capture emergency NOW.
 			contact_cooldown = float(Tuning.CONTACT_COOLDOWN)
 			if kind == &"skirmisher" and skirmish_phase == &"commit":
 				skirmish_phase = &"orbit"
 				skirmish_timer = 0.0
 				skirmish_strafe_sign = -skirmish_strafe_sign
+			player.take_damage(contact_damage)
 
 
 func projectile_origin(direction: Vector3) -> Vector3:
@@ -897,7 +901,7 @@ func _sync_ranged_visual() -> void:
 
 
 func _step_ranged(dt: float, player: Node3D, distance: float) -> void:
-	if health <= 0 or dt <= 0 or not is_instance_valid(player) or float(player.health) <= 0: return
+	if health <= 0 or dt <= 0 or not is_instance_valid(player) or not player.can_act: return
 	if attack_phase == &"approach":
 		if distance <= 11.5:
 			ranged_aim = Vector3(player.position.x - position.x, 0, player.position.z - position.z).normalized()
@@ -956,6 +960,7 @@ func pack_target(player_position: Vector3, neighbors: Array) -> Vector3:
 
 
 func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> void:
+	if health <= 0 or world_delta <= 0 or not is_instance_valid(player) or not player.can_act: return
 	var reach := radius + PLAYER_CONTACT_RADIUS + 0.1
 	if attack_phase == &"approach":
 		if distance <= reach:
@@ -968,10 +973,10 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 	if attack_timer > 0.0:
 		return
 	if attack_phase == &"windup":
-		if distance <= reach and player.health > 0:
-			player.take_damage(contact_damage)
 		attack_phase = &"recover"
 		attack_timer = float(Tuning.MATCHUPS.attack_recovery)
+		if distance <= reach and player.can_act:
+			player.take_damage(contact_damage)
 	else:
 		attack_phase = &"approach"
 

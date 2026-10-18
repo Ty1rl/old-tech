@@ -16,6 +16,9 @@ const MAX_OWNER_PROJECTILES := 6
 var _projectile_material: StandardMaterial3D
 var _trail_mesh: ImmediateMesh
 var _projectile_sequence := 0
+# Stops a caller's old tick after synchronous emergency restore or room retry.
+# Control-flow generation only: never rewind or capture it as world state.
+var _world_revision := 0
 var _repair_head_layer: CanvasLayer
 
 
@@ -89,22 +92,21 @@ func _total_scheduled_waves() -> int:
 
 
 func step(world_delta: float, player: Node3D) -> void:
+	var revision := _world_revision
+	if _suspend_for_player(player): return
 	_prune_dead_enemies()
 	_discard_orphaned_projectiles()
 	_step_projectiles(maxf(0, world_delta), player)
+	if revision != _world_revision or _suspend_for_player(player): return
 
 	if encounter_state == &"running":
-		if is_instance_valid(player) and float(player.health) <= 0.0:
-			encounter_active = false
-			encounter_state = &"defeat"
-		else:
-			var duration := float(Tuning.ENCOUNTER.duration)
-			var interval := maxf(0.1, float(Tuning.ENCOUNTER.interval))
-			var total_waves := _total_scheduled_waves()
-			encounter_elapsed = minf(duration, encounter_elapsed + maxf(0.0, world_delta))
-			while encounter_wave_index < total_waves and encounter_elapsed >= float(encounter_wave_index) * interval:
-				_spawn_encounter_wave(encounter_wave_index)
-				encounter_wave_index += 1
+		var duration := float(Tuning.ENCOUNTER.duration)
+		var interval := maxf(0.1, float(Tuning.ENCOUNTER.interval))
+		var total_waves := _total_scheduled_waves()
+		encounter_elapsed = minf(duration, encounter_elapsed + maxf(0.0, world_delta))
+		while encounter_wave_index < total_waves and encounter_elapsed >= float(encounter_wave_index) * interval:
+			_spawn_encounter_wave(encounter_wave_index)
+			encounter_wave_index += 1
 
 	var snapshot: Array[Node3D] = enemies.duplicate()
 	var burst: Dictionary = flow.next_burst(world_delta, player)
@@ -113,25 +115,23 @@ func step(world_delta: float, player: Node3D) -> void:
 		snapshot = enemies.duplicate()
 	var holds: Dictionary = flow.advance(world_delta, snapshot, player)
 	for enemy in snapshot:
-		if is_instance_valid(enemy) and enemy.health > 0.0 and (not is_instance_valid(player) or float(player.health) > 0):
+		if is_instance_valid(enemy) and enemy.health > 0.0 and (not is_instance_valid(player) or player.can_act):
 			var hold := float(holds.get(int(enemy.combat_id()), 0.0))
 			if hold > 0:
 				var speed := float(enemy.move_speed)
 				enemy.move_speed = 0.0
 				enemy.step_enemy(hold, player, snapshot)
 				enemy.move_speed = speed
+				if revision != _world_revision or _suspend_for_player(player): return
 			if world_delta - hold > 0: enemy.step_enemy(world_delta - hold, player, snapshot)
+			if revision != _world_revision or _suspend_for_player(player): return
 	flow.cohere(world_delta, snapshot, cover, holds)
 	_draw_arrivals()
 	_prune_dead_enemies()
 
-	if encounter_state == &"running":
-		if is_instance_valid(player) and float(player.health) <= 0.0:
-			encounter_active = false
-			encounter_state = &"defeat"
-		elif encounter_elapsed >= float(Tuning.ENCOUNTER.duration) and enemies.is_empty():
-			encounter_active = false
-			encounter_state = &"victory"
+	if encounter_state == &"running" and encounter_elapsed >= float(Tuning.ENCOUNTER.duration) and enemies.is_empty():
+		encounter_active = false
+		encounter_state = &"victory"
 
 
 func _spawn_encounter_wave(wave_idx: int) -> void:
@@ -261,6 +261,7 @@ func _cancel_encounter() -> void:
 
 
 func clear() -> void:
+	_world_revision += 1
 	_cancel_encounter()
 	projectiles.clear()
 	_sync_projectile_visuals()
@@ -309,6 +310,7 @@ func capture_state() -> Dictionary:
 
 
 func restore_state(data: Dictionary) -> void:
+	_world_revision += 1
 	if cover == null:
 		cover = CoverScript.new()
 	projectiles.clear()
@@ -319,7 +321,7 @@ func restore_state(data: Dictionary) -> void:
 			var velocity := Vector3(raw.velocity.x, 0, raw.velocity.z).limit_length(9)
 			if velocity.length_squared() < .0001 or float(raw.get("life", 0)) <= 0: continue
 			projectiles.append({"position": raw.position, "velocity": velocity,
-				"damage": clampf(float(raw.get("damage", 10)), 0, 100),
+				"damage": maxf(0, float(raw.get("damage", 10))),
 				"life": clampf(float(raw.get("life", 0)), 0, PROJECTILE_LIFETIME),
 				"age": clampf(float(raw.get("age", 0)), 0, PROJECTILE_LIFETIME),
 				"radius": PROJECTILE_RADIUS, "owner_id": maxi(0, int(raw.get("owner_id", 0))),
@@ -406,13 +408,14 @@ func status_text() -> String:
 		&"victory":
 			return "Encounter Victory! (F6 replay | R sandbox)"
 		&"defeat":
-			return "Player Down (0 HP) — Press R to reset or F6 to retry"
+			return "Time depleted — Press R to reset or F6 to retry"
 		_:
 			return "Sandbox"
 
 
 # Emissions are actor-owned; flight/visuals/snapshots are director-owned values.
 # Owner=0 is reserved for explicit standalone probes, not live enemy emissions.
+# damage is the base hostile time cost; TimeController applies hit tuning once.
 func launch_projectile(origin: Vector3, direction: Vector3, damage: float, speed := 7.5, owner_id: int = 0) -> bool:
 	var flat := Vector3(direction.x, 0, direction.z)
 	if projectiles.size() >= MAX_PROJECTILES or not origin.is_finite() or not flat.is_finite() or flat.length_squared() < .0001 or speed <= 0: return false
@@ -472,18 +475,33 @@ func _player_entry(start: Vector3, finish: Vector3, point: Vector3, radius: floa
 	return entry if entry >= 0 and entry <= 1 else -1.0
 
 
-func _step_projectiles(dt: float, player: Node3D) -> void:
-	if is_instance_valid(player) and float(player.health) <= 0:
+# An emergency is a suspended encounter, not defeat. Remaining flight is kept
+# for NOW/rewind; only exhausted attempts discard it and finish the encounter.
+func _suspend_for_player(player: Node3D) -> bool:
+	if not is_instance_valid(player) or player.can_act: return false
+	var controller: TimeController = player.time_controller
+	if controller.exhausted:
 		projectiles.clear()
-		_sync_projectile_visuals()
-		return
+		if encounter_state == &"running":
+			encounter_active = false
+			encounter_state = &"defeat"
+	_sync_projectile_visuals()
+	return true
+
+
+func _step_projectiles(dt: float, player: Node3D) -> void:
+	var revision := _world_revision
+	if _suspend_for_player(player): return
 	if dt <= 0:
 		_sync_projectile_visuals()
 		return
 	if cover == null: cover = CoverScript.new()
-	var live: Array[Dictionary] = []
-	for shot: Dictionary in projectiles:
-		if float(shot.life) <= 0: continue
+	var index := 0
+	while index < projectiles.size():
+		var shot: Dictionary = projectiles[index]
+		if float(shot.life) <= 0:
+			projectiles.remove_at(index)
+			continue
 		var travel_dt := minf(dt, float(shot.life))
 		var start: Vector3 = shot.position
 		var end: Vector3 = start + shot.velocity * travel_dt
@@ -494,20 +512,25 @@ func _step_projectiles(dt: float, player: Node3D) -> void:
 		# Cover wins exact ties and also shields a player already overlapping a
 		# blocked muzzle. A wall behind the player cannot absorb an earlier hit.
 		if entry >= 0 and (not obstacle.blocked or entry < float(obstacle.fraction) - .000001):
-			var before := float(player.health)
+			# Retire this impact BEFORE apply_hit can emit emergency_started and
+			# capture/restore NOW synchronously. Unprocessed shots stay frozen.
+			projectiles.remove_at(index)
+			_sync_projectile_visuals()
+			var controller: TimeController = player.time_controller
+			var before := controller.meter
 			player.take_damage(float(shot.damage))
-			if float(player.health) < before:
-				hostile_cue(&"player_hurt", player.position, clampf((before - float(player.health)) / 15, .65, 1.25))
-			if float(player.health) <= 0:
-				live.clear()
-				break
+			var spent := before - controller.meter
+			if spent > 0:
+				hostile_cue(&"player_hurt", player.position, clampf(spent / 15, .65, 1.25))
+			if revision != _world_revision or _suspend_for_player(player): return
 			continue
 		shot.life = maxf(0, float(shot.life) - dt)
-		if obstacle.blocked or shot.life <= 0: continue
+		if obstacle.blocked or shot.life <= 0:
+			projectiles.remove_at(index)
+			continue
 		shot.position = end
 		shot.age = minf(PROJECTILE_LIFETIME, float(shot.get("age", 0)) + travel_dt)
-		live.append(shot)
-	projectiles = live
+		index += 1
 	_sync_projectile_visuals()
 
 

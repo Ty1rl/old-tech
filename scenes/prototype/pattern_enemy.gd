@@ -247,7 +247,7 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 	if not handles(kind):
 		super.step_enemy(world_delta, player, neighbors)
 		return
-	if health <= 0 or world_delta <= 0: return
+	if health <= 0 or world_delta <= 0 or (is_instance_valid(player) and not player.can_act): return
 	if not pattern_open and window_timer > 0:
 		window_timer = maxf(0, window_timer - world_delta)
 		if window_timer <= 0: _reset_partial()
@@ -257,6 +257,7 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 	var locked_facing := facing
 	var locked := attack_phase != &"approach"
 	super.step_enemy(world_delta, player, neighbors)
+	if is_instance_valid(player) and not player.can_act: return
 	if locked: facing = locked_facing
 	var speed := position.distance_to(before) / world_delta
 	motion_clock += speed * world_delta * 5.5
@@ -290,7 +291,7 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 	if not handles(kind):
 		super._step_part_attack(world_delta, player, distance)
 		return
-	if health <= 0 or world_delta <= 0 or not is_instance_valid(player) or float(player.health) <= 0: return
+	if health <= 0 or world_delta <= 0 or not is_instance_valid(player) or not player.can_act: return
 	var mode := active_pattern()
 	var reach := 4.1 if is_boss() and mode == &"loop" else radius + PLAYER_CONTACT_RADIUS + 0.2
 	var trigger := 9.5 if is_boss() and mode in [&"pair", &"zigzag", &"core"] else reach
@@ -312,6 +313,9 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 		attack_phase = &"commit"
 		attack_timer = float(Tuning.PATTERNS.commit)
 	elif attack_phase == &"commit":
+		# Commit recovery before a strike can capture emergency NOW synchronously.
+		attack_phase = &"recover"
+		attack_timer = 2.3 if is_boss() else float(Tuning.PATTERNS.recovery)
 		if is_boss() and mode != &"loop":
 			var director := get_parent()
 			if director != null and director.has_method("launch_projectile"):
@@ -319,16 +323,15 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 				for direction in hostile_shot_directions():
 					emitted = director.launch_projectile(projectile_origin(direction), direction, contact_damage, 5.6, combat_id()) or emitted
 				if emitted and director.has_method("hostile_cue"): director.hostile_cue(&"hostile_fire", projectile_origin(ranged_aim), 1.0)
-		elif distance <= reach and player.health > 0:
+		elif distance <= reach and player.can_act:
 			var toward: Vector3 = player.position - position
 			if is_boss() or toward.normalized().dot(facing) > .2:
-				var before := float(player.health)
+				var controller: TimeController = player.time_controller
+				var before := controller.meter
 				player.take_damage(contact_damage)
 				var director := get_parent()
-				if float(player.health) < before and director != null and director.has_method("hostile_cue"):
+				if controller.meter < before and director != null and director.has_method("hostile_cue"):
 					director.hostile_cue(&"player_hurt", player.position, 1)
-		attack_phase = &"recover"
-		attack_timer = 2.3 if is_boss() else float(Tuning.PATTERNS.recovery)
 	else:
 		attack_phase = &"approach"
 	_sync_pattern_attack_warning()

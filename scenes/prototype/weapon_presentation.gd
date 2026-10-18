@@ -8,6 +8,7 @@ var phase := 0.0
 var vertices := 0
 var last_beam_start := Vector3.ZERO
 var last_air_origin := Vector3.ZERO
+var charge_glow_radius := 0.0
 
 
 func attach(parent: Node3D) -> void:
@@ -40,18 +41,44 @@ func reset() -> void:
 	phase = 0
 	mesh.clear_surfaces()
 	vertices = 0
+	charge_glow_radius = 0
 
 
 func rebuild(weapons: Node3D, player: Node3D, aim: Vector3) -> void:
 	mesh.clear_surfaces()
 	vertices = 0
-	if weapons.beam_pulses.is_empty() and weapons.beam_flash_timer <= 0 and not weapons.beam_charging and not weapons.cone_active:
+	charge_glow_radius = 0
+	var overlay: Dictionary = weapons.presentation_state()
+	var tool := int(overlay.tool)
+	var charging := bool(overlay.charging)
+	var charge := float(overlay.charge)
+	var blowing := bool(overlay.air)
+	if weapons.beam_pulses.is_empty() and weapons.beam_flash_timer <= 0 and not charging and not blowing:
 		return
 	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	if weapons.selected_tool == 2 and weapons.beam_charging and player != null:
+	if tool == 2 and charging and player != null:
 		var source := muzzle(player, 2)
-		var direction := Vector3(aim.x-player.global_position.x, 0, aim.z-player.global_position.z).normalized()
-		light(source, source + direction * lerpf(.35, 1.4, weapons.beam_charge), weapons.beam_charge, .6)
+		last_beam_start = source
+		charge_glow_radius = lerpf(.06,.24,charge)
+		# A growing halo on the aperture, with no forward beam until release.
+		var right := Vector3.RIGHT
+		var up := Vector3.UP
+		var camera: Variant = player.get("camera")
+		if camera is Camera3D:
+			right = camera.global_basis.x.normalized()
+			up = camera.global_basis.y.normalized()
+		for index in range(16):
+			var a := TAU * float(index)/16
+			var b := TAU * float(index+1)/16
+			var start := source + (right*cos(a)+up*sin(a))*charge_glow_radius
+			var end := source + (right*cos(b)+up*sin(b))*charge_glow_radius
+			for point in [source,start,end]:
+				mesh.surface_set_color(Color(1,.95,.65,(.35+.6*charge) if point == source else 0))
+				mesh.surface_set_uv(Vector2(.5,.5))
+				mesh.surface_add_vertex(point)
+				vertices += 1
+			ribbon(start,end,.045,Color(1,.85,.3,.3+charge*.6))
+		ribbon(source-right*.045,source+right*.045,.04,Color(1,.98,.75,.45+charge*.5))
 	for pulse: Dictionary in weapons.beam_pulses:
 		var source: Vector3 = pulse.get("muzzle", Vector3(pulse.pos.x, 1.2, pulse.pos.z))
 		var head := Vector3(pulse.pos.x, source.y, pulse.pos.z)
@@ -64,7 +91,7 @@ func rebuild(weapons: Node3D, player: Node3D, aim: Vector3) -> void:
 		var source: Vector3 = weapons.beam_visual_origin
 		var end := Vector3(weapons.beam_end.x, source.y, weapons.beam_end.z)
 		light(source, end, .7, clampf(weapons.beam_flash_timer/.14,0,1))
-	if weapons.selected_tool == 3 and weapons.cone_active and player != null:
+	if tool == 3 and blowing and player != null:
 		air(weapons, player)
 	# ImmediateMesh rejects an empty surface (e.g. a pulse still inside the gun).
 	if vertices == 0: ribbon(Vector3.ZERO, Vector3(.001,0,0), .001, Color(0,0,0,0))

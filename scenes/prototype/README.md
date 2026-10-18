@@ -13,7 +13,7 @@ The partner's original menu/game scenes and popup managers remain intact.
 
 - WASD moves; mouse aims. 1/2/3/4 equip ring/flash/cone/clock.
   Tab cycles forward; Shift+Tab cycles backward.
-- +/- zooms the view (10–32); R restores the closer default of 16.
+- +/- zooms the view (10–32); R restores the wider default of 22.
 - Ring: hold left mouse to draw a floor path, release to launch.
 - Flash: hold left mouse to charge, release to fire. Quick taps are weaker.
 - Cone: hold left mouse for continuous heat and repeating shove/stun pulses.
@@ -89,6 +89,7 @@ floor-level cutting path deals damage or stops against cover. The return
 homes harmlessly to the moving player, including through cover. Preview
 colors distinguish reachable and blocked portions of the cutting path.
 
+Charging grows a local glow on the aperture; it emits no beam before firing.
 Flash light starts at the modeled lens, with a narrow bright core and soft gold
 halo. A shot keeps its launch origin when the player moves and through rewind;
 the light extends only as far as its traveling collision pulse. Damage still
@@ -121,6 +122,10 @@ repair. Release E to stop the automatic slow. No separate T repair path exists.
 
 Equipping 4 does not activate time manipulation. A fresh Space press begins
 inspection; changing tools while already holding Space requires release first.
+A cool screen tint and TIME SLOW label mark slowed world time; player movement
+and animation intentionally remain responsive. Clock inspection uses a violet
+tint and TIME FROZEN label, with movement and animation stopped.
+
 Inspection blocks movement, attacks, repair and debug mutations. Its nearby
 readout shows NOW or selected age, proposed jump wear, and a short timeline.
 Positions and orientations ease between selected snapshots over 0.14 real
@@ -133,6 +138,10 @@ committed clock is capped at the lesser of its restored and live values before
 the jump cost. Other equipment, health, enemy roster/behavior, encounter state,
 and launched attacks restore to the selected snapshot. The clock stays equipped;
 held attacks/drawing/charge must start afresh after leaving inspection.
+While browsing, the held model, gauge selection, charge glow and cone effect
+show the recorded weapon. A few display-only values are stored with each
+snapshot; they never restore held inputs or apply damage. Clock controls stay
+active during review. These cosmetic poses remain approximate.
 
 Cancellation preserves the original present and charges inspection wear only.
 An unaffordable wheel selection is rejected; exhausting condition while browsing
@@ -169,8 +178,12 @@ python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 
 Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
 resource_integration, integration, parts, feedback, scrub_view, presentation,
-player_visual, variants, readability, weapon_presentation.
+player_visual, variants, readability, weapon_presentation, presentation_j.
 Use import after script/scene changes.
 The shared lab runner bounds execution and saves full logs in seat state.
 On another machine: `timeout 60s godot --headless --path . --script
 res://scenes/prototype/checks/rewind.gd` (one shell line).
+
+Teammate museum floor/wall/column assets from upstream d785266 are included.
+The original scenes/game.tscn demonstrates them; the combat-arena museum wrapper
+is assigned separately to jam-4. Current ownership is in shared COORDINATION.txt.

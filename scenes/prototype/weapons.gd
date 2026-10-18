@@ -8,6 +8,13 @@ const EquipmentScript = preload("res://scenes/prototype/equipment.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 const Presentation = preload("res://scenes/prototype/weapon_presentation.gd")
 var presentation: RefCounted = Presentation.new()
+var preview_overlay: Dictionary = {} # Display only; never restores held input.
+
+
+func presentation_state() -> Dictionary:
+	if not preview_overlay.is_empty(): return preview_overlay
+	return {"tool": selected_tool,"charging": beam_charging,"charge": beam_charge,
+		"air": cone_active,"phase": presentation.phase}
 
 const TOOL_IDS: Array[StringName] = [&"ring", &"beam", &"cone", &"clock"]
 
@@ -314,6 +321,7 @@ func cancel_input() -> void:
 
 
 func reset_state() -> void:
+	preview_overlay.clear()
 	presentation.reset()
 	beam_visual_origin = Vector3.ZERO
 	selected_tool = 1
@@ -359,6 +367,8 @@ func capture_state() -> Dictionary:
 			"charge": float(p_dict.get("charge", 0.0)),
 		})
 	return {
+		"overlay": {"tool": selected_tool,"charging": beam_charging,"charge": beam_charge,
+			"air": cone_active,"phase": presentation.phase},
 		"selected_tool": int(selected_tool),
 		"ring_phase": String(ring_phase),
 		"ring_pos": Vector3(ring_pos),
@@ -381,6 +391,7 @@ func capture_state() -> Dictionary:
 
 
 func restore_state(data: Dictionary) -> void:
+	preview_overlay.clear()
 	# Do not restore a held gesture: cancel drawing/charging/cone and require a fresh press.
 	ring_drawing = false
 	_clear_ring_preview()
@@ -1125,7 +1136,8 @@ func _rebuild_visuals(player: Node3D, aim: Vector3) -> void:
 		var ring_y := maxf(0.22, ring_pos.y + 0.22) if ring_phase == "outbound" else 0.22
 		_draw_circle_outline(Vector3(ring_pos.x, ring_y, ring_pos.z), float(Tuning.RING.radius), ring_col)
 
-	if selected_tool == 3 and cone_active and player != null:
+	var overlay := presentation_state()
+	if int(overlay.tool) == 3 and bool(overlay.air) and player != null:
 		# A faint floor footprint retains range information; moving air is drawn
 		# separately from the real nozzle by WeaponPresentation.
 		_draw_cone_sector(Vector3(player.global_position.x,.08,player.global_position.z), cone_forward,

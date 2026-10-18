@@ -8,6 +8,7 @@ const Enemies = preload("res://scenes/prototype/enemies.gd")
 const Equipment = preload("res://scenes/prototype/equipment.gd")
 const Cover = preload("res://scenes/prototype/cover.gd")
 const CombatFeedback = preload("res://scenes/prototype/combat_feedback.gd")
+const TimeCue = preload("res://scenes/prototype/time_cue.gd")
 const AimAssist = preload("res://scenes/prototype/aim_assist.gd")
 const ScrubView = preload("res://scenes/prototype/scrub_view.gd")
 const History = preload("res://scenes/prototype/history.gd")
@@ -31,6 +32,7 @@ var _repair_held := false
 var _inspection_clock := 0.0
 var _preview: Dictionary = {}
 var time_feedback := ""
+var time_cue: CanvasLayer
 var feedback: Node3D
 var scrub_view: RefCounted = ScrubView.new()
 var _scrub_speed := 0.0
@@ -62,6 +64,8 @@ func _ready() -> void:
 	weapons.combat_event.connect(feedback.cue)
 	equipment.repaired.connect(_on_repaired)
 	_build_hud()
+	time_cue = TimeCue.new()
+	add_child(time_cue)
 	GameState.state_changed.connect(_on_state_changed)
 	SceneManager.popup_opened.connect(_on_popup_opened)
 	SceneManager.popup_closed.connect(_on_popup_closed)
@@ -344,6 +348,10 @@ func _restore_world(data: Dictionary, live_clock: float) -> void:
 	director.restore_state(data.director)
 	weapons.restore_state(data.weapons)
 	weapons.select_tool(4) # Equipping the clock remains the player's current intent.
+	if history.inspecting:
+		weapons.preview_overlay = data.weapons.get("overlay", {}).duplicate()
+		weapons.presentation.phase = float(weapons.preview_overlay.get("phase",weapons.presentation.phase))
+		player.set_visual_tool(int(weapons.preview_overlay.get("tool",4)))
 	weapons._rebuild_visuals(player, aim)
 
 
@@ -463,9 +471,14 @@ func _on_repaired(_tool: StringName, restored: float) -> void:
 
 
 func _update_hud() -> void:
-	if player.visual_tool != weapons.selected_tool:
-		player.set_visual_tool(weapons.selected_tool)
+	time_cue.update_state(player.world_scale,history.inspecting)
+	var display_tool := int(weapons.preview_overlay.get("tool",weapons.selected_tool))
+	if player.visual_tool != display_tool:
+		player.set_visual_tool(display_tool)
 	status_hud.update_status(player, weapons, equipment)
+	if history.inspecting:
+		status_hud.selected = display_tool - 1
+		status_hud.caption = StatusHud.NAMES[display_tool-1] + " · recorded"
 	status_hud.set_combat_hint(feedback.muted)
 	var clock_after: float = _available_clock(_preview) - inspection_cost() if history.inspecting else equipment.remaining(&"clock")
 	status_hud.update_timeline(history, inspection_cost(), time_feedback, clock_after)

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CampaignDifficulty" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/prototype/settings/campaign_difficulty.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"easy"
+title = "Easy"
+count_scale = 1.0
+count_bonus = 0
+burst_bonus = 0
+early_max_live = 5
+sustained_max_live = 6
+interval_scale = 1.0
+refill_delay_scale = 1.0
+recovery_scale = 1.0
+boss_escort_count = 2
+mixed_reinforcements = false

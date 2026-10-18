@@ -64,20 +64,66 @@ static func formation_ids() -> Array[StringName]:
 	return FORMATION_IDS.duplicate()
 
 
-static func get_room(room_id: StringName) -> Dictionary:
-	for room in definitions():
+const DifficultySpec = preload("res://scenes/prototype/settings/campaign_difficulty.gd")
+
+
+static func get_room(room_id: StringName, difficulty: Variant = &"easy") -> Dictionary:
+	var defs := definitions(difficulty)
+	for room in defs:
 		if room.get("id") == room_id:
 			return room
-	return definitions()[0]
+	return defs[0]
 
 
 # count is the finite pressure roster, excluding a harmless practice specimen.
 # burst/interval/max_live stage arrivals through director.spawn_formation (flow warnings).
 # acquire gates the beat behind a visible physical tool; empty lesson is combat only.
-static func _make_wave(lesson: StringName, formation: StringName, enemies: Array[StringName], count: int, recovery: float, options: Dictionary = {}) -> Dictionary:
+static func _make_wave(lesson: StringName, formation: StringName, enemies: Array[StringName], count: int, recovery: float, options: Dictionary = {}, spec: CampaignDifficulty = null) -> Dictionary:
 	var wave := {"lesson": lesson, "formation": formation, "enemies": enemies.duplicate(),
-		"count": count, "recovery": recovery, "burst": 3, "interval": 4.5, "refill_delay": 0.75, "max_live": 5}
+		"count": count, "recovery": recovery, "burst": 3, "interval": 4.4, "refill_delay": 0.75, "max_live": 5}
 	wave.merge(options, true)
+	if spec != null:
+		return _apply_difficulty(wave, spec)
+	return wave
+
+
+static func _apply_difficulty(wave: Dictionary, spec: CampaignDifficulty) -> Dictionary:
+	var base_count := int(wave.get("count", 0))
+	if base_count <= 0:
+		return wave
+	var enemies: Array[StringName] = []
+	for kind in wave.get("enemies", []):
+		enemies.append(StringName(kind))
+	if spec.mixed_reinforcements:
+		for extra in wave.get("hard_enemies", []):
+			var extra_kind := StringName(extra)
+			if not enemies.has(extra_kind):
+				enemies.append(extra_kind)
+	wave["enemies"] = enemies
+	if bool(wave.get("boss", false)):
+		wave["burst"] = 1
+		wave["count"] = 1 + maxi(spec.boss_escort_count, 0)
+		wave["max_live"] = clampi(1 + maxi(spec.boss_escort_count, 0), 1, 4)
+		wave["interval"] = maxf(2.0, float(wave.get("interval", 6.5)) * spec.interval_scale)
+		wave["refill_delay"] = maxf(0.2, float(wave.get("refill_delay", 0.75)) * spec.refill_delay_scale)
+		if float(wave.get("recovery", 0.0)) > 0.0:
+			wave["recovery"] = maxf(0.25, float(wave.get("recovery", 0.0)) * spec.recovery_scale)
+		return wave
+	if spec.id == &"hard" or spec.count_scale != 1.0 or spec.count_bonus != 0 or spec.burst_bonus != 0:
+		wave["count"] = maxi(1, int(round(float(base_count) * spec.count_scale)) + spec.count_bonus)
+		var tier: StringName = wave.get("tier", &"standard")
+		var burst_extra := spec.burst_bonus + (1 if tier == &"sustained" and spec.burst_bonus > 0 else 0)
+		wave["burst"] = clampi(int(wave.get("burst", 3)) + burst_extra, 1, 8)
+		var base_max := int(wave.get("max_live", 5))
+		if tier == &"early":
+			wave["max_live"] = clampi(maxi(base_max, spec.early_max_live), 1, 32)
+		elif tier == &"sustained":
+			wave["max_live"] = clampi(maxi(base_max, spec.sustained_max_live + (1 if base_max >= 6 else 0)), 1, 32)
+		else:
+			wave["max_live"] = clampi(maxi(base_max, spec.early_max_live + 1 + (1 if base_max >= 5 else 0)), 1, 32)
+		wave["interval"] = maxf(1.2, float(wave.get("interval", 4.4)) * spec.interval_scale)
+		wave["refill_delay"] = maxf(0.15, float(wave.get("refill_delay", 0.75)) * spec.refill_delay_scale)
+		wave["recovery"] = maxf(0.25, float(wave.get("recovery", 2.5)) * spec.recovery_scale)
 	return wave
 
 
@@ -87,30 +133,30 @@ const RESTORATION_LAYOUT := preload("res://scenes/rooms/restoration_layout.tres"
 const BURIAL_LAYOUT := preload("res://scenes/rooms/burial_layout.tres")
 
 
-static func definitions() -> Array[Dictionary]:
+static func definitions(difficulty: Variant = &"easy") -> Array[Dictionary]:
+	var spec: CampaignDifficulty = DifficultySpec.load_for(difficulty)
 	# Room 1: Public Galleries (1 — LOOP ROUTES from 11.png)
-	# Yellow aiming and charge, then orange heat and a deliberate wear-free -> empty repair lesson.
+	# Yellow aiming and charge, then orange heat, a deliberate wear-free -> empty full repair lesson, and early time slow.
 	var gallery_geom: Dictionary = GALLERY_LAYOUT.to_geometry_dict()
-	var gallery_lessons: Array[StringName] = [&"shot", &"charge", &"heat", &"repair"]
+	var gallery_lessons: Array[StringName] = [&"shot", &"charge", &"heat", &"repair", &"slow"]
 	var gallery_waves: Array[Dictionary] = [
-		_make_wave(&"shot", &"curve", [&"yellow"], 8, 2.2, {"acquire": 2, "burst": 2, "max_live": 4, "interval": 4.2}),
-		_make_wave(&"charge", &"line", [&"yellow"], 10, 2.4, {"interval": 4.2}),
-		_make_wave(&"heat", &"cluster", [&"orange", &"yellow"], 9, 2.4, {"acquire": 3, "interval": 4.4}),
-		_make_wave(&"repair", &"line", [], 0, 0.35),
-		_make_wave(&"", &"mixed", [&"orange", &"yellow", &"ranged"], 12, 2.5, {"interval": 4.5}),
+		_make_wave(&"shot", &"curve", [&"yellow"], 8, 2.2, {"acquire": 2, "burst": 2, "max_live": 4, "interval": 4.2, "tier": &"early"}, spec),
+		_make_wave(&"charge", &"line", [&"yellow"], 10, 2.4, {"interval": 4.2, "tier": &"early"}, spec),
+		_make_wave(&"heat", &"cluster", [&"orange", &"yellow"], 9, 2.4, {"acquire": 3, "interval": 4.4}, spec),
+		_make_wave(&"repair", &"line", [], 0, 0.35, {}, spec),
+		_make_wave(&"slow", &"mixed", [&"orange", &"yellow", &"ranged"], 12, 2.5, {"interval": 4.4}, spec),
 	]
 
-	# Room 2: Connected Collections (blue cutter, time slow and emergency rewind, mixed enemies, Loop Curator)
-	# Blue cutting and guard openings lead into time slow and emergency rewind, then loops and their boss.
+	# Room 2: Connected Collections (blue cutter, guard openings, mid-room pressure, emergency rewind, loops, Loop Curator)
 	var collections_geom: Dictionary = COLLECTIONS_LAYOUT.to_geometry_dict()
-	var collections_lessons: Array[StringName] = [&"cut", &"opening", &"slow", &"rewind", &"loop"]
+	var collections_lessons: Array[StringName] = [&"cut", &"opening", &"rewind", &"loop"]
 	var collections_waves: Array[Dictionary] = [
-		_make_wave(&"cut", &"curve", [&"blue", &"yellow", &"orange"], 9, 2.5, {"acquire": 1, "interval": 4.5}),
-		_make_wave(&"opening", &"mixed", [&"side_guard", &"front_guard", &"yellow"], 9, 2.5, {"interval": 4.5}),
-		_make_wave(&"slow", &"curve", [&"blue", &"orange", &"ranged"], 8, 2.5, {"interval": 4.5}),
-		_make_wave(&"rewind", &"line", [&"yellow", &"blue", &"side_guard"], 7, 2.5, {"interval": 4.5}),
-		_make_wave(&"loop", &"curve", [&"loop", &"blue", &"yellow"], 6, 3.2, {"burst": 2, "max_live": 4, "interval": 4.5}),
-		_make_wave(&"", &"cluster", [&"loop_boss"], 1, 3.0, {"boss": true, "burst": 1}),
+		_make_wave(&"cut", &"curve", [&"blue", &"yellow", &"orange"], 9, 2.5, {"acquire": 1, "interval": 4.4}, spec),
+		_make_wave(&"opening", &"mixed", [&"side_guard", &"front_guard", &"yellow"], 9, 2.5, {"interval": 4.4, "hard_enemies": [&"blue", &"orange"]}, spec),
+		_make_wave(&"", &"curve", [&"blue", &"orange", &"side_guard", &"ranged"], 10, 2.5, {"interval": 4.4, "tier": &"sustained", "hard_enemies": [&"front_guard", &"yellow"]}, spec),
+		_make_wave(&"rewind", &"line", [&"yellow", &"blue", &"side_guard", &"ranged"], 8, 2.5, {"interval": 4.4, "hard_enemies": [&"orange", &"front_guard"]}, spec),
+		_make_wave(&"loop", &"curve", [&"loop", &"blue", &"yellow"], 6, 3.2, {"burst": 2, "max_live": 4, "interval": 4.5, "hard_enemies": [&"orange", &"ranged"]}, spec),
+		_make_wave(&"", &"cluster", [&"loop_boss", &"blue", &"yellow"], 3, 3.0, {"boss": true, "burst": 1, "max_live": 3, "interval": 6.5, "hard_enemies": [&"orange"]}, spec),
 	]
 
 	# Room 3: Restoration Rooms (2 — STAGGERED GALLERIES from 11.png)
@@ -118,10 +164,10 @@ static func definitions() -> Array[Dictionary]:
 	var restoration_geom: Dictionary = RESTORATION_LAYOUT.to_geometry_dict()
 	var restoration_lessons: Array[StringName] = [&"pair", &"zigzag"]
 	var restoration_waves: Array[Dictionary] = [
-		_make_wave(&"pair", &"line", [&"pair", &"yellow", &"front_guard"], 8, 2.6, {"burst": 2, "interval": 4.5}),
-		_make_wave(&"zigzag", &"curve", [&"zigzag", &"blue", &"orange"], 8, 2.6, {"burst": 2, "interval": 4.5}),
-		_make_wave(&"", &"mixed", [&"pair", &"ranged", &"side_guard", &"zigzag"], 12, 3.5, {"interval": 4.8, "max_live": 6}),
-		_make_wave(&"", &"line", [&"sequence_boss"], 1, 3.0, {"boss": true, "burst": 1}),
+		_make_wave(&"pair", &"line", [&"pair", &"yellow", &"front_guard"], 8, 2.6, {"burst": 2, "interval": 4.5, "hard_enemies": [&"blue", &"ranged"]}, spec),
+		_make_wave(&"zigzag", &"curve", [&"zigzag", &"blue", &"orange"], 8, 2.6, {"burst": 2, "interval": 4.5, "hard_enemies": [&"pair", &"side_guard"]}, spec),
+		_make_wave(&"", &"mixed", [&"pair", &"ranged", &"side_guard", &"zigzag"], 12, 3.5, {"interval": 4.6, "max_live": 6, "tier": &"sustained", "hard_enemies": [&"front_guard", &"orange", &"blue"]}, spec),
+		_make_wave(&"", &"line", [&"sequence_boss", &"pair", &"zigzag"], 3, 3.0, {"boss": true, "burst": 1, "max_live": 3, "interval": 6.5, "hard_enemies": [&"ranged"]}, spec),
 	]
 
 	# Room 4: Burial Exhibition (3 — BOSS COURT from 11.png)
@@ -129,8 +175,8 @@ static func definitions() -> Array[Dictionary]:
 	var burial_geom: Dictionary = BURIAL_LAYOUT.to_geometry_dict()
 	var burial_lessons: Array[StringName] = []
 	var burial_waves: Array[Dictionary] = [
-		_make_wave(&"", &"mixed", [&"pair", &"zigzag", &"loop", &"ranged", &"orange", &"front_guard"], 18, 4.0, {"interval": 4.8, "max_live": 6}),
-		_make_wave(&"", &"cluster", [&"final_boss"], 1, 0.0, {"boss": true, "burst": 1}),
+		_make_wave(&"", &"mixed", [&"pair", &"zigzag", &"loop", &"ranged", &"orange", &"front_guard"], 18, 4.0, {"interval": 4.6, "max_live": 6, "tier": &"sustained", "hard_enemies": [&"side_guard", &"blue", &"yellow"]}, spec),
+		_make_wave(&"", &"cluster", [&"final_boss", &"side_guard", &"ranged"], 3, 0.0, {"boss": true, "burst": 1, "max_live": 3, "interval": 7.0, "hard_enemies": [&"pair", &"zigzag"]}, spec),
 	]
 
 	var rooms: Array[Dictionary] = [

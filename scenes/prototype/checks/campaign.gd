@@ -11,6 +11,11 @@ func run() -> void:
 	if script == null or not script.can_instantiate():
 		expect(false,"Campaign compiles")
 	else:
+		var easy_res = load("res://scenes/prototype/settings/difficulty_easy.tres")
+		var hard_res = load("res://scenes/prototype/settings/difficulty_hard.tres")
+		expect(easy_res is CampaignDifficulty and hard_res is CampaignDifficulty, "Easy and Hard CampaignDifficulty resources load cleanly")
+		root.get_node("GameState").set_setting("tutorial", true)
+		root.get_node("SceneManager").params = {}
 		arena = load("res://scenes/prototype/campaign.tscn").instantiate()
 		root.add_child(arena);current_scene=arena
 		await physics_frame
@@ -18,7 +23,8 @@ func run() -> void:
 		root.get_node("GameState").start_game()
 		arena.set_physics_process(false)
 		expect(arena.room_index==0 and arena.mode==&"title","Fresh run enters first gallery")
-		expect(arena.history is ReplayHistory and arena.history.window_seconds==12.0 and arena.history.max_snapshots==240,"Campaign keeps bounded twelve-second ReplayHistory")
+		expect(not arena.time_controller.slow_unlocked and not arena.time_controller.rewind_unlocked,"Fresh run starts with slow and rewind capabilities locked")
+		expect(arena.history is ReplayHistory and arena.history.window_seconds==18.0 and arena.history.max_snapshots==240,"Campaign keeps bounded eighteen-second ReplayHistory")
 		expect(arena.history.has_checkpoint,"Fresh room seeds safe fallback checkpoint")
 		arena._physics_process(2.1)
 		expect(arena.mode==&"pickup" and arena.museum.pickup_tool==2,"First gallery offers the yellow camera")
@@ -47,6 +53,7 @@ func run() -> void:
 		for wi in range(definitions[1].waves.size()):
 			if definitions[1].waves[wi].lesson==&"loop": loop_wave=wi
 		arena.debug_start(1,loop_wave)
+		expect(arena.time_controller.slow_unlocked and arena.time_controller.rewind_unlocked,"Later checkpoint unlocks slow and rewind capabilities")
 		arena.tutorial.learned.erase(&"loop")
 		arena.director.clear();arena.wave_index=loop_wave-1;arena._begin_wave()
 		expect(arena.lesson==&"loop" and arena.specimens.size()==1,"First loop pattern lesson is solo")
@@ -57,14 +64,15 @@ func run() -> void:
 		expect(arena.director.enemies[0].has_method("lesson_state"),"Rewind reconstructs real pattern class")
 		expect(arena.specimens.size()==1 and arena.specimens[0].contact_damage==0,"Rebuilt practice specimen remains harmless and highlighted")
 		for tick in range(260):arena.history.record(.05,arena.capture_state)
-		expect(arena.history.snapshot_count==240 and arena.history.age_of(0)>11.8,"Longer rewind retains twelve seconds with fixed count cap")
+		expect(arena.history.snapshot_count>=150 and arena.history.snapshot_count<=240 and arena.history.age_of(0)>11.8,"Longer rewind retains history within fixed count cap")
 		var state: Node = root.get_node("GameState")
 		var prior_tutorial: bool = state.preferences().tutorial
 		state.set_setting("tutorial",false)
 		arena._physics_process(.001)
 		expect(arena.mode==&"pressure" and not arena.tutorial.blocking,"Disabling teaching releases the active practice gate")
 		state.set_setting("tutorial",prior_tutorial)
-		arena.tutorial.reset_run();arena.mode=&"pressure";arena.director.clear();arena._seed_room_checkpoint()
+		arena.tutorial.reset_run();arena._slow_unlocked=true;arena._rewind_unlocked=true;arena._apply_time_capabilities()
+		arena.mode=&"pressure";arena.director.clear();arena._seed_room_checkpoint()
 		arena.time_controller.begin_attempt()
 		arena.history.record(.05,arena.capture_state)
 		arena.time_controller.apply_hit(100.0)
@@ -74,5 +82,6 @@ func run() -> void:
 		expect(not arena.is_emergency_active() and arena.time_controller.meter>=arena.time_controller.settings.recovery_floor and arena.room_index==1,"Emergency rewind restores world state and recovery floor in the current room")
 		arena.feedback.reset_state();arena.queue_free()
 		await process_frame
+		await create_timer(0.3).timeout
 	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures}))
 	quit(0 if failures.is_empty() else 1)

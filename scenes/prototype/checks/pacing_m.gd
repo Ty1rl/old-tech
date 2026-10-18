@@ -1,10 +1,10 @@
 extends SceneTree
 
-# Focused check suite for Round M (JAM-4):
-# - Moderate service interval increases in Tuning.GEAR (24/64/24/18)
+# Focused check suite for Round M / Round O Wave B (JAM-4):
+# - Moderate service interval increases in Tuning.GEAR (24/64/24)
 # - Equipment.training_protection policy/hook and anti-bypass guarantees
 # - Campaign wear-free yellow training through Waves 0–2 until deliberate Wave 3 repair break
-# - Safe yellow empty/equip on Wave 3, E toggle + matching-shape tutorial copy, and full restoration after repair lesson
+# - Safe yellow empty/equip on Wave 3, staged full-restoration repair on actual tool, and prompt transition into Wave 4
 # - Permanent teaching progress ownership across rewind snapshots, retry_room, and debug_start
 # - Shorter early wave intervals/recovery and prompt refill when active group is cleared or almost empty (<= 1)
 
@@ -61,13 +61,13 @@ func run() -> void:
 	gear.set_training_protection([])
 	expect(gear.training_protection.is_empty() and is_equal_approx(gear.spend(&"beam", 10.0), 10.0) and is_equal_approx(gear.remaining(&"beam"), 54.0), "Removing protection restores normal beam wear")
 
-	# 3. Updated tutorial copy for E toggle, matching-shape contacts, and Space slow
+	# 3. Updated tutorial copy for E open, three marked stages to 100%, and Space slow
 	var tutorial_script: Script = load("res://scenes/ui/tutorial.gd")
 	var repair_copy: String = String(tutorial_script.LESSONS["repair"][1])
 	var slow_copy: String = String(tutorial_script.LESSONS["slow"][1])
-	expect("press E to toggle" in repair_copy and "matching-shape contacts" in repair_copy and "1–3" in repair_copy, "Repair lesson copy teaches E toggle, matching-shape contacts, and 1–3 tools")
+	expect("press E to open" in repair_copy and "three marked stages" in repair_copy and "100%" in repair_copy, "Repair lesson copy teaches E open and full three-stage restoration to 100%")
 	expect(not ("hold E" in repair_copy), "Repair lesson copy no longer instructs holding E")
-	expect("hold Space" in slow_copy, "Slow lesson copy teaches holding Space to slow the world")
+	expect("Hold Space" in slow_copy, "Slow lesson copy teaches holding Space to slow the world")
 
 	# 4. Sandbox arena is completely unaffected by training_protection
 	var sandbox: Node3D = load("res://scenes/prototype/arena.tscn").instantiate()
@@ -148,18 +148,24 @@ func run() -> void:
 	arena.tutorial.request_practice()
 	var session: int = arena.equipment.begin_repair(&"beam")
 	var step_restored: float = arena.equipment.complete_step(&"beam", session)
-	expect(is_equal_approx(step_restored, 16.0) and is_equal_approx(arena.equipment.remaining(&"beam"), 16.0), "One real repair step restores 1/4 yellow capacity (16 shots)")
+	var expected_step: float = arena.equipment.capacity(&"beam") / float(maxi(1, arena.equipment.repair_steps))
+	expect(is_equal_approx(step_restored, expected_step) and is_equal_approx(arena.equipment.remaining(&"beam"), expected_step), "One real repair step restores 1 stage of yellow capacity")
+	tick()
+	expect(not arena.tutorial.is_learned(&"repair"), "Single repair step does not complete full-restoration repair lesson")
+	while not arena.equipment.is_full(&"beam"):
+		arena.equipment.complete_step(&"beam", session)
 	arena.equipment.end_repair(session)
 	tick()
-	expect(arena.tutorial.is_learned(&"repair"), "Completing repair step marks repair lesson learned")
+	expect(arena.tutorial.is_learned(&"repair"), "Completing all repair steps to 100% marks repair lesson learned")
 	expect(arena.equipment.is_full(&"beam") and arena.equipment.is_full(&"cone"), "Deliberate repair completion restores full useful condition on acquired tools before combat continues")
 	expect(arena.equipment.training_protection.is_empty(), "Yellow protection stays off after repair lesson completes")
 
-	# Advance to Wave 4 normal combat after short post-repair transition and verify normal yellow wear
+	# Advance to Wave 4 after short post-repair transition and verify normal yellow wear
 	tick()
 	expect(arena.mode == &"recovery" and arena.timer <= 0.4, "Zero-enemy repair wave uses brief transition recovery (<= 0.4s)")
+	arena.tutorial.learned[&"slow"] = true
 	tick(0.4)
-	expect(arena.wave_index == 4 and arena.mode == &"pressure", "Recovery after repair lesson advances promptly to Wave 4 combat")
+	expect(arena.wave_index == 4 and arena.mode == &"pressure" and not arena.director.enemies.is_empty(), "Recovery after repair lesson advances promptly to Wave 4 enemies")
 	arena.equipment.spend(&"beam", 6.0)
 	expect(is_equal_approx(arena.equipment.remaining(&"beam"), 58.0), "Normal combat after repair lesson spends yellow capacity normally")
 
@@ -212,7 +218,8 @@ func run() -> void:
 	for key in prior:
 		game.set_setting(key, prior[key])
 	arena.feedback.reset_state()
-	arena.free()
+	arena.queue_free()
 	await process_frame
+	await create_timer(0.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

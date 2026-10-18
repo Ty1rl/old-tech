@@ -867,7 +867,8 @@ func _sync_attack_warning(directions: Array[Vector3], length: float, shown: bool
 		if cover != null and cover.clip_segment(position, position + origin, HOSTILE_RADIUS).blocked: continue
 		origin.y = .045
 		var side := direction.cross(Vector3.UP).normalized()
-		# Dashed arrows say incoming motion rather than an instant damaging beam.
+		# A thin translucent guide shows the locked aim without competing with
+		# the bright, collision-sized projectile head once the shot is released.
 		for i in range(9):
 			var start := origin + direction * (float(i) * length / 9)
 			var end := origin + direction * ((float(i) + .58) * length / 9)
@@ -876,10 +877,9 @@ func _sync_attack_warning(directions: Array[Vector3], length: float, shown: bool
 				if wall.blocked:
 					end = wall.position - position
 					if (end - start).dot(direction) <= 0: break
-			_warning_ribbon(mesh, start, end, HOSTILE_RADIUS + .035, Color(.12, .035, .035, .8))
-			_warning_ribbon(mesh, start, end, HOSTILE_RADIUS, Color(1, .24, .20, .60))
-			var tip := end + direction * .13
-			_warning_triangle(mesh, end - direction * .20 - side * .16, tip, end - direction * .20 + side * .16, Color(1, .93, .79, .9))
+			_warning_ribbon(mesh, start, end, .07, Color(1, .24, .20, .26))
+			var tip := end + direction * .06
+			_warning_triangle(mesh, end - direction * .13 - side * .09, tip, end - direction * .13 + side * .09, Color(1, .50, .39, .30))
 	# Some ports may all face directly into cover. Avoid an empty surface.
 	# A degenerate triangle is invisible and keeps ImmediateMesh valid.
 	_warning_triangle(mesh, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Color.TRANSPARENT)

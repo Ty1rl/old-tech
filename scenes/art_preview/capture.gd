@@ -1,10 +1,9 @@
 extends SceneTree
 
-# Round K actual-motion & attack-phase posture review at ortho 22 and close inspection.
-const OUT_DIR := "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/state/old-tech-jam-2/exports/round-k/"
+# Round M gameplay-perspective motion, transition, strafe, grip, and recoil review.
+const OUT_DIR := "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/state/old-tech-jam-2/exports/round-m/"
 const PlayerVisual = preload("res://scenes/prototype/player_visual.gd")
-const CreatureVisual = preload("res://scenes/prototype/creature_visual.gd")
-const ENEMY_KINDS: Array[StringName] = [&"blue", &"yellow", &"orange", &"front_guard", &"side_guard"]
+const Tuning = preload("res://scenes/prototype/tuning.gd")
 
 var pass_tag := "pass1"
 var stage: Node3D
@@ -12,13 +11,9 @@ var actors_root: Node3D
 var camera: Camera3D
 var label: Label
 var saved_images: Array[String] = []
-var metrics: Dictionary = {}
 
 
 func _initialize() -> void:
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--pass="):
-			pass_tag = arg.trim_prefix("--pass=")
 	if FileAccess.file_exists(OUT_DIR + "pass_mode.txt"):
 		var f := FileAccess.open(OUT_DIR + "pass_mode.txt", FileAccess.READ)
 		if f:
@@ -49,31 +44,32 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> MeshIns
 func _setup_stage() -> void:
 	stage = Node3D.new()
 	root.add_child(stage)
-	_box(stage, Vector3(44, 0.1, 44), Vector3(0, -0.05, 0), _mat("2d343a"))
-	var grid_mat := _mat("3f4952")
-	var accent_mat := _mat("566470")
+	_box(stage, Vector3(44, 0.1, 44), Vector3(0, -0.05, 0), _mat("303943"))
+	var grid_mat := _mat("3e4954")
+	var accent_mat := _mat("546372")
 	for i in range(-14, 15, 2):
 		var m := accent_mat if i % 4 == 0 else grid_mat
 		_box(stage, Vector3(0.025, 0.003, 28), Vector3(i, 0.002, 0), m)
 		_box(stage, Vector3(28, 0.003, 0.025), Vector3(0, 0.002, i), m)
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-58, -32, 0)
-	sun.light_energy = 1.18
+	sun.rotation_degrees = Vector3(-65, -30, 0)
+	sun.light_energy = 1.15
 	stage.add_child(sun)
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-35, 145, 0)
-	fill.light_energy = 0.42
+	fill.light_energy = 0.40
 	stage.add_child(fill)
 	var env := WorldEnvironment.new()
 	env.environment = Environment.new()
 	env.environment.background_mode = Environment.BG_COLOR
-	env.environment.background_color = Color("1d2328")
+	env.environment.background_color = Color("181d25")
 	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.environment.ambient_light_color = Color("cfd8de")
-	env.environment.ambient_light_energy = 0.68
+	env.environment.ambient_light_color = Color.WHITE
+	env.environment.ambient_light_energy = 0.65
 	stage.add_child(env)
 	camera = Camera3D.new()
-	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	camera.fov = float(Tuning.VIEW.fov)
 	stage.add_child(camera)
 	camera.current = true
 	actors_root = Node3D.new()
@@ -83,7 +79,7 @@ func _setup_stage() -> void:
 	label = Label.new()
 	label.position = Vector2(24, 18)
 	label.add_theme_font_size_override("font_size", 17)
-	label.add_theme_color_override("font_color", Color("f0f4f8"))
+	label.add_theme_color_override("font_color", Color("f2f5f8"))
 	label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	label.add_theme_constant_override("shadow_offset_x", 2)
 	label.add_theme_constant_override("shadow_offset_y", 2)
@@ -106,140 +102,171 @@ func _save(filename: String) -> void:
 		saved_images.append(full)
 
 
-func _spawn_player_sample(world_pos: Vector3, facing_yaw_deg: float, tool_idx: int, world_vel: Vector3, sim_duration: float, slow_scale: float = 1.0) -> Node3D:
+func _spawn_trajectory_sample(target_pos: Vector3, tool_idx: int, steps_spec: Array) -> Node3D:
 	var holder := Node3D.new()
-	holder.position = world_pos + Vector3(0, 0.5, 0)
-	holder.rotation_degrees.y = facing_yaw_deg
 	actors_root.add_child(holder)
 	var pv := PlayerVisual.new()
 	holder.add_child(pv)
 	pv.build()
-	pv.scale = Vector3.ONE * 1.3
+	pv.scale = Vector3.ONE * float(Tuning.PLAYER.visual_scale)
 	pv.set_tool_index(tool_idx)
-	var local_move := holder.global_basis.inverse() * world_vel
-	if slow_scale < 1.0:
-		for w in range(6):
-			pv.step_visual(0.04, local_move.length(), 6.0, local_move)
-	var steps := maxi(1, int(round(sim_duration / 0.04)))
-	var real_dt := sim_duration / float(steps)
-	var world_dt := real_dt * slow_scale
-	var start_pos := world_pos - world_vel * (sim_duration * slow_scale)
-	holder.position = start_pos + Vector3(0, 0.5, 0)
-	for s in range(steps):
-		holder.position += world_vel * world_dt
-		pv.step_visual(world_dt, local_move.length(), 6.0, local_move)
+
+	var total_disp := Vector3.ZERO
+	for seg: Dictionary in steps_spec:
+		var count: int = seg["count"]
+		var dt: float = seg["dt"]
+		var lvel: Vector3 = seg["vel"]
+		var y_s: float = seg["yaw_start"]
+		var y_e: float = seg.get("yaw_end", y_s)
+		for i in range(count):
+			var t := float(i + 1) / float(maxi(1, count))
+			var b := Basis(Vector3.UP, deg_to_rad(lerpf(y_s, y_e, t)))
+			total_disp += (b * lvel) * dt
+
+	holder.position = target_pos + Vector3(0, 0.5, 0) - total_disp
+	for seg: Dictionary in steps_spec:
+		var count: int = seg["count"]
+		var dt: float = seg["dt"]
+		var local_move: Vector3 = seg["vel"]
+		var yaw_start: float = seg["yaw_start"]
+		var yaw_end: float = seg.get("yaw_end", yaw_start)
+		var flash_t: float = seg.get("flash", 0.0)
+		var air_on: bool = seg.get("air", false)
+		var charge_r: float = seg.get("charge", 0.0)
+		for i in range(count):
+			var t := float(i + 1) / float(maxi(1, count))
+			holder.rotation_degrees.y = lerpf(yaw_start, yaw_end, t)
+			var world_vel := holder.global_basis * local_move
+			holder.position += world_vel * dt
+			pv.set_combat_pose(flash_t, air_on, charge_r)
+			pv.step_visual(dt, local_move.length(), 6.0, local_move)
 	return pv
-
-
-func _spawn_enemy_sample(kind: StringName, world_pos: Vector3, facing_yaw_deg: float, speed: float, phase_name: StringName, staggered: bool, sim_duration: float) -> Node3D:
-	var holder := Node3D.new()
-	holder.position = world_pos
-	holder.rotation_degrees.y = facing_yaw_deg
-	actors_root.add_child(holder)
-	var cv := CreatureVisual.new()
-	holder.add_child(cv)
-	cv.build(kind)
-	var steps := maxi(1, int(round(sim_duration / 0.04)))
-	var dt := sim_duration / float(steps)
-	var move_vec := -holder.global_basis.z * (speed if phase_name == &"approach" and not staggered else 0.0)
-	holder.position = world_pos - move_vec * sim_duration
-	for s in range(steps):
-		holder.position += move_vec * dt
-		cv.step_visual(dt, speed, staggered, false, phase_name)
-	return cv
 
 
 func run() -> void:
 	DirAccess.make_dir_recursive_absolute(OUT_DIR)
 	_setup_stage()
 
-	# 1. Ortho 22 gameplay camera: Player forward, backward, sideways strafe, and 0.18x slow motion across 4 stride phases.
+	# 1. Exact gameplay PERSPECTIVE camera (FOV 52, pos (0, 20, 14), pitch -55 deg, 1280x800).
+	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	camera.fov = float(Tuning.VIEW.fov)
 	camera.position = Vector3(0, 20, 14)
 	camera.rotation_degrees = Vector3(-55, 0, 0)
-	camera.size = 22.0
-	var lane_specs := [
-		{"title": "Forward Run (6.0 m/s, 1.0x)", "z": -4.8, "vel": Vector3(0, 0, -6.0), "yaw": 155.0, "tool": 1, "slow": 1.0},
-		{"title": "BackWalk Retreat (4.8 m/s, 1.0x)", "z": -1.6, "vel": Vector3(0, 0, 4.8), "yaw": 180.0, "tool": 2, "slow": 1.0},
-		{"title": "Sideways Strafe Right (5.6 m/s, 1.0x)", "z": 1.6, "vel": Vector3(5.6, 0, 0), "yaw": 180.0, "tool": 3, "slow": 1.0},
-		{"title": "Slow-Time Strafe/Run (6.0 m/s, 0.18x)", "z": 4.8, "vel": Vector3(4.2, 0, -4.2), "yaw": 180.0, "tool": 4, "slow": 0.18},
-	]
-	var player_samples: Array = []
-	for row_idx in range(lane_specs.size()):
-		var spec: Dictionary = lane_specs[row_idx]
-		var yaw_deg: float = spec["yaw"]
-		var local_v: Vector3 = spec["vel"]
-		var z_row: float = spec["z"]
-		var tool_num: int = spec["tool"]
-		var slow_val: float = spec["slow"]
-		for col in range(4):
-			var x_pos := -5.4 + col * 3.6
-			var sim_t := 0.18 + col * 0.18
-			var world_vel: Vector3 = Basis(Vector3.UP, deg_to_rad(yaw_deg)) * local_v
-			var pv := _spawn_player_sample(Vector3(x_pos, 0, z_row), yaw_deg, tool_num, world_vel, sim_t, slow_val)
-			if col == 2:
-				player_samples.append({
-					"lane": spec["title"],
-					"clip": pv.animation.current_animation,
-					"cadence_hz": snappedf(pv.cadence_hz, 0.001),
-					"playback_rate": snappedf(pv.playback_rate, 0.001),
-					"grip_error_l": snappedf(pv.grip_error("L"), 0.0001),
-					"grip_error_r": snappedf(pv.grip_error("R"), 0.0001),
-				})
-	label.text = "ROUND K (%s) • PLAYER ACTUAL MOTION AT ORTHO 22 (1280×800, pitch −55°)\nRows: 1) Forward Run 1.0x  2) BackWalk 1.0x  3) Sideways Strafe 1.0x (hip-steered)  4) Slow-Time 0.18x  |  Cols: 4 actual translating stride samples" % pass_tag.to_upper()
-	await _save("%s-ortho22-player-motion.png" % pass_tag)
 
-	# 2. Ortho 22 gameplay camera: All 5 enemies across Approach Walk, Windup Anticipation, Recovery, and Stun.
+	# Row 1 (z = -4.8): Accelerate -> Full Run -> Sharp 85 deg Aim Turn while Moving -> Braking Stop Settle
+	_spawn_trajectory_sample(Vector3(-5.4, 0, -4.8), 1, [
+		{"count": 5, "dt": 0.04, "vel": Vector3(0, 0, -4.2), "yaw_start": 160.0}
+	])
+	_spawn_trajectory_sample(Vector3(-1.8, 0, -4.8), 1, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(0, 0, -6.0), "yaw_start": 160.0}
+	])
+	_spawn_trajectory_sample(Vector3(1.8, 0, -4.8), 1, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(3.2, 0, -4.8), "yaw_start": 115.0, "yaw_end": 195.0}
+	])
+	_spawn_trajectory_sample(Vector3(5.4, 0, -4.8), 1, [
+		{"count": 7, "dt": 0.04, "vel": Vector3(0, 0, -6.0), "yaw_start": 160.0},
+		{"count": 2, "dt": 0.03, "vel": Vector3(0, 0, -0.1), "yaw_start": 160.0}
+	])
+
+	# Row 2 (z = -1.6): Sideways Strafe Right, Sideways Strafe Left, Diagonal Strafe-Run, Strafe Direction Reversal
+	_spawn_trajectory_sample(Vector3(-5.4, 0, -1.6), 3, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(5.6, 0, 0), "yaw_start": 180.0}
+	])
+	_spawn_trajectory_sample(Vector3(-1.8, 0, -1.6), 3, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(-5.6, 0, 0), "yaw_start": 180.0}
+	])
+	_spawn_trajectory_sample(Vector3(1.8, 0, -1.6), 2, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(4.2, 0, -4.2), "yaw_start": 180.0}
+	])
+	_spawn_trajectory_sample(Vector3(5.4, 0, -1.6), 3, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(-5.6, 0, 0), "yaw_start": 180.0},
+		{"count": 3, "dt": 0.04, "vel": Vector3(5.6, 0, 0), "yaw_start": 180.0}
+	])
+
+	# Row 3 (z = 1.6): Slow-Time (0.18x) Run, Slow-Time Strafe, Normal BackWalk, Slow-Time BackWalk
+	_spawn_trajectory_sample(Vector3(-5.4, 0, 1.6), 4, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(0, 0, -6.0), "yaw_start": 160.0},
+		{"count": 6, "dt": 0.04 * 0.18, "vel": Vector3(0, 0, -6.0), "yaw_start": 160.0}
+	])
+	_spawn_trajectory_sample(Vector3(-1.8, 0, 1.6), 4, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(5.5, 0, 0), "yaw_start": 180.0},
+		{"count": 6, "dt": 0.04 * 0.18, "vel": Vector3(5.5, 0, 0), "yaw_start": 180.0}
+	])
+	_spawn_trajectory_sample(Vector3(1.8, 0, 1.6), 2, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(0, 0, 4.8), "yaw_start": 180.0}
+	])
+	_spawn_trajectory_sample(Vector3(5.4, 0, 1.6), 4, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(0, 0, 4.8), "yaw_start": 180.0},
+		{"count": 6, "dt": 0.04 * 0.18, "vel": Vector3(0, 0, 4.8), "yaw_start": 180.0}
+	])
+
+	# Row 4 (z = 4.8): Combat Grip & Recoil across all 4 tools (Ring Stride, Flash Charge Brace, Flash Recoil Kick, Cone Bellows Heave)
+	var pv_ring := _spawn_trajectory_sample(Vector3(-5.4, 0, 4.8), 1, [
+		{"count": 8, "dt": 0.04, "vel": Vector3(0, 0, -5.8), "yaw_start": 160.0}
+	])
+	var pv_charge := _spawn_trajectory_sample(Vector3(-1.8, 0, 4.8), 2, [
+		{"count": 8, "dt": 0.04, "vel": Vector3(3.2, 0, -2.0), "yaw_start": 175.0, "charge": 0.95}
+	])
+	var pv_recoil := _spawn_trajectory_sample(Vector3(1.8, 0, 4.8), 2, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(0, 0, -2.2), "yaw_start": 165.0, "flash": 0.135}
+	])
+	var pv_cone := _spawn_trajectory_sample(Vector3(5.4, 0, 4.8), 3, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(0, 0, -4.4), "yaw_start": 165.0, "air": true}
+	])
+
+	var force_updates: int = pv_ring.force_update_count
+	var grip_summary := {
+		"ring_run": [snappedf(pv_ring.grip_error("L"), 0.0001), snappedf(pv_ring.grip_error("R"), 0.0001)],
+		"flash_charge": [snappedf(pv_charge.grip_error("L"), 0.0001), snappedf(pv_charge.grip_error("R"), 0.0001)],
+		"flash_recoil": [snappedf(pv_recoil.grip_error("L"), 0.0001), snappedf(pv_recoil.grip_error("R"), 0.0001)],
+		"cone_heave": [snappedf(pv_cone.grip_error("L"), 0.0001), snappedf(pv_cone.grip_error("R"), 0.0001)],
+	}
+
+	label.text = "ROUND M (%s) • GAMEPLAY PERSPECTIVE (FOV 52°, pos 0,20,14, pitch −55°, 1280×800)\nRow 1: Start -> Run -> Aim-Turn -> Brake Settle | Row 2: Strafe R/L/Diag/Reverse | Row 3: 0.18x Slow & BackWalk | Row 4: Ring / Flash Charge / Flash Recoil / Cone Heave" % pass_tag.to_upper()
+	await _save("%s-perspective-gameplay-motion.png" % pass_tag)
+
+	# 2. Closer perspective view (FOV 42, pos (0, 5.8, 5.4), pitch -42 deg) to inspect step articulation, hip steering, grip, and recoil.
 	_clear_actors()
-	var enemy_metrics: Array = []
-	var phases := [
-		{"name": &"approach", "stagger": false, "speed": 2.0, "x": -6.0},
-		{"name": &"windup", "stagger": false, "speed": 2.0, "x": -2.0},
-		{"name": &"recover", "stagger": false, "speed": 1.6, "x": 2.0},
-		{"name": &"stun", "stagger": true, "speed": 1.8, "x": 6.0},
-	]
-	for r in range(ENEMY_KINDS.size()):
-		var kind: StringName = ENEMY_KINDS[r]
-		var z_pos := -5.2 + r * 2.6
-		for c in range(phases.size()):
-			var p: Dictionary = phases[c]
-			var px: float = p["x"]
-			var pspeed: float = p["speed"]
-			var pname: StringName = p["name"]
-			var pstagger: bool = p["stagger"]
-			var cv := _spawn_enemy_sample(kind, Vector3(px, 0, z_pos), 155.0, pspeed, pname, pstagger, 0.44)
-			if r == 0 or c in [0, 1]:
-				enemy_metrics.append({
-					"kind": String(kind),
-					"phase": String(p["name"]),
-					"leg_cycling": cv.leg_cycling,
-					"clip": cv.animation.current_animation,
-					"cadence_hz": snappedf(cv.cadence_hz, 0.001),
-				})
-	label.text = "ROUND K (%s) • ENEMY STRIDE & ATTACK-PHASE POSTURES AT ORTHO 22 (1280×800, pitch −55°)\nCols: 1) Approach Walk (natural cadence, longer stride)  2) Windup (no leg-cycle, coiled anticipation)  3) Recover (no leg-cycle, forward slump)  4) Stun/Stagger" % pass_tag.to_upper()
-	await _save("%s-ortho22-enemy-phases.png" % pass_tag)
+	camera.fov = 42.0
+	camera.position = Vector3(0, 5.8, 5.4)
+	camera.rotation_degrees = Vector3(-42, 0, 0)
 
-	# 3. Closer inspection strip (ortho 7.4) to critique silhouette, hip steering, foot plant, and windup/recovery posture.
-	_clear_actors()
-	camera.position = Vector3(0, 7.6, 6.8)
-	camera.rotation_degrees = Vector3(-44, 0, 0)
-	camera.size = 7.4
-	_spawn_player_sample(Vector3(-3.3, 0, -1.2), 160.0, 1, Basis(Vector3.UP, deg_to_rad(160.0)) * Vector3(0, 0, -6.0), 0.36, 1.0)
-	_spawn_player_sample(Vector3(-1.1, 0, -1.2), 180.0, 2, Vector3(0, 0, 4.8), 0.36, 1.0)
-	_spawn_player_sample(Vector3(1.1, 0, -1.2), 180.0, 3, Vector3(5.6, 0, 0), 0.36, 1.0)
-	_spawn_player_sample(Vector3(3.3, 0, -1.2), 180.0, 4, Vector3(-5.6, 0, 0), 0.36 * 0.18, 0.18)
+	_spawn_trajectory_sample(Vector3(-2.35, 0, -1.2), 1, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(0, 0, -6.0), "yaw_start": 158.0}
+	])
+	_spawn_trajectory_sample(Vector3(-0.78, 0, -1.2), 3, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(5.6, 0, 0), "yaw_start": 180.0}
+	])
+	_spawn_trajectory_sample(Vector3(0.78, 0, -1.2), 1, [
+		{"count": 7, "dt": 0.04, "vel": Vector3(0, 0, -6.0), "yaw_start": 160.0},
+		{"count": 2, "dt": 0.03, "vel": Vector3(0, 0, -0.05), "yaw_start": 160.0}
+	])
+	_spawn_trajectory_sample(Vector3(2.35, 0, -1.2), 4, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(0, 0, 4.8), "yaw_start": 165.0},
+		{"count": 6, "dt": 0.04 * 0.18, "vel": Vector3(0, 0, 4.8), "yaw_start": 165.0}
+	])
 
-	_spawn_enemy_sample(&"blue", Vector3(-3.3, 0, 1.6), 160.0, 2.0, &"approach", false, 0.42)
-	_spawn_enemy_sample(&"blue", Vector3(-1.1, 0, 1.6), 160.0, 2.0, &"windup", false, 0.42)
-	_spawn_enemy_sample(&"front_guard", Vector3(1.1, 0, 1.6), 160.0, 2.0, &"windup", false, 0.42)
-	_spawn_enemy_sample(&"side_guard", Vector3(3.3, 0, 1.6), 160.0, 1.8, &"recover", false, 0.42)
-	label.text = "ROUND K (%s) • CLOSE GAIT & POSTURE INSPECTION (ortho 7.4)\nTop: Player Run, BackWalk, Strafe Right, Slow Strafe Left (0.18x)  |  Bottom: Conjoined Walk, Conjoined Windup, False Face Windup, Borrowed Heart Recover" % pass_tag.to_upper()
-	await _save("%s-close-gait-and-windup.png" % pass_tag)
+	_spawn_trajectory_sample(Vector3(-2.35, 0, 1.4), 2, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(0, 0, 0.0), "yaw_start": 160.0, "charge": 1.0}
+	])
+	_spawn_trajectory_sample(Vector3(-0.78, 0, 1.4), 2, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(0, 0, 0.0), "yaw_start": 160.0, "flash": 0.14}
+	])
+	_spawn_trajectory_sample(Vector3(0.78, 0, 1.4), 3, [
+		{"count": 9, "dt": 0.04, "vel": Vector3(0, 0, -3.8), "yaw_start": 165.0, "air": true}
+	])
+	_spawn_trajectory_sample(Vector3(2.35, 0, 1.4), 1, [
+		{"count": 6, "dt": 0.04, "vel": Vector3(3.5, 0, -4.2), "yaw_start": 120.0, "yaw_end": 200.0}
+	])
 
-	metrics = {
+	label.text = "ROUND M (%s) • PERSPECTIVE CLOSE INSPECTION (FOV 42°, pitch −42°)\nTop: Run Stride, Strafe Right (hip-steered), Braking Stop Settle, 0.18x BackWalk | Bottom: Flash Charge Brace, Flash Recoil Kick, Cone Heave, Aim-Turn Follow-Through" % pass_tag.to_upper()
+	await _save("%s-perspective-close-inspection.png" % pass_tag)
+
+	var metrics := {
 		"pass": pass_tag,
 		"saved_images": saved_images,
-		"player_samples": player_samples,
-		"enemy_samples": enemy_metrics,
+		"force_update_count_per_step": force_updates,
+		"grip_errors": grip_summary,
 	}
 	var f := FileAccess.open(OUT_DIR + "%s-metrics.json" % pass_tag, FileAccess.WRITE)
 	if f:

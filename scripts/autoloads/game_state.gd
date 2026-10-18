@@ -1,6 +1,10 @@
 extends Node
 
-enum State { MENU, PLAYING, PAUSED, GAME_OVER }
+## EMERGENCY: a hit emptied the time meter; combat is frozen through
+## TimeController.world_scale == 0 while the recovery choice is open. The tree is
+## NOT paused, so the arena's emergency input and UI keep running. PAUSED may sit
+## on top of PLAYING or EMERGENCY and resumes to whichever it interrupted.
+enum State { MENU, PLAYING, PAUSED, GAME_OVER, EMERGENCY }
 
 signal state_changed(old_state: State, new_state: State)
 signal game_started
@@ -8,6 +12,8 @@ signal game_paused
 signal game_resumed
 signal game_over
 signal opened_menu
+signal emergency_entered
+signal emergency_exited
 signal settings_changed(values: Dictionary)
 signal settings_save_failed(path: String)
 
@@ -15,6 +21,10 @@ var state: State:
 	get: return _state
 
 var _state: State = State.MENU
+## State that PAUSED returns to (PLAYING or EMERGENCY).
+var _resume_state: State = State.PLAYING
+var _emergency: EmergencyRewind
+var _in_emergency := false
 const SETTINGS_PATH := "user://museum-settings.cfg"
 const AUDIO_PATH := "user://combat-audio.cfg"
 const HUD_PATH := "user://combat-hud.cfg"
@@ -43,11 +53,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## Only toggles between PLAYING and PAUSED.
-## Ignored when in MENU and GAME_OVER.
+## Toggles PAUSED over PLAYING or EMERGENCY. Ignored in MENU and GAME_OVER.
 func toggle_pause() -> bool:
 	match _state:
-		State.PLAYING:
+		State.PLAYING, State.EMERGENCY:
 			return pause()
 		State.PAUSED:
 			return resume()
@@ -61,9 +70,19 @@ func change_state(new_state: State) -> bool:
 	var old_state: State = _state
 	_state = new_state
 	get_tree().paused = (_state in [State.PAUSED, State.GAME_OVER])
+	var entered := _state == State.EMERGENCY and not _in_emergency
+	var exited := _in_emergency and _state in [State.PLAYING, State.MENU, State.GAME_OVER]
+	if entered:
+		_in_emergency = true
+	if exited:
+		_in_emergency = false
 	
 	state_changed.emit(old_state, _state)
 	_emit_state_signal(old_state, _state)
+	if entered:
+		emergency_entered.emit()
+	if exited:
+		emergency_exited.emit()
 	return true
 
 
@@ -80,8 +99,9 @@ func open_menu() -> bool:
 
 
 func pause() -> bool:
-	if _state != State.PLAYING:
+	if _state not in [State.PLAYING, State.EMERGENCY]:
 		return false
+	_resume_state = _state
 	SceneManager.push_popup("PauseMenu")
 	return change_state(State.PAUSED)
 
@@ -90,7 +110,39 @@ func resume() -> bool:
 	if _state != State.PAUSED or SceneManager.has_popup(&"Settings"):
 		return false
 	SceneManager.close_popup("PauseMenu")
-	return change_state(State.PLAYING)
+	return change_state(_resume_state)
+
+
+## Connects the arena's EmergencyRewind so its session drives EMERGENCY mode.
+## Call once when the arena composes its time core; rebinding replaces the old one.
+func bind_emergency(rewind: EmergencyRewind) -> void:
+	if is_instance_valid(_emergency):
+		_emergency.started.disconnect(_on_emergency_started)
+		_emergency.ended.disconnect(end_emergency)
+	_emergency = rewind
+	if is_instance_valid(_emergency):
+		_emergency.started.connect(_on_emergency_started)
+		_emergency.ended.connect(end_emergency)
+
+
+## PLAYING -> EMERGENCY. Returns false from any other state.
+func begin_emergency() -> bool:
+	if _state != State.PLAYING:
+		return false
+	return change_state(State.EMERGENCY)
+
+
+## Leaves EMERGENCY. If a pause menu covers the emergency (e.g. retry chosen from
+## pause), the pause will resume into PLAYING instead.
+func end_emergency() -> bool:
+	if _state == State.EMERGENCY:
+		return change_state(State.PLAYING)
+	if _state == State.PAUSED and _resume_state == State.EMERGENCY:
+		_resume_state = State.PLAYING
+		_in_emergency = false
+		emergency_exited.emit()
+		return true
+	return false
 
 
 func is_in_menu() -> bool:
@@ -109,8 +161,17 @@ func is_game_over() -> bool:
 	return _state == State.GAME_OVER
 
 
+## True from emergency start until it ends, including while paused over it.
+func is_in_emergency() -> bool:
+	return _in_emergency
+
+
 func get_current_scene() -> Node:
 	return get_tree().current_scene
+
+
+func _on_emergency_started(_choice_count: int) -> void:
+	begin_emergency()
 
 
 func _emit_state_signal(old_state: State, new_state: State) -> void:
@@ -118,8 +179,11 @@ func _emit_state_signal(old_state: State, new_state: State) -> void:
 		State.PLAYING:
 			if old_state == State.PAUSED:
 				game_resumed.emit()
-			else:
+			elif old_state != State.EMERGENCY:
 				game_started.emit()
+		State.EMERGENCY:
+			if old_state == State.PAUSED:
+				game_resumed.emit()
 		State.PAUSED:
 			game_paused.emit()
 		State.GAME_OVER:

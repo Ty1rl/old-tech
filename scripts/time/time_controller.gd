@@ -164,6 +164,18 @@ func apply_hit(base_amount: float) -> float:
 	return spent
 
 
+## Teaching hook: empties the meter and runs the SAME depletion path as a hit,
+## spending a real charge (or exhausting the attempt). Ignores recovery grace so
+## a scripted lesson cannot be silently absorbed. Returns false when an emergency
+## is already active or the attempt is exhausted.
+func force_depletion() -> bool:
+	if _emergency or _exhausted:
+		return false
+	_set_meter(0.0)
+	_deplete()
+	return true
+
+
 ## Whether a voluntary spend of `amount` can be paid in full right now.
 func can_afford(amount: float) -> bool:
 	return not _emergency and not _exhausted and amount >= 0.0 and _meter + 0.000001 >= amount

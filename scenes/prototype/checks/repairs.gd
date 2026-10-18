@@ -162,7 +162,9 @@ func run() -> void:
 	trace(panel, [panel.route[0], Vector2(360, 220)])
 	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Leaving spin ring annulus fails without free capacity")
 	trace(panel, [panel.route[0], panel.route[1], panel.route[2]])
-	expect(gear.remaining(&"ring") == 0 and panel.trace_bad, "Releasing early before completing spin angle fails")
+	expect(gear.remaining(&"ring") == 0 and panel.spin_base_accum > 0.0, "Releasing early before completing spin angle banks partial progress without free capacity")
+	panel.spin_base_accum = 0.0
+	panel.spin_locked_dir = 0.0
 	# Reverse direction mid-spin
 	button(panel, panel.route[0], true)
 	motion(panel, panel.route[1])
@@ -182,22 +184,22 @@ func run() -> void:
 	button(panel, panel.route[-1], false)
 	expect(gear.stage(&"ring") == 1, "Duplicate release cannot repair the next operation")
 
-	# 4. Hold-E flow: pressing E does NOT toggle/close; releasing E closes and preserves checkpoint
+	# 4. E-toggle flow: releasing E does nothing; pressing E toggles/closes and preserves checkpoint
 	expect(panel.active_op_index == 1 and panel.active_kind == &"connect",
 		"After completing Operation 1 (Spin), panel advances to Operation 2 (Connect)")
 	button(panel, panel.route[0], true)
 	motion(panel, panel.route[1])
-	key(KEY_E, false, true)
+	key(KEY_E, false, false)
 	key(KEY_E, true, true)
 	await frames()
 	expect(scenes.has_popup(&"Repair") and gear.repairing == &"ring",
-		"Holding/pressing E does not toggle-close the repair panel")
-	key(KEY_E, false, false)
+		"Releasing E or holding echo E does not close the repair panel")
+	key(KEY_E, false, true)
 	await frames()
 	expect(not scenes.has_popup(&"Repair") and gear.repairing == &"",
-		"Releasing E closes repair panel and releases its session")
+		"Pressing E toggles repair panel closed and releases its session")
 	expect(gear.stage(&"ring") == 1 and is_equal_approx(gear.remaining(&"ring"), ring_cap * 0.25),
-		"Releasing E mid-gesture discards only unfinished gesture and preserves completed checkpoint")
+		"Closing with E mid-gesture discards only unfinished gesture and preserves completed checkpoint")
 
 	# 5. Reopening resumes at Operation 2 (Connect) without redoing Operation 1 (Spin)
 	panel = await open(scenes, gear, &"ring")
@@ -287,15 +289,17 @@ func run() -> void:
 	expect(not scenes.has_popup() and not paused and state.is_playing() and is_equal_approx(gear.remaining(&"ring"), ring_cap * 0.75),
 		"Escape cancels unfinished trace and closes Repair without opening PauseMenu")
 
-	# 8. Finishing remaining short trace at stage 3 reaches full capacity and automatically closes Repair
+	# 8. Finishing remaining short trace at stage 3 reaches full capacity and displays Ready until closed
 	panel = await open(scenes, gear, &"ring")
 	expect(panel.active_op_index == 2 and panel.active_kind == &"trace",
 		"Reopening at 75% starts on the remaining tail of Operation 3 (Trace)")
 	trace(panel)
 	await frames()
 	expect(gear.remaining(&"ring") == gear.capacity(&"ring") and gear.stage(&"ring") == 0
-		and gear.repairing == &"" and not scenes.has_popup(&"Repair"),
-		"Completing the remaining tail reaches full capacity, resets stage to 0, and closes Repair")
+		and gear.repairing == &"" and scenes.has_popup(&"Repair") and panel.progress.text.contains("Ready"),
+		"Completing the remaining tail reaches full capacity, resets stage to 0, clears repair session, and displays Ready")
+	scenes.close_popup(&"Repair")
+	await frames()
 
 	# 9. Tiny / light wear vs heavy wear vs partial segment: never forces all 3 operations for small damage
 	gear.reset_state()
@@ -307,8 +311,10 @@ func run() -> void:
 		"Lightly worn ring skips Operations 1 & 2 and requires only a short tail trace in Operation 3")
 	trace(panel)
 	await frames()
-	expect(is_equal_approx(gear.remaining(&"ring"), ring_cap) and not scenes.has_popup(&"Repair") and gear.repairing == &"",
-		"Tracing short missing section on lightly worn ring restores to full and closes panel")
+	expect(is_equal_approx(gear.remaining(&"ring"), ring_cap) and scenes.has_popup(&"Repair") and gear.repairing == &"",
+		"Tracing short missing section on lightly worn ring restores to full and stays Ready")
+	scenes.close_popup(&"Repair")
+	await frames()
 
 	# Tiny damage on Orange (cone) at >75% condition: skips Spin & Trace, and Pair A is already connected; only Pair B needed!
 	gear.reset_state()
@@ -319,8 +325,10 @@ func run() -> void:
 		"Lightly worn Orange bellows skips Spin & Trace and starts with Pair A already connected")
 	click_connect_pair(panel, 1)
 	await frames()
-	expect(is_equal_approx(gear.remaining(&"cone"), cone_cap) and not scenes.has_popup(&"Repair") and gear.repairing == &"",
-		"Clicking only the single remaining coil pair on lightly worn Orange bellows restores to full and closes")
+	expect(is_equal_approx(gear.remaining(&"cone"), cone_cap) and scenes.has_popup(&"Repair") and gear.repairing == &"",
+		"Clicking only the single remaining coil pair on lightly worn Orange bellows restores to full and stays Ready")
+	scenes.close_popup(&"Repair")
+	await frames()
 
 	# Partial wear within Quarter 1 (12.5% condition) scales down Spin arc length to 50%
 	gear.reset_state()
@@ -368,8 +376,10 @@ func run() -> void:
 		else:
 			trace(panel)
 		await frames()
-		expect(gear.is_full(tool) and not scenes.has_popup(&"Repair") and gear.repairing == &"",
-			"Completing 3 tool-specific operations on %s reaches 100%% Full and auto-closes panel" % String(tool))
+		expect(gear.is_full(tool) and scenes.has_popup(&"Repair") and gear.repairing == &"" and panel.progress.text.contains("Ready"),
+			"Completing 3 tool-specific operations on %s reaches 100%% Full and displays Ready" % String(tool))
+		scenes.close_popup(&"Repair")
+		await frames()
 
 	# Clock cannot power itself while repairing clock, but can slow time while repairing another tool
 	gear.reset_state()
@@ -446,7 +456,7 @@ func run() -> void:
 	scenes.close_popup(&"Repair")
 	await frames()
 
-	# 12. Enemy contact damage interruption and arena reset
+	# 12. Non-lethal damage keeps repair open; lethal damage closes repair and preserves checkpoint; arena reset
 	gear.reset_state()
 	gear.spend(&"ring", ring_cap)
 	panel = await open(scenes, gear, &"ring")
@@ -459,11 +469,14 @@ func run() -> void:
 	var health_before: float = player.health
 	arena._physics_process(0.1)
 	await frames()
-	expect(player.health < health_before and not scenes.has_popup(&"Repair"),
-		"Actual arena enemy contact damage closes the repair popup")
-	expect(gear.stage(&"ring") == 1 and is_equal_approx(gear.remaining(&"ring"), ring_cap * 0.25) and gear.repairing == &"",
-		"Damage interruption preserves completed checkpoint without leaving a lock")
+	expect(player.health < health_before and player.health > 0.0 and scenes.has_popup(&"Repair") and gear.repairing == &"ring",
+		"Non-lethal arena enemy contact damage does not forcibly dismiss the repair popup")
+	player.take_damage(player.health)
+	await frames()
+	expect(not scenes.has_popup(&"Repair") and gear.stage(&"ring") == 1 and is_equal_approx(gear.remaining(&"ring"), ring_cap * 0.25) and gear.repairing == &"",
+		"Lethal damage closes repair popup and preserves completed checkpoint without leaving a lock")
 	arena.director.clear()
+	player.reset_state()
 	panel = await open(scenes, gear, &"ring")
 	arena.reset_arena()
 	await frames()

@@ -9,10 +9,12 @@ extends RefCounted
 const BOARD_SIZE := Vector2(520.0, 260.0)
 const TRACE_CORRIDOR := 24.0
 const TRACE_CONTACT := 20.0
-const SPIN_RADIAL_INNER_PAD := 26.0
-const SPIN_RADIAL_OUTER_PAD := 30.0
-const SPIN_MIN_RADIANS := PI * 0.55
-const SPIN_FULL_RADIANS := PI * 1.35
+const SPIN_RADIAL_INNER_PAD := 36.0
+const SPIN_RADIAL_OUTER_PAD := 68.0
+const SPIN_ACTIVE_OUTER_PAD := 95.0
+const SPIN_HUB_DEADZONE := 9.0
+const SPIN_MIN_RADIANS := PI * 0.45
+const SPIN_FULL_RADIANS := PI * 1.15
 const CONNECT_RADIUS := 22.0
 const CONNECT_CORRIDOR := 46.0
 
@@ -33,9 +35,9 @@ const TOOL_SPECS := {
 				"kind": &"spin",
 				"tag": "1 · WIND TAPE",
 				"short": "Wind Tape",
-				"prompt": "Drag around the cassette reel to wind the tape.",
+				"prompt": "Drag around the cassette reel in either direction to wind the tape.",
 				"center": Vector2(245.0, 112.0),
-				"radius": 22.0,
+				"radius": 28.0,
 				"dir": 1.0,
 				"start_angle": -PI * 0.65,
 				"badge_pos": Vector2(68.0, 32.0),
@@ -96,7 +98,7 @@ const TOOL_SPECS := {
 				"kind": &"spin",
 				"tag": "1 · SPIN LENS",
 				"short": "Lens Spin",
-				"prompt": "Drag around the brass lens barrel to focus the aperture.",
+				"prompt": "Drag around the brass lens barrel in either direction to focus the aperture.",
 				"center": Vector2(184.0, 201.0),
 				"radius": 42.0,
 				"dir": -1.0,
@@ -160,7 +162,7 @@ const TOOL_SPECS := {
 				"kind": &"spin",
 				"tag": "1 · SPIN FAN",
 				"short": "Fan Spin",
-				"prompt": "With the rear fan cover open, spin the intake fan.",
+				"prompt": "With the rear fan cover open, spin the intake fan in either direction.",
 				"center": Vector2(338.0, 78.0),
 				"radius": 38.0,
 				"dir": 1.0,
@@ -223,9 +225,9 @@ const TOOL_SPECS := {
 				"kind": &"spin",
 				"tag": "1 · SPIN KEY",
 				"short": "Key Spin",
-				"prompt": "Drag around the brass side key to wind the mainspring.",
+				"prompt": "Drag around the brass side key in either direction to wind the mainspring.",
 				"center": Vector2(326.0, 196.0),
-				"radius": 25.0,
+				"radius": 30.0,
 				"dir": 1.0,
 				"start_angle": -PI * 0.65,
 				"badge_pos": Vector2(342.0, 92.0),
@@ -404,48 +406,96 @@ static func spin_can_start(op: Dictionary, point: Vector2) -> bool:
 	var center: Vector2 = op["center"]
 	var radius: float = float(op["radius"])
 	var dist := point.distance_to(center)
-	return dist >= maxf(8.0, radius - SPIN_RADIAL_INNER_PAD) and dist <= radius + SPIN_RADIAL_OUTER_PAD
+	return dist <= radius + SPIN_RADIAL_OUTER_PAD
 
 
 static func spin_step(op: Dictionary, prev_point: Vector2, next_point: Vector2, current_accum: float, locked_dir: float) -> Dictionary:
 	var center: Vector2 = op["center"]
 	var radius: float = float(op["radius"])
-	var min_r := maxf(8.0, radius - SPIN_RADIAL_INNER_PAD)
-	var max_r := radius + SPIN_RADIAL_OUTER_PAD
-	var samples := maxi(1, ceili(prev_point.distance_to(next_point) / 6.0))
+	var max_r := radius + SPIN_ACTIVE_OUTER_PAD
+	var step_dist := prev_point.distance_to(next_point)
+	if step_dist <= 0.001:
+		return {
+			"ok": true,
+			"accum": current_accum,
+			"locked_dir": locked_dir,
+			"point": next_point,
+			"message": "",
+		}
+	# Ignore single-frame noise/teleport jumps during an honest active turn rather than resetting progress.
+	if step_dist > 170.0 and current_accum >= 0.22:
+		return {
+			"ok": true,
+			"accum": current_accum,
+			"locked_dir": locked_dir,
+			"point": prev_point,
+			"message": "",
+		}
+	var samples := maxi(1, ceili(step_dist / 4.0))
 	var accum := current_accum
 	var dir := locked_dir
 	var last_pt := prev_point
+	var reverse_accum := 0.0
 	for i in range(1, samples + 1):
 		var pt := prev_point.lerp(next_point, float(i) / float(samples))
 		var dist := pt.distance_to(center)
-		if dist < min_r or dist > max_r:
+		if dist > max_r:
+			if accum >= 0.25 and dist <= max_r + 65.0:
+				# Wide oval excursion during an established turn: preserve progress without aborting.
+				last_pt = pt
+				continue
 			return {
 				"ok": false,
 				"accum": accum,
 				"locked_dir": dir,
 				"point": pt,
-				"message": "Left the spin ring. Completed checkpoints are safe; drag around the dial.",
+				"message": "Left the spin area. Completed checkpoints are safe; drag around the dial.",
 			}
+		var last_dist := last_pt.distance_to(center)
+		if dist < SPIN_HUB_DEADZONE or last_dist < SPIN_HUB_DEADZONE:
+			# Center crossing: glide across hub without polar angle spikes or resetting.
+			if dir != 0.0 and accum > 0.05:
+				accum += (last_pt.distance_to(pt) / maxf(radius, 24.0)) * 0.35
+			last_pt = pt
+			continue
 		var a0 := (last_pt - center).angle()
 		var a1 := (pt - center).angle()
 		var delta := wrapf(a1 - a0, -PI, PI)
+		if absf(delta) > 1.25:
+			# Ignore angular noise spike on a single sub-step.
+			last_pt = pt
+			continue
 		if dir == 0.0:
-			if absf(delta) > 0.015:
+			if absf(delta) > 0.008:
 				dir = 1.0 if delta > 0.0 else -1.0
-			else:
-				last_pt = pt
-				continue
+				accum += absf(delta)
+			last_pt = pt
+			continue
 		var signed_step := delta * dir
-		if signed_step < -0.35:
-			return {
-				"ok": false,
-				"accum": accum,
-				"locked_dir": dir,
-				"point": pt,
-				"message": "Reversed spin direction. Keep turning smoothly in one direction.",
-			}
-		accum = maxf(0.0, accum + signed_step)
+		if accum < 0.22 and signed_step < 0.0:
+			# Smoothly adopt new direction if initial grip had a tiny opposite hook.
+			accum += signed_step
+			if accum < 0.0:
+				dir = -dir
+				accum = -accum
+			last_pt = pt
+			continue
+		if signed_step >= 0.0:
+			accum += signed_step
+			reverse_accum = maxf(0.0, reverse_accum - signed_step * 0.5)
+		else:
+			# Interior return of a D-shape / off-center loop (dist < 0.72 * radius) ratchets without unwinding.
+			if dist >= radius * 0.72 and last_dist >= radius * 0.72:
+				reverse_accum += -signed_step
+				accum = maxf(0.0, accum + signed_step)
+				if reverse_accum > 0.40:
+					return {
+						"ok": false,
+						"accum": 0.0,
+						"locked_dir": 0.0,
+						"point": pt,
+						"message": "Reversed spin direction. Keep turning smoothly in one direction.",
+					}
 		last_pt = pt
 	return {
 		"ok": true,

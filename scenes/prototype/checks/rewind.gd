@@ -56,35 +56,53 @@ func run() -> void:
 		fresh()
 		key(KEY_1 + tool - 1)
 		key(KEY_E)
-		expect(not scenes.has_popup(), "Full tool %d ignores repair" % tool)
+		expect(scenes.has_popup(&"Repair") and arena.equipment.repairing == &"", "Full tool %d opens repair in Ready state" % tool)
+		key(KEY_E, false)
+		expect(scenes.has_popup(&"Repair"), "Releasing E does not close repair on full tool %d" % tool)
+		key(KEY_E)
+		await process_frame
+		expect(not scenes.has_popup(&"Repair"), "Pressing E again closes repair on full tool %d" % tool)
 		key(KEY_E, false)
 		arena.equipment.spend(arena.Weapons.TOOL_IDS[tool - 1], 1)
 		key(KEY_E)
 		expect(scenes.has_popup(&"Repair") and arena.equipment.repairing == arena.Weapons.TOOL_IDS[tool - 1], "E repairs selected tool %d" % tool)
 		var clock_before: float = arena.player.slow_charge
 		arena._physics_process(0.1)
+		expect(arena.player.world_scale == 1 and arena.player.slow_charge == clock_before,
+			"Tool %d repair does not automatically slow world without Space" % tool)
+		key(KEY_SPACE)
+		arena._physics_process(0.1)
 		if tool < 4:
 			expect(is_equal_approx(arena.player.world_scale, Tuning.SLOW.scale)
-				and is_equal_approx(arena.player.slow_charge, clock_before - 0.1 * Tuning.SLOW.drain),
-				"Tool %d repair automatically spends clock to slow world" % tool)
+				and is_equal_approx(arena.player.slow_charge, clock_before - 0.1 * Tuning.SLOW.drain)
+				and not arena.history.inspecting,
+				"Manual Space during tool %d repair spends clock to slow world without rewind" % tool)
 		else:
-			expect(arena.player.world_scale == 1 and arena.player.slow_charge == clock_before,
-				"Clock repair cannot power its own slow")
+			expect(arena.player.world_scale == 1 and arena.player.slow_charge == clock_before and not arena.history.inspecting,
+				"Clock repair cannot power its own slow or trigger accidental rewind")
+		key(KEY_SPACE, false)
 		key(KEY_E, false)
 		await process_frame
+		expect(scenes.has_popup(&"Repair"), "Releasing E leaves repair open for tool %d" % tool)
+		key(KEY_E)
+		await process_frame
+		key(KEY_E, false)
 		clock_before = arena.player.slow_charge
 		arena._physics_process(0.1)
 		expect(arena.player.world_scale == 1 and arena.player.slow_charge == clock_before,
-			"E release stops automatic repair slow for tool %d" % tool)
-		expect(not scenes.has_popup(&"Repair") and arena.equipment.repairing == &"", "Releasing E resumes tool %d" % tool)
+			"Closing repair and releasing Space returns tool %d to normal time" % tool)
+		expect(not scenes.has_popup(&"Repair") and arena.equipment.repairing == &"", "Pressing E closes repair and resumes tool %d" % tool)
 
 	fresh()
 	arena.equipment.spend(&"ring", 1)
 	arena.equipment.spend(&"clock", arena.player.slow_charge)
 	key(KEY_E)
+	key(KEY_SPACE)
 	arena._physics_process(0.1)
 	expect(arena.player.world_scale == 1 and scenes.has_popup(&"Repair"),
 		"Empty clock leaves other equipment repair usable at normal speed")
+	key(KEY_SPACE, false)
+	key(KEY_E)
 	key(KEY_E, false)
 	await process_frame
 

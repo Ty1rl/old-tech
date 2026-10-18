@@ -305,7 +305,7 @@ func run() -> void:
 	expect(panel.trace_bad and not panel.dragging and gear.stage(&"ring") == 1 and is_equal_approx(gear.remaining(&"ring"), ring_cap / float(steps)),
 		"Invalid trace clears only unfinished gesture and preserves completed stage and capacity")
 
-	# Start second gesture then close with E mid-trace
+	# Start second gesture then close with E toggle mid-trace
 	board_button(panel, panel.route[0], true)
 	board_motion(panel, panel.route[1], true)
 	expect(panel.dragging, "Second gesture is in progress before closing popup")
@@ -313,10 +313,16 @@ func run() -> void:
 	release_e.pressed = false
 	root.push_input(release_e, true)
 	await frames()
+	expect(scenes.has_popup(&"Repair") and gear.repairing == &"ring",
+		"Releasing E does not close the repair popup")
+	var toggle_e := key_event(KEY_E)
+	toggle_e.pressed = true
+	root.push_input(toggle_e, true)
+	await frames()
 	expect(not scenes.has_popup(&"Repair") and gear.repairing == &"" and gear.stage(&"ring") == 1 and is_equal_approx(gear.remaining(&"ring"), ring_cap / float(steps)),
-		"Closing popup mid-trace preserves completed steps and releases repair lock")
+		"Closing popup with E mid-trace preserves completed steps and releases repair lock")
 
-	# Reopen, complete section 2, start section 3, then interrupt via actual enemy contact damage in arena._physics_process
+	# Reopen, complete section 2, start section 3, verify non-lethal damage keeps repair open while lethal damage closes it safely
 	panel = await open_repair(scenes, gear, &"ring")
 	expect(panel.route[1] == panel.ROUTES[1][1], "Reopened repair resumes at stage 1 route")
 	trace_section(panel)
@@ -330,10 +336,14 @@ func run() -> void:
 	var hp_before_hit: float = player.health
 	arena._physics_process(0.1)
 	await frames()
-	expect(player.health < hp_before_hit and not scenes.has_popup(&"Repair") and gear.repairing == &"",
-		"Enemy contact damage during arena tick closes repair popup and clears repairing lock")
+	expect(player.health < hp_before_hit and player.health > 0.0 and scenes.has_popup(&"Repair") and gear.repairing == &"ring",
+		"Non-lethal enemy contact damage during arena tick keeps repair popup open")
+	player.take_damage(player.health)
+	await frames()
+	expect(not scenes.has_popup(&"Repair") and gear.repairing == &"",
+		"Lethal damage closes repair popup and clears repairing lock")
 	expect(gear.stage(&"ring") == 2 and is_equal_approx(gear.remaining(&"ring"), ring_cap * 2.0 / float(steps)),
-		"Enemy damage interruption preserves all previously completed repair steps and capacity")
+		"Damage and death preserve all previously completed repair steps and capacity")
 	arena.director.clear()
 
 	# 5. Own-clock repair disables slow, while repairing another tool permits slow

@@ -3,7 +3,7 @@ extends SceneTree
 const Equipment = preload("res://scenes/prototype/equipment.gd")
 const RepairScene = preload("res://scenes/prototype/repair.tscn")
 const Gestures = preload("res://scenes/prototype/repair_gestures.gd")
-const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-1/exports/repair-view-l"
+const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-3/exports/repair-view-l"
 var checks := 0
 var failures: Array[String] = []
 
@@ -59,6 +59,7 @@ func run() -> void:
 	for tool: StringName in [&"ring", &"beam", &"cone", &"clock"]:
 		gear.reset_state()
 		gear.spend(tool, gear.capacity(tool))
+		arena.player.position = Vector3.ZERO
 		var panel: Control = scenes.push_popup(&"Repair", {"equipment": gear, "tool": tool})
 		await frames()
 		expect(not paused, "%s leaves world simulation unpaused" % tool)
@@ -93,7 +94,14 @@ func run() -> void:
 		release.pressed = false
 		root.push_input(release, true)
 		await frames()
-		expect(not scenes.has_popup(&"Repair") and gear.stage(tool) == 1, "%s release E closes and retains checkpoint" % tool)
+		expect(scenes.has_popup(&"Repair") and gear.stage(tool) == 1, "%s release E keeps repair open" % tool)
+		var toggle_close := InputEventKey.new()
+		toggle_close.physical_keycode = KEY_E
+		toggle_close.keycode = KEY_E
+		toggle_close.pressed = true
+		root.push_input(toggle_close, true)
+		await frames()
+		expect(not scenes.has_popup(&"Repair") and gear.stage(tool) == 1, "%s pressing E toggles repair closed and retains checkpoint" % tool)
 		panel = scenes.push_popup(&"Repair", {"equipment": gear, "tool": tool})
 		await frames()
 		expect(panel.active_op_index == 1, "%s resumes next operation" % tool)
@@ -110,8 +118,7 @@ func run() -> void:
 		else:
 			gesture(panel)
 		await frames()
-		expect(gear.is_full(tool) and not scenes.has_popup(&"Repair"), "%s full GUI gesture sequence completes and closes" % tool)
-
+		expect(gear.is_full(tool) and gear.repairing == &"" and scenes.has_popup(&"Repair") and panel.progress.text.contains("Ready"), "%s full GUI gesture sequence completes to Ready state" % tool)
 		scenes.close_popup(&"Repair")
 		await frames()
 	arena.queue_free()

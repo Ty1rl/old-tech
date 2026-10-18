@@ -52,13 +52,20 @@ var next_contact := 1
 var trace_stage := 0
 var trace_bad := false
 var active_op_index := 0
+const TOOL_ORDER: Array[StringName] = [&"ring", &"beam", &"cone", &"clock"]
+
 var active_op: Dictionary = {}
 var active_kind: StringName = &"spin"
 var local_intact_ratio := 0.0
+var available_tools: Array[StringName] = []
 
 var spin_accum := 0.0
+var spin_base_accum := 0.0
+var spin_stroke_accum := 0.0
+var spin_stroke_dir := 0.0
 var spin_required := Gestures.SPIN_FULL_RADIANS
 var spin_locked_dir := 0.0
+var spin_grip_angle := -PI * 0.5
 var spin_visual_angle := 0.0
 
 var connected_pairs: Array[int] = []
@@ -83,20 +90,105 @@ func _rebuild_routes_for_tool(for_tool: StringName) -> void:
 			full_path.append(section[point_idx])
 
 
+var _arena_ref: Node = null
+
+
 func setup(params: Dictionary) -> void:
+	equipment = params.equipment
+	if params.has("arena") and is_instance_valid(params["arena"]):
+		_arena_ref = params["arena"]
+	if params.has("available_tools"):
+		available_tools.clear()
+		for item in params["available_tools"]:
+			if item is int:
+				var idx := int(item)
+				if idx >= 1 and idx <= TOOL_ORDER.size():
+					available_tools.append(TOOL_ORDER[idx - 1])
+			else:
+				available_tools.append(StringName(item))
+	switch_tool(StringName(params.get("tool", &"ring")))
+
+
+func switch_tool(next_tool: StringName) -> void:
 	_clear_trace()
 	if equipment != null and _session >= 0:
 		equipment.end_repair(_session)
-	equipment = params.equipment
-	tool = params.get("tool", &"ring")
+	tool = next_tool
 	_rebuild_routes_for_tool(tool)
-	_session = equipment.begin_repair(tool)
+	if equipment != null:
+		if equipment.is_full(tool):
+			_session = -1
+		else:
+			_session = equipment.begin_repair(tool)
 	if is_node_ready():
 		_refresh()
+		if equipment != null and equipment.is_full(tool):
+			feedback.text = "Ready · Tab / 1–4 switch tools · E or Esc close."
+		else:
+			feedback.text = "E or Esc close · Tab / 1–4 switch tools · WASD move · Space slow."
+
+
+func _find_arena() -> Node:
+	if is_instance_valid(_arena_ref):
+		return _arena_ref
+	if not is_inside_tree() or get_tree() == null:
+		return null
+	var scene := get_tree().current_scene
+	if scene != null and "weapons" in scene and scene.weapons != null:
+		return scene
+	for child in get_tree().root.get_children():
+		if "weapons" in child and child.weapons != null:
+			return child
+	return null
+
+
+func _acquired_tools() -> Array[StringName]:
+	var arena := _find_arena()
+	if arena != null and "available_tools" in arena.weapons:
+		var out: Array[StringName] = []
+		for idx in arena.weapons.available_tools:
+			var i := int(idx)
+			if i >= 1 and i <= TOOL_ORDER.size():
+				out.append(TOOL_ORDER[i - 1])
+		return out
+	if not available_tools.is_empty():
+		return available_tools
+	var all_tools: Array[StringName] = []
+	all_tools.assign(TOOL_ORDER)
+	return all_tools
+
+
+func _select_acquired_tool_index(index: int) -> bool:
+	if index < 1 or index > TOOL_ORDER.size():
+		return false
+	var target_tool: StringName = TOOL_ORDER[index - 1]
+	var acquired := _acquired_tools()
+	if not (target_tool in acquired):
+		feedback.text = "That tool is not yet collected."
+		_queue_redraws()
+		return false
+	var arena := _find_arena()
+	if arena != null and arena.has_method("_switch_tool"):
+		arena.call("_switch_tool", index)
+	if tool != target_tool or (equipment != null and not equipment.is_full(target_tool) and not equipment.is_session_active(_session, target_tool)):
+		switch_tool(target_tool)
+	return true
+
+
+func _cycle_acquired_tool(backward: bool = false) -> bool:
+	var acquired := _acquired_tools()
+	if acquired.is_empty():
+		return false
+	var current_idx := acquired.find(tool)
+	if current_idx < 0:
+		current_idx = 0
+	var next_tool: StringName = acquired[posmod(current_idx + (-1 if backward else 1), acquired.size())]
+	var slot_index := TOOL_ORDER.find(next_tool) + 1
+	return _select_acquired_tool_index(slot_index)
 
 
 func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	if get_parent() != null:
 		for sibling in get_parent().get_children():
 			if sibling is ColorRect:
@@ -149,7 +241,10 @@ func _ready() -> void:
 	overlay.draw.connect(_draw_overlay)
 	board.add_child(overlay)
 	feedback = Label.new()
-	feedback.text = "Hold E to repair · release E or Esc to close · WASD still moves."
+	if equipment != null and equipment.is_full(tool):
+		feedback.text = "Ready · Tab / 1–4 switch tools · E or Esc close."
+	else:
+		feedback.text = "E or Esc close · Tab / 1–4 switch tools · WASD move · Space slow."
 	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	feedback.max_lines_visible = 2
 	feedback.custom_minimum_size = Vector2(240, 20)
@@ -332,7 +427,7 @@ func _refresh() -> void:
 		active_op = spec["operations"][2]
 		active_kind = active_op["kind"]
 		progress.text = "Ready · %.1f / %.1f" % [rem, cap]
-		instructions.text = "All mechanisms aligned and ready."
+		instructions.text = "All mechanisms aligned and ready. Tab / 1–4 switch tools · E or Esc close."
 		solved_path.assign(full_path)
 		missing_path.clear()
 		future_missing_path.clear()
@@ -397,13 +492,19 @@ func _can_trace() -> bool:
 	)
 
 
-func _clear_trace() -> void:
+func _clear_trace(preserve_spin: bool = false) -> void:
 	dragging = false
 	stroke.clear()
 	next_contact = 1
 	trace_bad = false
-	spin_accum = 0.0
-	spin_locked_dir = 0.0
+	spin_stroke_accum = 0.0
+	spin_stroke_dir = 0.0
+	if preserve_spin:
+		spin_accum = spin_base_accum
+	else:
+		spin_accum = 0.0
+		spin_base_accum = 0.0
+		spin_locked_dir = 0.0
 	selected_terminal = {}
 	_drag_pair_pending = -1
 	_drag_completed_pairs.clear()
@@ -427,11 +528,17 @@ func _input(event: InputEvent) -> void:
 		var code: Key = event.physical_keycode if event.physical_keycode != KEY_NONE else event.keycode
 		if code == KEY_E:
 			get_viewport().set_input_as_handled()
-			if not event.pressed and not event.echo:
+			if event.pressed and not event.echo:
 				_request_close()
 		elif code == KEY_ESCAPE and event.pressed and not event.echo:
 			get_viewport().set_input_as_handled()
 			_request_close()
+		elif code == KEY_TAB and event.pressed and not event.echo:
+			get_viewport().set_input_as_handled()
+			_cycle_acquired_tool(event.shift_pressed)
+		elif code >= KEY_1 and code <= KEY_4 and event.pressed and not event.echo:
+			get_viewport().set_input_as_handled()
+			_select_acquired_tool_index(code - KEY_1 + 1)
 
 
 func _request_close() -> void:
@@ -459,7 +566,11 @@ func _board_offset() -> Vector2:
 
 func _on_board_input(event: InputEvent) -> void:
 	if not _can_trace():
-		_clear_trace()
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and equipment != null and equipment.is_full(tool):
+			feedback.text = "Ready · Tab / 1–4 switch tools · E or Esc close."
+			_queue_redraws()
+		else:
+			_clear_trace()
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var point: Vector2 = (event.position - _board_offset()) / _board_scale()
@@ -471,8 +582,12 @@ func _on_board_input(event: InputEvent) -> void:
 			_handle_trace_button(point, event.pressed)
 	elif event is InputEventMouseMotion and dragging:
 		if not (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
-			_clear_trace()
-			feedback.text = "Mouse released; restart this gesture."
+			if active_kind == &"spin" and spin_stroke_accum >= 0.20 and not trace_bad:
+				spin_base_accum = clampf(spin_accum, 0.0, spin_required)
+				_clear_trace(true)
+			else:
+				_clear_trace()
+			feedback.text = "Mouse released; drag again to continue."
 		else:
 			var point: Vector2 = (event.position - _board_offset()) / _board_scale()
 			if active_kind == &"spin":
@@ -491,38 +606,84 @@ func _handle_spin_button(point: Vector2, pressed: bool) -> void:
 			return
 		_refresh()
 		if not Gestures.spin_can_start(active_op, point):
-			feedback.text = "Grab the spin ring to rotate the mechanism. Nothing was lost."
+			feedback.text = "Grab the spin dial or drag around it. Nothing was lost."
 			return
-		_clear_trace()
+		var keep_bank := spin_base_accum > 0.01
+		_clear_trace(keep_bank)
 		dragging = true
 		trace_stage = equipment.stage(tool)
 		stroke = [point]
-		feedback.text = "Drag smoothly around the ring to spin."
+		var center: Vector2 = active_op["center"]
+		if not keep_bank and point.distance_to(center) >= 4.0:
+			spin_grip_angle = (point - center).angle()
+		elif not keep_bank:
+			spin_grip_angle = float(active_op.get("start_angle", -PI * 0.5))
+		var pct := int(round(clampf(spin_accum / maxf(0.01, spin_required), 0.0, 1.0) * 100.0))
+		feedback.text = ("Continue spinning (%d%%) in either direction." % pct) if pct > 0 else "Drag around the mechanism in either direction to spin."
 	elif dragging:
 		_extend_spin(point)
 		if dragging:
 			if spin_accum >= spin_required - 0.06:
 				_commit_steps(1)
 			else:
+				if spin_stroke_accum >= 0.20 and not trace_bad:
+					spin_base_accum = clampf(spin_accum, 0.0, spin_required)
 				var pct := int(round(clampf(spin_accum / maxf(0.01, spin_required), 0.0, 1.0) * 100.0))
-				_invalid("Released early (%d%% spun). Completed checkpoints are safe; spin further." % pct)
+				_invalid("Released early (%d%% spun). Progress saved — drag again to finish." % pct if spin_base_accum > 0.01 else "Released early (%d%% spun). Completed checkpoints are safe; spin further." % pct)
 
 
 func _extend_spin(finish: Vector2) -> void:
 	var start := stroke[-1]
-	var res := Gestures.spin_step(active_op, start, finish, spin_accum, spin_locked_dir)
+	if spin_accum >= spin_required - 0.06:
+		# Target already reached during this drag: latch completion so wrist-stop hooks never lose it.
+		spin_accum = maxf(spin_accum, spin_required)
+		if stroke[-1].distance_to(finish) >= 3.0:
+			stroke.append(finish)
+		feedback.text = "Spin target reached (100%). Release to lock."
+		return
+	var prev_stroke_accum := spin_stroke_accum
+	var res := Gestures.spin_step(active_op, start, finish, spin_stroke_accum, spin_stroke_dir)
 	if not bool(res["ok"]):
 		stroke.append(res["point"])
-		_invalid(String(res["message"]))
+		var msg := String(res["message"])
+		if msg.begins_with("Reversed"):
+			spin_base_accum = 0.0
+			spin_accum = 0.0
+			spin_stroke_accum = 0.0
+			spin_stroke_dir = 0.0
+		elif spin_accum >= 0.25:
+			spin_base_accum = clampf(spin_accum, 0.0, spin_required)
+		_invalid(msg)
 		return
-	spin_accum = float(res["accum"])
-	spin_locked_dir = float(res["locked_dir"])
-	spin_visual_angle += (spin_accum * 0.25)
+	spin_stroke_accum = float(res["accum"])
+	spin_stroke_dir = float(res["locked_dir"])
+	if stroke.size() >= 2 and spin_stroke_dir != 0.0:
+		var center: Vector2 = active_op["center"]
+		var radius: float = float(active_op["radius"])
+		if finish.distance_to(center) <= radius + Gestures.SPIN_ACTIVE_OUTER_PAD:
+			var prev_vec := start - stroke[-2]
+			var curr_vec := finish - start
+			if prev_vec.length() >= 3.0 and curr_vec.length() >= 3.0:
+				var turn_delta := wrapf(curr_vec.angle() - prev_vec.angle(), -PI, PI)
+				if absf(turn_delta) < 1.25 and turn_delta * spin_stroke_dir > 0.02:
+					var polar_gain := spin_stroke_accum - prev_stroke_accum
+					var curve_gain := turn_delta * spin_stroke_dir * 0.85
+					if curve_gain > polar_gain:
+						spin_stroke_accum = prev_stroke_accum + curve_gain
+	spin_accum = spin_base_accum + spin_stroke_accum
+	if spin_stroke_dir != 0.0:
+		spin_locked_dir = spin_stroke_dir
+	spin_visual_angle = (spin_locked_dir if spin_locked_dir != 0.0 else 1.0) * spin_accum * 1.35
 	_update_3d_backdrop()
 	if stroke[-1].distance_to(finish) >= 3.0:
 		stroke.append(finish)
 	if spin_accum >= spin_required - 0.06:
-		feedback.text = "Spin target reached. Release to lock."
+		spin_accum = maxf(spin_accum, spin_required)
+		feedback.text = "Spin target reached (100%). Release to lock."
+	else:
+		var pct := int(round(clampf(spin_accum / maxf(0.01, spin_required), 0.0, 1.0) * 100.0))
+		var dir_txt := "CW" if spin_locked_dir >= 0.0 else "CCW"
+		feedback.text = "Spinning %s · %d%%" % [dir_txt, pct]
 
 
 # --- TRACE GESTURE ---
@@ -714,10 +875,11 @@ func _commit_steps(step_count: int) -> void:
 	_clear_trace()
 	_refresh()
 	if equipment.is_full(tool):
-		feedback.text = "Ready. Repair complete."
-		_request_close()
+		equipment.end_repair(_session)
+		_session = -1
+		feedback.text = "Ready. Repair complete · Tab / 1–4 switch tools · E or Esc close."
 	else:
-		feedback.text = "Checkpoint complete (+%.1f). Next operation ready or release E." % total_restored
+		feedback.text = "Checkpoint complete (+%.1f). Next operation ready · E or Esc close." % total_restored
 
 
 func _notification(what: int) -> void:
@@ -731,9 +893,13 @@ func _exit_tree() -> void:
 
 
 func _draw_overlay() -> void:
-	if equipment == null or equipment.is_full(tool):
+	if equipment == null:
 		return
 	overlay.draw_set_transform(_board_offset(), 0, Vector2.ONE * _board_scale())
+	if equipment.is_full(tool):
+		var spec := Gestures.tool_spec(tool)
+		_draw_badge(Vector2(18.0, 28.0), String(spec["title"]).to_upper() + " · READY ✓", GREEN)
+		return
 	# Completed and upcoming mechanisms stay unobscured; highlight only the live step.
 	_draw_operation_layer(active_op, false, true)
 
@@ -762,32 +928,43 @@ func _draw_spin_operation(op: Dictionary, is_done: bool, is_active: bool) -> voi
 		overlay.draw_arc(center, radius, 0.0, TAU, 28, INK.darkened(0.55), 2.0, true)
 		return
 
-	# Active Spin ring
+	# Active Spin ring + subtle permissive grip zone halo
 	var ring_col := RED if trace_bad else PURPLE
-	overlay.draw_arc(center, radius, 0.0, TAU, 36, Color(0.18, 0.12, 0.28, 0.78), 12.0, true)
+	overlay.draw_arc(center, radius + 16.0, 0.0, TAU, 36, Color(0.55, 0.42, 0.78, 0.16), 2.0, true)
+	overlay.draw_arc(center, radius, 0.0, TAU, 36, Color(0.18, 0.12, 0.28, 0.78), 14.0, true)
 	overlay.draw_arc(center, radius, 0.0, TAU, 36, ring_col, 3.5, true)
 
-	# Progress arc
+	# Progress arc from user's actual grip angle & direction
 	var prog_frac := clampf(spin_accum / maxf(0.01, spin_required), 0.0, 1.0)
+	var base_ang := spin_grip_angle if (dragging or prog_frac > 0.01) else start_ang
+	var use_dir := spin_locked_dir if spin_locked_dir != 0.0 else dir
+	var head_ang := base_ang + use_dir * spin_required * prog_frac
 	if prog_frac > 0.01:
-		var use_dir := spin_locked_dir if spin_locked_dir != 0.0 else dir
-		overlay.draw_arc(center, radius, start_ang, start_ang + use_dir * spin_required * prog_frac, 28, GREEN, 5.5, true)
+		overlay.draw_arc(center, radius, base_ang, head_ang, 28, GREEN, 6.0, true)
 
-	# Start handle & directional arrow head
-	var start_pt := center + Vector2(cos(start_ang), sin(start_ang)) * radius
-	overlay.draw_circle(start_pt, 9.0, GREEN if dragging else INK)
-	overlay.draw_arc(start_pt, 9.0, 0.0, TAU, 16, ring_col, 2.0, true)
+	# Live rotating handle dot
+	var handle_pt := center + Vector2(cos(head_ang), sin(head_ang)) * radius
+	overlay.draw_circle(handle_pt, 9.5, GREEN if (dragging or prog_frac > 0.01) else INK)
+	overlay.draw_arc(handle_pt, 9.5, 0.0, TAU, 16, ring_col, 2.0, true)
 
-	var arrow_ang := start_ang + dir * PI * 1.15
-	var arrow_tip := center + Vector2(cos(arrow_ang), sin(arrow_ang)) * radius
-	var tang := Vector2(-sin(arrow_ang), cos(arrow_ang)) * dir
-	var norm := Vector2(cos(arrow_ang), sin(arrow_ang))
-	var tri := PackedVector2Array([
-		arrow_tip + tang * 10.0,
-		arrow_tip - tang * 6.0 + norm * 7.0,
-		arrow_tip - tang * 6.0 - norm * 7.0,
-	])
-	overlay.draw_colored_polygon(tri, ring_col)
+	# Bidirectional arrows before direction lock; active direction arrow once turning
+	var dirs_to_draw: Array = [use_dir] if spin_locked_dir != 0.0 else [1.0, -1.0]
+	for d_sign in dirs_to_draw:
+		var arrow_ang := (head_ang if spin_locked_dir != 0.0 else base_ang) + float(d_sign) * PI * 0.55
+		var arrow_tip := center + Vector2(cos(arrow_ang), sin(arrow_ang)) * radius
+		var tang := Vector2(-sin(arrow_ang), cos(arrow_ang)) * float(d_sign)
+		var norm := Vector2(cos(arrow_ang), sin(arrow_ang))
+		var tri := PackedVector2Array([
+			arrow_tip + tang * 10.0,
+			arrow_tip - tang * 6.0 + norm * 6.5,
+			arrow_tip - tang * 6.0 - norm * 6.5,
+		])
+		overlay.draw_colored_polygon(tri, GREEN if prog_frac >= 0.98 else ring_col)
+
+	var tag_txt := String(op["tag"])
+	if prog_frac > 0.01:
+		tag_txt += " · %d%%" % int(round(prog_frac * 100.0))
+	_draw_badge(bpos, tag_txt, GREEN if prog_frac > 0.01 else ring_col)
 
 
 func _draw_trace_operation(op: Dictionary, is_done: bool, is_active: bool) -> void:

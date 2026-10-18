@@ -3,7 +3,7 @@ extends SceneTree
 const Equipment = preload("res://scenes/prototype/equipment.gd")
 const RepairScene = preload("res://scenes/prototype/repair.tscn")
 const Gestures = preload("res://scenes/prototype/repair_gestures.gd")
-const EXPORT_DIR := "/home/mattlongname/game-jams/state/old-tech-jam-3/exports/round-k"
+const EXPORT_DIR := "/home/mattlongname/game-jams/state/old-tech-jam-3/exports/round-m"
 
 var checks := 0
 var failures: Array[String] = []
@@ -50,10 +50,11 @@ func _make_card(parent: Control, pos: Vector2, card_size: Vector2, gear: RefCoun
 
 func capture() -> void:
 	DirAccess.make_dir_recursive_absolute(EXPORT_DIR)
+	DisplayServer.window_set_size(Vector2i(1280, 800))
 	root.size = Vector2i(1280, 800)
-	await frames(2)
+	await frames(4)
 
-	# 1. Capture 2x2 Overview of all 4 tool backdrops & operations (matching mockups 2, 3, 4, 5)
+	# 1. Capture 2x2 Overview of all 4 tool backdrops & Spin operations at full 1280x800 layout
 	var sheet := Control.new()
 	sheet.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(sheet)
@@ -64,17 +65,15 @@ func capture() -> void:
 	sheet.add_child(bg)
 
 	var title := Label.new()
-	title.text = "JAM-3 ROUND K — TOOL-SPECIFIC REPAIR INTERACTIONS (SPIN · TRACE · CONNECT ON 4 TOOL BACKDROPS)"
+	title.text = "JAM-3 ROUND M — FORGIVING BIDIRECTIONAL SPIN, E-TOGGLE REPAIR & TOOL SWITCHING (4 TOOLS)"
 	title.position = Vector2(16, 8)
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 15)
 	sheet.add_child(title)
 
-	var cell_size := Vector2(452, 268)
-	var gear_overview := Equipment.new()
-	# Spend all tools so Operation 1 is active and all 3 operations are visible on each tool
-	for t: StringName in [&"beam", &"clock", &"ring", &"cone"]:
-		gear_overview.spend(t, gear_overview.capacity(t))
-
+	var vp := root.get_visible_rect().size
+	var cell_w := floorf((vp.x - 48.0) * 0.5)
+	var cell_h := floorf((vp.y - 54.0) * 0.5)
+	var cell_size := Vector2(cell_w, cell_h)
 	var g_beam := Equipment.new()
 	g_beam.spend(&"beam", g_beam.capacity(&"beam"))
 	var g_clock := Equipment.new()
@@ -84,10 +83,10 @@ func capture() -> void:
 	var g_cone := Equipment.new()
 	g_cone.spend(&"cone", g_cone.capacity(&"cone"))
 
-	var c_beam := _make_card(sheet, Vector2(16, 34), cell_size, g_beam, &"beam")
-	var c_clock := _make_card(sheet, Vector2(492, 34), cell_size, g_clock, &"clock")
-	var c_ring := _make_card(sheet, Vector2(16, 316), cell_size, g_ring, &"ring")
-	var c_cone := _make_card(sheet, Vector2(492, 316), cell_size, g_cone, &"cone")
+	var c_beam := _make_card(sheet, Vector2(16, 32), cell_size, g_beam, &"beam")
+	var c_clock := _make_card(sheet, Vector2(32 + cell_w, 32), cell_size, g_clock, &"clock")
+	var c_ring := _make_card(sheet, Vector2(16, 42 + cell_h), cell_size, g_ring, &"ring")
+	var c_cone := _make_card(sheet, Vector2(32 + cell_w, 42 + cell_h), cell_size, g_cone, &"cone")
 
 	for card in [c_beam, c_clock, c_ring, c_cone]:
 		card.panel.position = Vector2.ZERO
@@ -96,45 +95,36 @@ func capture() -> void:
 
 	var p1 := await save_png("repair-4tools-overview.png")
 
-	# 2. Capture active mid-gesture & interrupted / partial repair states across the 4 tools
-	title.text = "JAM-3 ROUND K — ACTIVE GESTURES & INTERRUPTED / PARTIAL REPAIR STATES (OP 1 SPIN, OP 2 CONNECT, OP 3 TRACE, LIGHT WEAR)"
-	# Top-left (beam): mid-Spin (60% spun around lens ring)
+	# 2. Capture Round M Spin states: CCW oval drag, banked regrip progress, Ready state, and Connect state
+	title.text = "JAM-3 ROUND M — CCW OVAL SPIN (65%), BANKED REGRIP PROGRESS (52%), READY ✓ STATE & CONNECT"
+	# Top-left (beam): mid-Spin CCW (65% spun around lens ring with live grip handle)
 	c_beam.dragging = true
+	c_beam.spin_grip_angle = 2.2
 	c_beam.spin_accum = c_beam.spin_required * 0.65
 	c_beam.spin_locked_dir = -1.0
+	c_beam.feedback.text = "Spinning CCW · 65%"
 	c_beam._queue_redraws()
 
-	# Top-right (clock): Stage 1 (Op 2 Pendulum Trace active, Op 1 Spin ✓ completed)
-	g_clock.complete_step(&"clock")
-	c_clock._refresh()
-	c_clock.panel.position = Vector2.ZERO
-	c_clock.panel.size = cell_size
-	c_clock.dragging = true
-	c_clock.next_contact = 2
-	c_clock.stroke.assign([c_clock.route[0], c_clock.route[1], c_clock.route[1].lerp(c_clock.route[2], 0.5)])
+	# Top-right (clock): Banked partial arc after regrip release (52% saved in spin_base_accum)
+	c_clock.dragging = false
+	c_clock.trace_bad = false
+	c_clock.spin_grip_angle = -PI * 0.5
+	c_clock.spin_base_accum = c_clock.spin_required * 0.52
+	c_clock.spin_accum = c_clock.spin_base_accum
+	c_clock.spin_locked_dir = 1.0
+	c_clock.feedback.text = "Released early (52% spun). Progress saved — drag again to finish."
 	c_clock._queue_redraws()
 
-	# Bottom-left (ring): Stage 1 (Op 2 Connect active with Pair ▲A connected ✓ and ■B selected)
-	g_ring.complete_step(&"ring")
-	c_ring._refresh()
+	# Bottom-left (ring): Completed 100% Full tool remaining displayed as READY ✓ inside repair
+	g_ring.reset_state()
+	c_ring.switch_tool(&"ring")
 	c_ring.panel.position = Vector2.ZERO
 	c_ring.panel.size = cell_size
-	c_ring.connected_pairs.assign([0])
-	var ring_pairs: Array = c_ring.active_op["pairs"]
-	c_ring.selected_terminal = {
-		"pair_index": 1,
-		"pair_id": &"B",
-		"shape": &"square",
-		"label": "B",
-		"side": "a",
-		"position": ring_pairs[1]["a"],
-	}
-	c_ring.feedback.text = "Connected ▲A. Selected ■B — click matching ■B terminal."
 	c_ring._queue_redraws()
 
-	# Bottom-right (cone): Stage 3 light wear (89% condition: Op 1 Spin ✓, Op 2 Trace ✓, Pair ▲A ✓, only ■B left!)
+	# Bottom-right (cone): Stage 3 light wear (89% condition: Op 1 Spin ✓, Op 2 Trace ✓, Pair ▲A ✓, only ■B left)
 	g_cone.reset_state()
-	g_cone.spend(&"cone", 5.0)
+	g_cone.spend(&"cone", 2.0)
 	c_cone.setup({"equipment": g_cone, "tool": &"cone"})
 	c_cone.panel.position = Vector2.ZERO
 	c_cone.panel.size = cell_size
@@ -144,25 +134,29 @@ func capture() -> void:
 	sheet.queue_free()
 	await frames(2)
 
-	# 3. Capture live Arena with top-right Repair popup open (showing player visible at center)
+	# 3. Capture live Arena with fullscreen transparent E-toggled Repair view open during active Spin
 	var arena = load("res://scenes/prototype/arena.tscn").instantiate()
 	root.add_child(arena)
 	current_scene = arena
 	await physics_frame
 	await physics_frame
 	arena.set_physics_process(false)
-	arena.equipment.spend(&"cone", arena.equipment.capacity(&"cone"))
-	var popup_layer := CanvasLayer.new()
-	popup_layer.layer = 50
-	arena.add_child(popup_layer)
-	var live_popup: Control = RepairScene.instantiate()
-	popup_layer.add_child(live_popup)
-	live_popup.setup({"equipment": arena.equipment, "tool": &"cone"})
+	arena.equipment.spend(&"ring", arena.equipment.capacity(&"ring"))
+	var scenes: Node = root.get_node("SceneManager")
+	var live_popup: Control = scenes.push_popup(&"Repair", {"equipment": arena.equipment, "tool": &"ring", "arena": arena})
 	await frames(5)
-	expect(live_popup != null and arena.equipment.repairing == &"cone", "Live arena repair popup opened for cone")
+	arena._update_hud()
+	live_popup.dragging = true
+	live_popup.spin_grip_angle = -PI * 0.35
+	live_popup.spin_accum = live_popup.spin_required * 0.58
+	live_popup.spin_locked_dir = 1.0
+	live_popup.feedback.text = "Spinning CW · 58% · Tab / 1–4 switch tools · WASD move · Space slow"
+	live_popup._queue_redraws()
+	await frames(3)
+	expect(live_popup != null and arena.equipment.repairing == &"ring", "Live arena repair popup opened for ring")
 	var p3 := await save_png("repair-in-arena.png")
 
-	live_popup.queue_free()
+	scenes.close_popup(&"Repair")
 	arena.queue_free()
 	await frames(2)
 	await create_timer(0.10).timeout

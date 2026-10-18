@@ -13,12 +13,22 @@ const CombatFeedback = preload("res://scenes/prototype/combat_feedback.gd")
 const TimeCue = preload("res://scenes/prototype/time_cue.gd")
 const AimAssist = preload("res://scenes/prototype/aim_assist.gd")
 const ScrubView = preload("res://scenes/prototype/scrub_view.gd")
-const History = preload("res://scenes/prototype/history.gd")
 const StatusHud = preload("res://scenes/prototype/status_hud.gd")
+const TimeCoreScene = preload("res://scenes/time/time_core.tscn")
+const RepairGestures = preload("res://scenes/prototype/repair_gestures.gd")
+
+const TOOL_IDS: Array[StringName] = [&"ring", &"beam", &"cone"]
+const SLOW_ACTION: StringName = &"slow_time"
+const SLOW_ACTION_TIME: StringName = &"time_slow"
+const SLOW_ACTION_ALT: StringName = &"slow"
 
 var museum: Node3D
 var equipment: RefCounted = Equipment.new()
 var cover: RefCounted = Cover.new()
+
+var time_controller: TimeController
+var emergency_rewind: EmergencyRewind
+var history: ReplayHistory
 
 var player: CharacterBody3D
 var weapons: Node3D
@@ -26,14 +36,13 @@ var director: Node3D
 var hud: Label
 var slow_bar: ProgressBar
 var status_hud: Control
+var emergency_view: Control
 var aim: Vector3 = Vector3.ZERO
 var aim_valid: bool = false
-var history: RefCounted = History.new()
-var _space_held := false
-var _space_release_required := false
+var _space_action_held := false
 var _repair_held := false
-var _inspection_clock := 0.0
-var _preview: Dictionary = {}
+var _suppress_next_lmb_release := false
+var _last_emergency_age := 0.0
 var time_feedback := ""
 var time_cue: CanvasLayer
 var feedback: Node3D
@@ -42,17 +51,30 @@ var _scrub_speed := 0.0
 
 
 func _ready() -> void:
+	_ensure_input_map()
+	_setup_time_core()
 	_build_floor()
 	_build_cover()
 	museum = create_museum()
 	museum.name = "MuseumEnvironment"
 	museum.build()
 	museum.apply_to_arena(self)
-	player = PlayerScene.instantiate()
-	player.set_script(PlayerController)
-	player.equipment = equipment
-	player.camera = player.get_node("Camera3D")
-	player.model = player.get_node("MeshInstance3D")
+	if ResourceLoader.exists("res://scenes/prototype/combat_player.tscn"):
+		player = (load("res://scenes/prototype/combat_player.tscn") as PackedScene).instantiate() as CharacterBody3D
+	elif ResourceLoader.exists("res://scenes/prototype/player.tscn"):
+		player = (load("res://scenes/prototype/player.tscn") as PackedScene).instantiate() as CharacterBody3D
+	else:
+		player = PlayerScene.instantiate() as CharacterBody3D
+		if player.get_script() != PlayerController:
+			player.set_script(PlayerController)
+	if "equipment" in player:
+		player.equipment = equipment
+	if "time_controller" in player:
+		player.time_controller = time_controller
+	if player.camera == null:
+		player.camera = player.get_node_or_null("Camera3D") as Camera3D
+	if player.model == null:
+		player.model = (player.get_node_or_null("Model") if player.get_node_or_null("Model") != null else player.get_node_or_null("MeshInstance3D")) as Node3D
 	add_child(player)
 	player.camera.position = Vector3(0, 20, 14)
 	player.camera.rotation_degrees = Vector3(-55, 0, 0)
@@ -60,9 +82,19 @@ func _ready() -> void:
 	player.camera.fov = float(Tuning.VIEW.fov)
 	player.camera.size = float(Tuning.VIEW.camera_size)
 	player.camera.current = true
-	weapons = Weapons.new()
+	if ResourceLoader.exists("res://scenes/weapons/weapons.tscn"):
+		weapons = (load("res://scenes/weapons/weapons.tscn") as PackedScene).instantiate() as Node3D
+	elif ResourceLoader.exists("res://scenes/prototype/weapons.tscn"):
+		weapons = (load("res://scenes/prototype/weapons.tscn") as PackedScene).instantiate() as Node3D
+	else:
+		weapons = Weapons.new()
+	if "condition_settings" in weapons and weapons.get("condition_settings") != null and "settings" in equipment:
+		equipment.set("settings", weapons.get("condition_settings"))
+		equipment.reset_state()
 	weapons.equipment = equipment
 	weapons.cover = cover
+	if "time_controller" in weapons:
+		weapons.time_controller = time_controller
 	add_child(weapons)
 	director = Enemies.new()
 	director.cover = cover
@@ -71,7 +103,8 @@ func _ready() -> void:
 	add_child(feedback)
 	weapons.combat_event.connect(feedback.cue)
 	equipment.repaired.connect(_on_repaired)
-	player.wounded.connect(_on_player_wounded)
+	if player.has_signal("wounded"):
+		player.wounded.connect(_on_player_wounded)
 	_build_hud()
 	time_cue = TimeCue.new()
 	add_child(time_cue)
@@ -81,6 +114,49 @@ func _ready() -> void:
 	GameState.start_game()
 	reset_arena()
 	CreatureVisual.warmup(self)
+
+
+func _exit_tree() -> void:
+	if is_instance_valid(emergency_view) and emergency_view.has_method("bind_emergency_rewind"):
+		emergency_view.call("bind_emergency_rewind", null)
+
+
+func _ensure_input_map() -> void:
+	for action_name in [SLOW_ACTION, SLOW_ACTION_TIME, SLOW_ACTION_ALT]:
+		if not InputMap.has_action(action_name):
+			InputMap.add_action(action_name)
+		var has_space := false
+		for existing in InputMap.action_get_events(action_name):
+			if existing is InputEventKey:
+				var k := existing as InputEventKey
+				if k.physical_keycode == KEY_SPACE or k.keycode == KEY_SPACE:
+					has_space = true
+					break
+		if not has_space:
+			var ev := InputEventKey.new()
+			ev.physical_keycode = KEY_SPACE
+			ev.keycode = KEY_SPACE
+			InputMap.action_add_event(action_name, ev)
+
+
+func _setup_time_core() -> void:
+	var time_core: Node = TimeCoreScene.instantiate()
+	add_child(time_core)
+	time_controller = time_core.get_node("TimeController") as TimeController
+	emergency_rewind = time_core.get_node("EmergencyRewind") as EmergencyRewind
+	time_controller.auto_advance = false
+	time_controller.set_physics_process(false)
+	history = ReplayHistory.from_settings(time_controller.settings)
+	emergency_rewind.time_controller = time_controller
+	emergency_rewind.history = history
+	emergency_rewind.capture_present = capture_state
+	if GameState.has_method("bind_emergency"):
+		GameState.call("bind_emergency", emergency_rewind)
+	emergency_rewind.started.connect(_on_emergency_started)
+	emergency_rewind.selection_changed.connect(_on_emergency_selection_changed)
+	emergency_rewind.confirmed.connect(_on_emergency_confirmed)
+	emergency_rewind.ended.connect(_on_emergency_ended)
+	time_controller.attempt_exhausted.connect(_on_attempt_exhausted)
 
 
 func create_museum() -> Node3D:
@@ -113,43 +189,99 @@ func _has_non_repair_popup() -> bool:
 	return false
 
 
+func _is_slow_held() -> bool:
+	if _has_non_repair_popup() or GameState.is_paused():
+		return false
+	return _space_action_held or Input.is_action_pressed(SLOW_ACTION) or Input.is_action_pressed(SLOW_ACTION_TIME) or Input.is_action_pressed(SLOW_ACTION_ALT)
+
+
+func _player_can_act() -> bool:
+	if time_controller != null and (time_controller.emergency_active or time_controller.exhausted):
+		return false
+	if player != null and "can_act" in player:
+		return bool(player.get("can_act"))
+	if player != null and "health" in player and float(player.get("health")) <= 0.0:
+		return false
+	return true
+
+
+func _owned_tool_slots() -> Array[int]:
+	var slots: Array[int] = []
+	if weapons != null and "available_tools" in weapons:
+		for raw_slot in weapons.available_tools:
+			var slot := int(raw_slot)
+			if slot >= 1 and slot <= TOOL_IDS.size() and not (slot in slots):
+				slots.append(slot)
+	return slots
+
+
+func _owned_tool_names() -> Array[StringName]:
+	var names: Array[StringName] = []
+	for slot in _owned_tool_slots():
+		names.append(TOOL_IDS[slot - 1])
+	return names
+
+
+func _equipped_tool_name() -> StringName:
+	if weapons == null:
+		return &"ring"
+	var idx := clampi(int(weapons.selected_tool), 1, TOOL_IDS.size())
+	return TOOL_IDS[idx - 1]
+
+
 func _switch_tool(index: int) -> void:
+	if index < 1 or index > TOOL_IDS.size():
+		return
 	var repair_panel := _active_repair_panel()
-	if index not in weapons.available_tools:
+	var owned_slots := _owned_tool_slots()
+	if index not in owned_slots:
 		if repair_panel != null:
 			repair_panel.feedback.text = "That tool is not yet collected."
 			repair_panel._queue_redraws()
 		return
-	var target_tool: StringName = Weapons.TOOL_IDS[index - 1]
+	var target_tool: StringName = TOOL_IDS[index - 1]
 	if index == weapons.selected_tool and (repair_panel == null or repair_panel.tool == target_tool):
 		return
-	var continue_space := _space_held and not _space_release_required
-	if history.inspecting:
-		_finish_inspection(false) # Switching never commits an accidental rewind.
 	weapons.select_tool(index)
 	if repair_panel != null:
 		if repair_panel.tool != target_tool or (not equipment.is_full(target_tool) and not equipment.is_session_active(repair_panel._session, target_tool)):
 			repair_panel.switch_tool(target_tool)
-		if index == 4:
-			player._step_slow(0.0, false)
-		elif continue_space:
-			_space_release_required = false
-			player._last_repair = equipment.repairing
-			player._slow_release_required = false
-			player._step_slow(0.0, 4 in weapons.available_tools)
-	elif continue_space:
-		_space_release_required = false
-		player._slow_release_required = false
-		if index == 4: _begin_inspection()
-		else: player._step_slow(0.0, 4 in weapons.available_tools)
+	if time_controller != null:
+		time_controller.slow_requested = _is_slow_held()
 	_update_hud()
 
 
 func _cycle_tool(backward: bool = false) -> void:
-	var tools: Array[int] = weapons.available_tools
-	if tools.is_empty(): return
+	var tools := _owned_tool_slots()
+	if tools.is_empty():
+		return
 	var current := tools.find(weapons.selected_tool)
+	if current < 0:
+		current = 0
 	_switch_tool(tools[posmod(current + (-1 if backward else 1), tools.size())])
+
+
+func _open_smart_repair() -> bool:
+	var owned_names := _owned_tool_names()
+	if owned_names.is_empty():
+		return false
+	var target_tool := RepairGestures.pick_repair_tool(equipment, owned_names, _equipped_tool_name())
+	if target_tool == &"":
+		time_feedback = "All tools ready"
+		_update_hud()
+		return false
+	var target_slot := TOOL_IDS.find(target_tool) + 1
+	if target_slot >= 1 and weapons.selected_tool != target_slot:
+		weapons.select_tool(target_slot)
+	_repair_held = true
+	SceneManager.push_popup(&"Repair", {
+		"equipment": equipment,
+		"tool": target_tool,
+		"arena": self,
+		"time_controller": time_controller,
+	})
+	_update_hud()
+	return true
 
 
 func _build_cover() -> void:
@@ -213,12 +345,36 @@ func _build_hud() -> void:
 	slow_bar = ProgressBar.new()
 	slow_bar.position = Vector2(16, 130)
 	slow_bar.size = Vector2(240, 16)
-	slow_bar.max_value = equipment.capacity(&"clock")
+	slow_bar.max_value = time_controller.capacity if time_controller != null else 100.0
 	slow_bar.show_percentage = false
 	slow_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(slow_bar)
-	status_hud = StatusHud.new()
+	if ResourceLoader.exists("res://scenes/prototype/status_hud.tscn"):
+		status_hud = (load("res://scenes/prototype/status_hud.tscn") as PackedScene).instantiate() as Control
+	else:
+		status_hud = StatusHud.new()
 	layer.add_child(status_hud)
+	if ResourceLoader.exists("res://scenes/ui/emergency_view.tscn"):
+		var emergency_layer := CanvasLayer.new()
+		emergency_layer.layer = 60
+		add_child(emergency_layer)
+		emergency_view = (load("res://scenes/ui/emergency_view.tscn") as PackedScene).instantiate() as Control
+		emergency_layer.add_child(emergency_view)
+	_bind_hud_controllers()
+
+
+func _bind_hud_controllers() -> void:
+	if status_hud != null:
+		if status_hud.has_method("bind_time_controller"):
+			status_hud.call("bind_time_controller", time_controller)
+		elif "time_controller" in status_hud:
+			status_hud.set("time_controller", time_controller)
+		if status_hud.has_method("bind_emergency_rewind"):
+			status_hud.call("bind_emergency_rewind", emergency_rewind)
+		elif "emergency_rewind" in status_hud:
+			status_hud.set("emergency_rewind", emergency_rewind)
+	if emergency_view != null and emergency_view.has_method("bind_emergency_rewind"):
+		emergency_view.call("bind_emergency_rewind", emergency_rewind)
 
 
 func floor_aim(screen_position: Vector2) -> Vector3:
@@ -236,47 +392,104 @@ func floor_aim(screen_position: Vector2) -> Vector3:
 
 
 func _process(delta: float) -> void:
-	if history.inspecting:
+	if emergency_rewind != null and emergency_rewind.active:
 		scrub_view.step(delta)
 	_scrub_speed *= exp(-maxf(delta, 0.0) * 8.0)
 
 
+func _step_player(delta: float) -> void:
+	if "time_controller" in player:
+		if player.time_controller != time_controller:
+			player.time_controller = time_controller
+		player.step(delta, aim)
+	else:
+		player.step(delta * time_controller.world_scale, aim, false, false)
+		player.world_scale = time_controller.world_scale
+
+
 func _physics_process(delta: float) -> void:
-	if SceneManager.has_popup(&"Developer") or SceneManager.has_popup(&"Settings"): return
-	if history.inspecting:
+	if SceneManager.has_popup(&"Developer") or SceneManager.has_popup(&"Settings"):
+		return
+	time_controller.slow_requested = _is_slow_held()
+	if not time_controller.is_physics_processing() or not is_physics_processing():
+		time_controller.advance(delta)
+	if emergency_rewind.active or time_controller.emergency_active:
 		feedback.step(delta, 0.0, 0.0, true, _scrub_speed, weapons, equipment)
-		_step_inspection(delta)
 		_update_hud()
 		return
-	if player.health <= 0.0:
+	if not _player_can_act():
 		if SceneManager.has_popup(&"Repair"):
 			_close_repair()
-		player.world_scale = 1.0
 		feedback.step(delta, 0.0, 1.0, false, 0.0, weapons, equipment)
 		_update_hud()
-		return # Keep the final live history available for a do-over.
+		return
 	aim = floor_aim(get_viewport().get_mouse_position())
-	var repair_open: bool = SceneManager.has_popup(&"Repair")
-	var repair_panel := _active_repair_panel() if repair_open else null
-	var repairing_clock: bool = equipment.repairing == &"clock" or (repair_panel != null and repair_panel.tool == &"clock") or (not repair_open and weapons.selected_tool == 4)
-	var can_manual_slow: bool = _space_held and not _space_release_required and 4 in weapons.available_tools and not repairing_clock
-	if not repairing_clock:
-		player._last_repair = equipment.repairing
-	player.step(delta, aim, can_manual_slow, false)
+	_step_player(delta)
 	player.position.x = clampf(player.position.x, -19.0, 19.0)
 	player.position.z = clampf(player.position.z, -19.0, 19.0)
-	var world_delta: float = delta * player.world_scale
+	var world_scale: float = time_controller.world_scale
+	var world_delta: float = delta * world_scale
 	director.step(world_delta, player)
-	if player.health <= 0.0 and SceneManager.has_popup(&"Repair"):
+	if (emergency_rewind.active or time_controller.emergency_active or not _player_can_act()) and SceneManager.has_popup(&"Repair"):
 		_close_repair()
+	if emergency_rewind.active or time_controller.emergency_active:
+		feedback.step(delta, 0.0, 0.0, true, _scrub_speed, weapons, equipment)
+		_update_hud()
+		return
 	weapons.step(delta, player, aim, director.enemies, world_delta)
-	feedback.step(delta, world_delta, player.world_scale, false, 0.0, weapons, equipment)
-	history.record(delta, capture_state)
+	feedback.step(delta, world_delta, world_scale, false, 0.0, weapons, equipment)
+	history.record(world_delta, capture_state)
 	_update_hud()
 
 
-# Handle mode exits before popup controls or weapon input can consume them.
+# Handle emergency rewind, slow-time action, and mode exits before popup controls or weapon input can consume them.
 func _input(event: InputEvent) -> void:
+	if event.is_action(SLOW_ACTION) or event.is_action(SLOW_ACTION_TIME) or event.is_action(SLOW_ACTION_ALT):
+		if not event.is_echo():
+			_space_action_held = event.is_pressed()
+			if time_controller != null:
+				time_controller.slow_requested = _is_slow_held()
+		get_viewport().set_input_as_handled()
+		return
+
+	if _suppress_next_lmb_release and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_suppress_next_lmb_release = false
+		get_viewport().set_input_as_handled()
+		return
+
+	if emergency_rewind != null and emergency_rewind.active and not GameState.is_paused() and not _has_non_repair_popup():
+		if event is InputEventMouseButton and event.pressed:
+			if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				emergency_rewind.step_selection(1)
+				get_viewport().set_input_as_handled()
+				return
+			elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				emergency_rewind.step_selection(-1)
+				get_viewport().set_input_as_handled()
+				return
+			elif event.button_index == MOUSE_BUTTON_LEFT:
+				_suppress_next_lmb_release = true
+				emergency_rewind.confirm()
+				get_viewport().set_input_as_handled()
+				return
+		elif event is InputEventKey and event.pressed and not event.echo:
+			var key_code: int = event.physical_keycode if event.physical_keycode else event.keycode
+			if key_code == KEY_ENTER or key_code == KEY_KP_ENTER:
+				emergency_rewind.confirm()
+				get_viewport().set_input_as_handled()
+				return
+			elif key_code == KEY_UP or key_code == KEY_LEFT:
+				emergency_rewind.step_selection(1)
+				get_viewport().set_input_as_handled()
+				return
+			elif key_code == KEY_DOWN or key_code == KEY_RIGHT:
+				emergency_rewind.step_selection(-1)
+				get_viewport().set_input_as_handled()
+				return
+		if event is InputEventMouse:
+			get_viewport().set_input_as_handled()
+			return
+
 	if event is InputEventKey:
 		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
 		if code == KEY_E:
@@ -290,20 +503,11 @@ func _input(event: InputEvent) -> void:
 				_close_repair()
 				get_viewport().set_input_as_handled()
 				return
-		if code == KEY_SPACE and not event.echo:
-			_space_held = event.pressed
-			if not event.pressed:
-				if history.inspecting:
-					_finish_inspection(true)
-				_space_release_required = false
-				player._step_slow(0.0, false)
-			elif not _space_release_required and weapons.selected_tool == 4 and not SceneManager.has_popup():
-				_begin_inspection()
-			get_viewport().set_input_as_handled()
-			return
 		if code == KEY_F10 and event.pressed and not event.echo and SceneManager.developer_tools:
-			if SceneManager.has_popup(&"Developer"): SceneManager.close_popup(&"Developer")
-			else: SceneManager.push_popup(&"Developer")
+			if SceneManager.has_popup(&"Developer"):
+				SceneManager.close_popup(&"Developer")
+			else:
+				SceneManager.push_popup(&"Developer")
 			get_viewport().set_input_as_handled()
 			return
 		if code == KEY_M and event.pressed and not event.echo:
@@ -316,26 +520,22 @@ func _input(event: InputEvent) -> void:
 			_update_hud()
 			get_viewport().set_input_as_handled()
 			return
-	if event is InputEventKey and event.pressed and not event.echo and not _has_non_repair_popup():
+	if event is InputEventKey and event.pressed and not event.echo and not _has_non_repair_popup() and (emergency_rewind == null or not emergency_rewind.active):
 		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
-		if code == KEY_TAB or (code >= KEY_1 and code <= KEY_4):
-			if code == KEY_TAB: _cycle_tool(event.shift_pressed)
-			else: _switch_tool(code - KEY_1 + 1)
+		if code == KEY_TAB or (code >= KEY_1 and code <= KEY_3):
+			if code == KEY_TAB:
+				_cycle_tool(event.shift_pressed)
+			else:
+				_switch_tool(code - KEY_1 + 1)
 			get_viewport().set_input_as_handled()
 			return
-	if history.inspecting:
-		if event is InputEventMouseButton and event.pressed:
-			if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-				_seek_inspection(history.selected_seconds_ago + Tuning.REWIND.scroll_step)
-			elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
-				_seek_inspection(history.selected_seconds_ago - Tuning.REWIND.scroll_step)
-		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ESCAPE:
-			_finish_inspection(false)
-		get_viewport().set_input_as_handled()
+		if code == KEY_4:
+			get_viewport().set_input_as_handled()
+			return
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if history.inspecting:
+	if emergency_rewind != null and emergency_rewind.active:
 		return
 	if SceneManager.has_popup():
 		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_R:
@@ -346,8 +546,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if code == KEY_TAB:
 			_cycle_tool(event.shift_pressed)
 			return
-		if code >= KEY_1 and code <= KEY_4:
+		if code >= KEY_1 and code <= KEY_3:
 			_switch_tool(code - KEY_1 + 1)
+			return
+		if code == KEY_4:
 			return
 		match code:
 			KEY_EQUAL, KEY_PLUS:
@@ -361,10 +563,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_update_hud()
 				return
 			KEY_E:
-				if player.health > 0.0 and not weapons.available_tools.is_empty():
-					_repair_held = true
-					var tool: StringName = Weapons.TOOL_IDS[weapons.selected_tool - 1]
-					SceneManager.push_popup(&"Repair", {"equipment": equipment, "tool": tool, "arena": self})
+				if _player_can_act() and not _owned_tool_slots().is_empty():
+					_open_smart_repair()
 				return
 			KEY_R:
 				reset_arena()
@@ -372,33 +572,41 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_BACKSPACE:
 				director.clear()
 				history.clear()
+				history.seed_checkpoint(capture_state())
 				return
 			KEY_F1, KEY_F2, KEY_F3, KEY_F4:
 				var kinds := [&"target", &"blue", &"yellow", &"orange"]
 				director.spawn(kinds[code - KEY_F1], _spawn_position())
 				history.clear()
+				history.seed_checkpoint(capture_state())
 				return
 			KEY_F5:
 				director.spawn_group()
 				history.clear()
+				history.seed_checkpoint(capture_state())
 				return
 			KEY_F8:
 				director.spawn(&"side_guard", _spawn_position())
 				history.clear()
+				history.seed_checkpoint(capture_state())
 				return
 			KEY_F9:
 				reset_arena()
 				director.clear()
 				_set_zoom(float(Tuning.VIEW.showcase_size))
 				director.spawn(&"front_guard", Vector3(0, 0, -7))
+				history.clear()
+				history.seed_checkpoint(capture_state())
 				_update_hud()
 				return
 			KEY_F6:
 				reset_arena()
 				director.start_encounter()
+				history.clear()
+				history.seed_checkpoint(capture_state())
 				return
 	aim = floor_aim(get_viewport().get_mouse_position())
-	if aim_valid and player.health > 0.0:
+	if aim_valid and _player_can_act():
 		weapons.handle_event(event, player, aim)
 
 
@@ -407,179 +615,204 @@ func _spawn_position() -> Vector3:
 
 
 func reset_arena() -> void:
-	if history.inspecting:
-		_finish_inspection(false)
+	if emergency_rewind != null and emergency_rewind.active:
+		emergency_rewind.abandon()
 	_close_repair()
 	scrub_view.finish()
 	feedback.reset_state()
-	history.clear()
-	_space_release_required = _space_held
 	_repair_held = false
+	_suppress_next_lmb_release = false
+	_last_emergency_age = 0.0
+	_space_action_held = Input.is_action_pressed(SLOW_ACTION) or Input.is_action_pressed(SLOW_ACTION_ALT)
+	if time_controller != null:
+		time_controller.begin_attempt()
+		time_controller.slow_requested = _is_slow_held()
 	equipment.reset_state()
 	weapons.reset_state()
+	var three_tools: Array[int] = [1, 2, 3]
+	weapons.set_loadout(three_tools, 1)
 	player.reset_state()
+	if "time_controller" in player:
+		player.time_controller = time_controller
 	_set_zoom(float(Tuning.VIEW.camera_size))
 	director.reset_state()
 	time_feedback = ""
+	if history != null:
+		history.clear()
+		history.seed_checkpoint(capture_state())
 	_update_hud()
 
 
 func _close_repair() -> void:
+	if time_controller != null:
+		time_controller.set_repair_gesture_active(false)
 	if equipment.repairing != &"":
 		equipment.end_repair()
 	SceneManager.close_popup(&"Repair")
 
 
-func _on_player_wounded(_amount: float) -> void:
-	if player.health <= 0.0 and SceneManager.has_popup(&"Repair"):
+func _on_player_wounded(amount: float) -> void:
+	if not ("time_controller" in player) and time_controller != null and not time_controller.emergency_active and not time_controller.exhausted:
+		time_controller.apply_hit(amount)
+		if time_controller.emergency_active and "health" in player and float(player.get("health")) <= 0.0:
+			player.set("health", 1.0)
+	if is_instance_valid(feedback) and is_instance_valid(player):
+		feedback.cue(&"player_hurt", player.global_position, clampf(amount / 15.0, 0.5, 1.35))
+	if not _player_can_act() and SceneManager.has_popup(&"Repair"):
 		_close_repair()
 
 
 func capture_state() -> Dictionary:
-	return {"player": player.capture_state(), "equipment": equipment.capture_state(),
-		"weapons": weapons.capture_state(), "director": director.capture_state()}
+	scrub_view.finish()
+	return {
+		"player": player.capture_state(),
+		"equipment": equipment.capture_state(),
+		"weapons": weapons.capture_state(),
+		"director": director.capture_state(),
+	}
 
 
-func _restore_world(data: Dictionary, live_clock: float) -> void:
+func _restore_world(data: Dictionary, preview: bool = false) -> void:
 	scrub_view.finish()
 	_close_repair()
-	var gear: Dictionary = data.equipment.duplicate(true)
-	gear.remaining["clock"] = live_clock
-	equipment.restore_state(gear)
-	player.restore_state(data.player)
-	director.restore_state(data.director)
-	weapons.restore_state(data.weapons)
-	weapons.select_tool(4) # Equipping the clock remains the player's current intent.
-	if history.inspecting:
-		weapons.preview_overlay = data.weapons.get("overlay", {}).duplicate()
-		weapons.presentation.phase = float(weapons.preview_overlay.get("phase",weapons.presentation.phase))
-		player.set_visual_tool(int(weapons.preview_overlay.get("tool",4)))
-	weapons._rebuild_visuals(player, aim)
+	var live_slots: Array[int] = _owned_tool_slots()
+	var live_training: Array = equipment.training_protection.duplicate() if "training_protection" in equipment else []
+	if data.has("equipment") and data["equipment"] is Dictionary:
+		equipment.restore_state((data["equipment"] as Dictionary).duplicate(true))
+	if not live_training.is_empty() and equipment.has_method("set_training_protection"):
+		equipment.set_training_protection(live_training)
+	if data.has("player") and data["player"] is Dictionary:
+		player.restore_state(data["player"])
+		if not ("time_controller" in player) and time_controller != null and not time_controller.exhausted and "health" in player and float(player.get("health")) <= 0.0:
+			player.set("health", 100.0)
+	if data.has("director") and data["director"] is Dictionary:
+		director.restore_state(data["director"])
+	if data.has("weapons") and data["weapons"] is Dictionary:
+		weapons.restore_state(data["weapons"])
+	if not live_slots.is_empty():
+		weapons.available_tools.assign(live_slots)
+	var restored_slot := clampi(int(weapons.selected_tool), 1, TOOL_IDS.size())
+	if not live_slots.is_empty() and restored_slot not in live_slots:
+		restored_slot = live_slots[0]
+	weapons.selected_tool = restored_slot
+	if preview:
+		var weapons_data: Dictionary = data.get("weapons", {}) if data.get("weapons") is Dictionary else {}
+		weapons.preview_overlay = (weapons_data.get("overlay", {}) as Dictionary).duplicate()
+		if "presentation" in weapons and weapons.presentation != null:
+			weapons.presentation.phase = float(weapons.preview_overlay.get("phase", weapons.presentation.phase))
+		var preview_tool := clampi(int(weapons.preview_overlay.get("tool", weapons.selected_tool)), 1, TOOL_IDS.size())
+		player.set_visual_tool(preview_tool)
+	else:
+		weapons.preview_overlay.clear()
+		player.set_visual_tool(clampi(int(weapons.selected_tool), 1, TOOL_IDS.size()))
+	if weapons.has_method("rebuild_visuals"):
+		weapons.call("rebuild_visuals", player)
+	elif weapons.has_method("_rebuild_visuals"):
+		weapons.call("_rebuild_visuals", player, aim)
 
 
-func _begin_inspection() -> void:
-	if history.inspecting or 4 not in weapons.available_tools or weapons.selected_tool != 4 or SceneManager.has_popup() or not equipment.can_use(&"clock"):
-		return
+func _on_emergency_started(_choice_count: int) -> void:
+	_close_repair()
 	weapons.cancel_input()
 	player.reset_input()
-	_preview = capture_state()
-	history.begin_inspection(_preview)
-	if not history.inspecting:
-		return
-	_inspection_clock = equipment.remaining(&"clock")
 	feedback.clear_effects()
-	feedback.step(0, 0, 0, true, 0, weapons, equipment)
+	feedback.step(0.0, 0.0, 0.0, true, 0.0, weapons, equipment)
 	_scrub_speed = 0.0
+	_last_emergency_age = 0.0
 	time_feedback = ""
 	_update_hud()
 
 
-func inspection_cost() -> float:
-	return history.selected_seconds_ago * Tuning.REWIND.jump_cost
-
-
-func _available_clock(data: Dictionary) -> float:
-	return minf(_inspection_clock, float(data.equipment.remaining.clock))
-
-
-func _seek_inspection(seconds_ago: float) -> void:
-	if not history.inspecting:
-		return
-	var previous: float = history.selected_seconds_ago
-	var candidate: Dictionary = history.seek(seconds_ago)
-	if inspection_cost() > _available_clock(candidate) + 0.000001:
-		history.seek(previous)
-		time_feedback = "Not enough clock condition for that jump"
+func _on_emergency_selection_changed(_index: int, age_seconds: float, state: Dictionary) -> void:
+	if not emergency_rewind.active:
 		return
 	var from_pose: Dictionary = scrub_view.capture_pose(player, director, weapons)
 	scrub_view.finish()
-	_preview = candidate
-	time_feedback = ""
-	_scrub_speed = (history.selected_seconds_ago - previous) / ScrubView.DURATION
-	_restore_world(_preview, _inspection_clock)
-	scrub_view.begin(from_pose, player, director, weapons)
+	var effective_age := maxf(0.0, age_seconds)
+	_scrub_speed = (effective_age - _last_emergency_age) / ScrubView.DURATION
+	_last_emergency_age = effective_age
+	if not state.is_empty():
+		_restore_world(state, true)
+		scrub_view.begin(from_pose, player, director, weapons)
 	_update_hud()
 
 
-func _step_inspection(delta: float) -> void:
-	_inspection_clock = maxf(0.0, _inspection_clock - maxf(delta, 0.0) * Tuning.REWIND.browse_drain)
-	equipment.spend(&"clock", maxf(0.0, equipment.remaining(&"clock") - _inspection_clock))
-	if _inspection_clock <= 0.000001 or inspection_cost() > _available_clock(_preview) + 0.000001:
-		_finish_inspection(false)
-		time_feedback = "Clock spent · returned to present"
-
-
-func _finish_inspection(commit: bool) -> void:
-	if not history.inspecting:
-		return
+func _on_emergency_confirmed(age_seconds: float, state: Dictionary) -> void:
 	scrub_view.finish()
 	feedback.clear_effects()
-	var age: float = history.selected_seconds_ago
-	var cost := inspection_cost()
-	var can_commit: bool = commit and cost <= _available_clock(_preview) + 0.000001
-	var data: Dictionary = history.commit_inspection() if can_commit else history.cancel_inspection()
-	var clock: float = _inspection_clock
-	if can_commit and age > 0.0:
-		clock = maxf(0.0, minf(clock, float(data.equipment.remaining.clock)) - cost)
-	_restore_world(data, clock)
-	feedback.step(0, 0, 1, false, 0, weapons, equipment)
-	_space_release_required = _space_held
-	_preview = {}
-	time_feedback = "Rewound %.2fs" % age if can_commit and age > 0.0 else "Present"
+	if not state.is_empty():
+		_restore_world(state, false)
+	feedback.step(0.0, 0.0, 1.0, false, 0.0, weapons, equipment)
+	_last_emergency_age = 0.0
+	if age_seconds == EmergencyRewind.CHECKPOINT_AGE:
+		time_feedback = "Rewound to checkpoint"
+	elif age_seconds > 0.0:
+		time_feedback = "Rewound %.2fs" % age_seconds
+	else:
+		time_feedback = "Recovered"
+	if time_controller != null:
+		time_controller.slow_requested = _is_slow_held()
+	_update_hud()
+
+
+func _on_emergency_ended() -> void:
+	scrub_view.finish()
+	weapons.preview_overlay.clear()
+	_last_emergency_age = 0.0
+	_update_hud()
+
+
+func _on_attempt_exhausted() -> void:
+	if SceneManager.has_popup(&"Repair"):
+		_close_repair()
+	weapons.cancel_input()
+	player.reset_input()
 	_update_hud()
 
 
 func _on_popup_opened(_key: StringName, _popup: Node) -> void:
-	if history.inspecting:
-		_finish_inspection(false)
 	weapons.cancel_input()
 	if _key == &"RunResult":
 		_close_repair()
-	if _key == &"Repair":
-		player._last_repair = equipment.repairing
-		if weapons.selected_tool == 4 or equipment.repairing == &"clock":
-			_space_release_required = _space_held
-			player._step_slow(0.0, false)
-	else:
+	if _key != &"Repair":
 		player.reset_input()
-		_space_release_required = _space_held
+	if time_controller != null:
+		time_controller.slow_requested = _is_slow_held()
 
 
 func _on_popup_closed(_key: StringName) -> void:
 	weapons.cancel_input()
-	if _key == &"Repair":
-		player._last_repair = equipment.repairing
-		if weapons.selected_tool == 4:
-			_space_release_required = _space_held
-			player._step_slow(0.0, false)
-	else:
+	if _key != &"Repair":
 		player.reset_input()
-		_space_release_required = _space_held
+	if time_controller != null:
+		time_controller.slow_requested = _is_slow_held()
+	_update_hud()
 
 
 func _on_state_changed(_old: int, _new: int) -> void:
 	if is_instance_valid(feedback):
 		feedback.reset_state()
-	if history.inspecting:
-		_finish_inspection(false)
 	weapons.cancel_input()
 	player.reset_input()
-	_space_release_required = Input.is_physical_key_pressed(KEY_SPACE)
-	_space_held = false
+	_space_action_held = Input.is_action_pressed(SLOW_ACTION) or Input.is_action_pressed(SLOW_ACTION_TIME) or Input.is_action_pressed(SLOW_ACTION_ALT)
+	if time_controller != null:
+		time_controller.slow_requested = _is_slow_held() and GameState.is_playing()
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(weapons):
-		if history.inspecting:
-			_finish_inspection(false)
 		_close_repair()
 		weapons.cancel_input()
 		player.reset_input()
-		_space_held = false
-		_space_release_required = true
+		_space_action_held = false
+		Input.action_release(SLOW_ACTION)
+		Input.action_release(SLOW_ACTION_TIME)
+		Input.action_release(SLOW_ACTION_ALT)
+		if time_controller != null:
+			time_controller.slow_requested = false
+			time_controller.set_repair_gesture_active(false)
 		_repair_held = false
-		if GameState.is_playing():
-			GameState.pause()
+		GameState.pause()
 
 
 func _on_repaired(_tool: StringName, restored: float) -> void:
@@ -587,20 +820,17 @@ func _on_repaired(_tool: StringName, restored: float) -> void:
 
 
 func _update_hud() -> void:
-	time_cue.update_state(player.world_scale,history.inspecting)
-	var display_tool := int(weapons.preview_overlay.get("tool",weapons.selected_tool))
+	var in_emergency := emergency_rewind != null and emergency_rewind.active
+	var world_scale := time_controller.world_scale if time_controller != null else 1.0
+	time_cue.update_state(world_scale, in_emergency)
+	var display_tool := clampi(int(weapons.preview_overlay.get("tool", weapons.selected_tool)), 1, TOOL_IDS.size())
 	if player.visual_tool != display_tool:
 		player.set_visual_tool(display_tool)
 	status_hud.update_status(player, weapons, equipment)
-	var repair_open: bool = equipment.repairing != &"" or SceneManager.has_popup(&"Repair")
-	status_hud.visible = not repair_open
-	if is_instance_valid(player.visual): player.visual.held_tool.visible = not weapons.available_tools.is_empty()
-	if history.inspecting:
-		status_hud.selected = display_tool - 1
-		status_hud.caption = StatusHud.NAMES[display_tool-1] + " · recorded"
+	if is_instance_valid(player.visual):
+		player.visual.held_tool.visible = not _owned_tool_slots().is_empty()
 	status_hud.set_combat_hint(feedback.muted)
-	var clock_after: float = _available_clock(_preview) - inspection_cost() if history.inspecting else equipment.remaining(&"clock")
-	status_hud.update_timeline(history, inspection_cost(), time_feedback, clock_after)
+	var repair_open: bool = equipment.repairing != &"" or SceneManager.has_popup(&"Repair")
 	var alpha: float = StatusHud.READOUT_ALPHA[status_hud.readout_mode] if not repair_open else 0.0
 	hud.modulate.a = alpha
 	hud.visible = alpha > 0.0
@@ -608,16 +838,19 @@ func _update_hud() -> void:
 	slow_bar.visible = alpha > 0.0
 	if not hud.visible:
 		return
-	var next_text: String = "WASD move | 1/2/3/4 or Tab equip | +/- zoom | LMB draw / charge / hold | Space slow / clock inspect | Esc pause\n"
-	next_text += "E toggle repair | Wheel scrub clock | M sound | "
+	var next_text: String = "WASD move | 1/2/3 or Tab equip | +/- zoom | LMB draw / charge / hold | Space slow | Esc pause\n"
+	next_text += "E toggle repair | Wheel/LMB/Enter emergency rewind | M sound | "
 	if has_method("retry_room"):
 		next_text += "R retry room | F10 encounters\n"
 	else:
 		next_text += "R reset | F1 target / F2 blue / F3 yellow / F4 orange | F5 pack | F6 encounter | F8 side / F9 front guard | Backspace clear\n"
-	next_text += "HP %.0f | Enemies %d | World %.2fx\n" % [player.health, director.enemies.size(), player.world_scale]
-	next_text += player.status_text() + "\n" + weapons.status_text()
+	next_text += "Time %.0f / %.0f | Charges %d/%d | Enemies %d | World %.2fx\n" % [
+		time_controller.meter, time_controller.capacity, time_controller.charges_remaining, time_controller.charges_per_attempt, director.enemies.size(), world_scale
+	]
+	next_text += weapons.status_text()
 	next_text += "\n" + equipment.status_text() + " | " + director.status_text()
 	if hud.text != next_text:
 		hud.text = next_text
 		slow_bar.position.y = hud.position.y + hud.get_minimum_size().y + 8
-	slow_bar.value = player.slow_charge
+	slow_bar.max_value = time_controller.capacity
+	slow_bar.value = time_controller.meter

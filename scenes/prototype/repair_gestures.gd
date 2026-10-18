@@ -1,11 +1,11 @@
 extends RefCounted
 
-# Pure gesture and tool-specification helpers for Round K tool-specific repairs:
-# - Orange (cone):  1. Fan Spin        -> 2. Leather Trace     -> 3. Heating-Coil Contacts (open fan cover & front grille)
-# - Yellow (beam):  1. Lens Ring Spin  -> 2. Ceramic Terminals -> 3. Bellows Trace
-# - Blue   (ring):  1. Cassette Spin   -> 2. Arch Contacts     -> 3. Blade Alignment Trace
-# - Purple (clock): 1. Side-Key Spin   -> 2. Pendulum Trace    -> 3. Cassette Contacts
+# Pure gesture and tool-specification helpers for three-weapon repairs:
+# - Blue   (ring): 1. Cassette Spin   -> 2. Arch Contacts     -> 3. Blade Alignment Trace
+# - Yellow (beam): 1. Lens Ring Spin  -> 2. Ceramic Terminals -> 3. Bellows Trace
+# - Orange (cone): 1. Fan Spin        -> 2. Leather Trace     -> 3. Heating-Coil Contacts (open fan cover & front grille)
 
+const TOOL_ORDER: Array[StringName] = [&"ring", &"beam", &"cone"]
 const BOARD_SIZE := Vector2(520.0, 260.0)
 const TRACE_CORRIDOR := 24.0
 const TRACE_CONTACT := 20.0
@@ -72,12 +72,12 @@ const TOOL_SPECS := {
 				"tag": "3 · TRACE TO ALIGN",
 				"short": "Align Blade",
 				"prompt": "Trace along the saw ring arc from start to end.",
-				"badge_pos": Vector2(34.0, 218.0),
+				"badge_pos": Vector2(310.0, 134.0),
 				"points": [
-					Vector2(46.0, 182.0),
-					Vector2(57.0, 160.0),
-					Vector2(80.0, 153.0),
-					Vector2(105.0, 166.0),
+					Vector2(302.0, 210.0),
+					Vector2(322.0, 178.0),
+					Vector2(354.0, 174.0),
+					Vector2(376.0, 202.0),
 				],
 			},
 		],
@@ -209,69 +209,6 @@ const TOOL_SPECS := {
 			},
 		],
 	},
-	"clock": {
-		"id": &"clock",
-		"title": "Time Device",
-		"accent": Color("b88cf2"),
-		"glb": "res://assets/equipment/time_device.glb",
-		"cam_pos": Vector3(0.0, 1.05, 1.35),
-		"cam_target": Vector3(0.0, 0.0, 0.0),
-		"cam_size": 0.44,
-		"model_pos": Vector3(-0.11, -0.09, -0.02),
-		"model_rot_deg": Vector3(6.0, 148.0, 0.0),
-		"operations": [
-			{
-				"index": 0,
-				"kind": &"spin",
-				"tag": "1 · SPIN KEY",
-				"short": "Key Spin",
-				"prompt": "Drag around the brass side key in either direction to wind the mainspring.",
-				"center": Vector2(326.0, 196.0),
-				"radius": 30.0,
-				"dir": 1.0,
-				"start_angle": -PI * 0.65,
-				"badge_pos": Vector2(342.0, 92.0),
-			},
-			{
-				"index": 1,
-				"kind": &"trace",
-				"tag": "2 · TRACE PENDULUM",
-				"short": "Pendulum Trace",
-				"prompt": "Trace along the metronome scale and pendulum rod.",
-				"badge_pos": Vector2(288.0, 34.0),
-				"points": [
-					Vector2(256.0, 132.0),
-					Vector2(260.0, 98.0),
-					Vector2(264.0, 62.0),
-					Vector2(286.0, 94.0),
-				],
-			},
-			{
-				"index": 2,
-				"kind": &"connect",
-				"tag": "3 · CASSETTE CONTACTS",
-				"short": "Contacts",
-				"prompt": "Click matching triangle and square contacts on the cassette plate.",
-				"badge_pos": Vector2(46.0, 168.0),
-				"pairs": [
-					{
-						"pair_id": &"A",
-						"shape": &"triangle",
-						"label": "A",
-						"a": Vector2(198.0, 195.0),
-						"b": Vector2(225.0, 205.0),
-					},
-					{
-						"pair_id": &"B",
-						"shape": &"square",
-						"label": "B",
-						"a": Vector2(243.0, 215.0),
-						"b": Vector2(270.0, 225.0),
-					},
-				],
-			},
-		],
-	},
 }
 
 
@@ -280,6 +217,41 @@ static func tool_spec(tool: StringName) -> Dictionary:
 	if TOOL_SPECS.has(key):
 		return TOOL_SPECS[key]
 	return TOOL_SPECS["ring"]
+
+
+# Selects the repair target: equipped weapon if damaged, otherwise the most damaged
+# owned weapon by normalized condition (with stable tie-breaking in owned order).
+# Returns &"" when all owned weapons are full.
+static func pick_repair_tool(equipment: RefCounted, owned_tools: Array, preferred_tool: StringName = &"") -> StringName:
+	if equipment == null:
+		return &""
+	var valid_owned: Array[StringName] = []
+	for item in owned_tools:
+		var candidate: StringName
+		if item is int:
+			var idx := int(item)
+			if idx >= 1 and idx <= TOOL_ORDER.size():
+				candidate = TOOL_ORDER[idx - 1]
+			else:
+				continue
+		else:
+			candidate = StringName(item)
+		if candidate in TOOL_ORDER and not (candidate in valid_owned):
+			valid_owned.append(candidate)
+	if valid_owned.is_empty():
+		valid_owned.assign(TOOL_ORDER)
+	if preferred_tool in valid_owned and not equipment.is_full(preferred_tool):
+		return preferred_tool
+	var best_tool: StringName = &""
+	var best_condition := INF
+	for candidate in valid_owned:
+		if equipment.is_full(candidate):
+			continue
+		var cond := float(equipment.condition(candidate))
+		if cond < best_condition - 0.000001:
+			best_condition = cond
+			best_tool = candidate
+	return best_tool
 
 
 # Maps the 4 internal capacity checkpoints (stage 0..3) onto the 3 visible tool operations (0..2).

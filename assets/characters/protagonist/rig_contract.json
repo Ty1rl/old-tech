@@ -1,0 +1,277 @@
+{
+  "units": "metres",
+  "axes": "Godot +Y up, -Z front; feet at ground",
+  "bone_names": [
+    "root",
+    "pelvis",
+    "spine",
+    "chest",
+    "neck",
+    "head",
+    "clavicle.L",
+    "upper_arm.L",
+    "forearm.L",
+    "hand.L",
+    "clavicle.R",
+    "upper_arm.R",
+    "forearm.R",
+    "hand.R",
+    "thigh.L",
+    "shin.L",
+    "foot.L",
+    "thigh.R",
+    "shin.R",
+    "foot.R"
+  ],
+  "hierarchy": {
+    "root": "pelvis > spine > chest > neck > head",
+    "arms": "chest > clavicle.L/R > upper_arm.L/R > forearm.L/R > hand.L/R",
+    "legs": "pelvis > thigh.L/R > shin.L/R > foot.L/R"
+  },
+  "clips": {
+    "ClockHold": {
+      "frames": [
+        1.0,
+        31.0
+      ],
+      "duration_s": 1.0,
+      "loop": true
+    },
+    "ConeHold": {
+      "frames": [
+        1.0,
+        31.0
+      ],
+      "duration_s": 1.0,
+      "loop": true
+    },
+    "FlashHold": {
+      "frames": [
+        1.0,
+        31.0
+      ],
+      "duration_s": 1.0,
+      "loop": true
+    },
+    "Idle": {
+      "frames": [
+        1.0,
+        61.0
+      ],
+      "duration_s": 2.0,
+      "loop": true
+    },
+    "RingHold": {
+      "frames": [
+        1.0,
+        31.0
+      ],
+      "duration_s": 1.0,
+      "loop": true
+    },
+    "Walk": {
+      "frames": [
+        1.0,
+        31.0
+      ],
+      "duration_s": 1.0,
+      "loop": true
+    }
+  },
+  "sockets": {
+    "Grip_R": {
+      "bone": "hand.R",
+      "attach_prop_root_at_identity": true
+    },
+    "Grip_L": {
+      "bone": "hand.L",
+      "purpose": "support-hand target"
+    }
+  },
+  "holding_pose_socket_transforms": {
+    "ClockHold": {
+      "Grip_L": {
+        "origin_m": [
+          -0.104999907314777,
+          1.16000032424927,
+          -0.289999812841415
+        ],
+        "quaternion_xyzw": [
+          -2.98023294931227e-08,
+          -1.19209275339927e-07,
+          -1.49011647465613e-08,
+          1.0
+        ]
+      },
+      "Grip_R": {
+        "origin_m": [
+          0.104999803006649,
+          1.16000044345856,
+          -0.270000100135803
+        ],
+        "quaternion_xyzw": [
+          5.21540712838942e-08,
+          -1.49011611938477e-07,
+          5.21540712838942e-08,
+          1.0
+        ]
+      }
+    },
+    "ConeHold": {
+      "Grip_L": {
+        "origin_m": [
+          -0.114999979734421,
+          1.19000017642975,
+          -0.43999981880188
+        ],
+        "quaternion_xyzw": [
+          -7.10542820463395e-15,
+          -4.47034729234019e-08,
+          -3.35276055807299e-08,
+          1.0
+        ]
+      },
+      "Grip_R": {
+        "origin_m": [
+          0.114999905228615,
+          1.16000020503998,
+          -0.290000140666962
+        ],
+        "quaternion_xyzw": [
+          3.72529385117559e-08,
+          1.34110479166338e-07,
+          -2.980233659855e-08,
+          1.0
+        ]
+      }
+    },
+    "FlashHold": {
+      "Grip_L": {
+        "origin_m": [
+          -0.149999901652336,
+          1.21000015735626,
+          -0.359999895095825
+        ],
+        "quaternion_xyzw": [
+          1.04308128356934e-07,
+          -1.9371506709831e-07,
+          5.21540783893215e-08,
+          1.0
+        ]
+      },
+      "Grip_R": {
+        "origin_m": [
+          0.149999782443047,
+          1.21000039577484,
+          -0.320000052452087
+        ],
+        "quaternion_xyzw": [
+          1.63912829975743e-07,
+          1.04308099935224e-07,
+          -1.45286335850869e-07,
+          1.0
+        ]
+      }
+    },
+    "RingHold": {
+      "Grip_L": {
+        "origin_m": [
+          -0.129999861121178,
+          1.17000007629395,
+          -0.439999788999557
+        ],
+        "quaternion_xyzw": [
+          -7.45058681417277e-09,
+          -8.94069387413765e-08,
+          1.11758666321293e-07,
+          1.0
+        ]
+      },
+      "Grip_R": {
+        "origin_m": [
+          0.114999704062939,
+          1.17000019550323,
+          -0.310000061988831
+        ],
+        "quaternion_xyzw": [
+          2.53319853982248e-07,
+          2.38418508047289e-07,
+          -2.57045087437291e-07,
+          1.0
+        ]
+      }
+    }
+  },
+  "source_rest_socket_matrices": {
+    "Grip_L": {
+      "bone": "hand.L",
+      "rest_local_matrix": [
+        [
+          -0.7142354249954224,
+          0.5222894549369812,
+          0.4659201502799988,
+          0.005836913362145424
+        ],
+        [
+          -0.5222893953323364,
+          0.04541628435254097,
+          -0.8515582084655762,
+          -0.04256664216518402
+        ],
+        [
+          -0.4659201204776764,
+          -0.8515582084655762,
+          0.240348219871521,
+          0.00013541057705879211
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    "Grip_R": {
+      "bone": "hand.R",
+      "rest_local_matrix": [
+        [
+          -0.7142353057861328,
+          -0.5222896933555603,
+          -0.4659201502799988,
+          -0.005836913362145424
+        ],
+        [
+          0.5222893953323364,
+          0.045416440814733505,
+          -0.8515582084655762,
+          -0.04256664216518402
+        ],
+        [
+          0.4659203588962555,
+          -0.8515580892562866,
+          0.240348219871521,
+          0.00013541057705879211
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    }
+  },
+  "root_travel": false,
+  "skin": "linear blend; normalized; at most four exported influences",
+  "runtime_ik": false,
+  "review_standins_exported": false,
+  "triangles": 35522,
+  "mesh_objects": 80,
+  "materials": 9,
+  "limits": [
+    "No finger or face rig.",
+    "Final handle fitting and runtime IK belong to integration.",
+    "Triangulated cloth/limbs; some joint and cuff compression."
+  ]
+}

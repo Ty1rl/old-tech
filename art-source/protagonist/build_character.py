@@ -14,6 +14,8 @@ from mathutils import Vector
 REPO = Path(os.environ['JAM_REPO'])
 OUT = Path(os.environ['JAM_STATE_ROOT']) / 'exports/character-art'
 OUT.mkdir(parents=True, exist_ok=True)
+if (REPO/'art-source/protagonist/protagonist.blend').exists():
+    raise RuntimeError('Archived trial generator refuses to overwrite the authored model. Use refine_character.py after reviewing existing edits.')
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
 bpy.context.preferences.filepaths.save_version=0

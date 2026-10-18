@@ -3,6 +3,7 @@ extends Node3D
 # Cosmetic only: the arena advances animation in real time. No independent tick
 # or rig data enters the bounded gameplay history.
 const Character = preload("res://assets/characters/protagonist/protagonist.glb")
+const Tuning = preload("res://scenes/prototype/tuning.gd")
 const TOOLS = [preload("res://assets/equipment/ring_caster.glb"),
 	preload("res://assets/equipment/flash_camera.glb"),
 	preload("res://assets/equipment/heat_bellows.glb"),
@@ -11,8 +12,8 @@ const TOOL_IDS: Array[StringName] = [&"ring", &"beam", &"cone", &"clock"]
 const HOLDS = ["RingHold", "FlashHold", "ConeHold", "ClockHold"]
 # Actual props have different handle spacing from the art-preview stand-ins.
 # These grip positions keep both handles within reach of the exported rig.
-const MOUNTS = [Vector3(.12, 1.32, -.10), Vector3(.21, 1.30, -.25),
-	Vector3(0, 1.35, -.10), Vector3(.115, 1.30, -.25)]
+const MOUNTS = [Vector3(.10, 1.36, -.02), Vector3(.265, 1.34, -.19),
+	Vector3(-.04, 1.40, .02), Vector3(.145, 1.32, -.23)]
 
 var character: Node3D
 var skeleton: Skeleton3D
@@ -29,6 +30,8 @@ var _sockets: Dictionary = {}
 var _prop_sockets: Dictionary = {}
 var _bones: Dictionary = {}
 var _equipped_index := 0
+var _kick := 0.0
+var _air_active := false
 var _built := false
 
 
@@ -62,10 +65,11 @@ func build() -> void:
 	add_child(held_tool)
 	for index in range(TOOLS.size()):
 		var prop: Node3D = TOOLS[index].instantiate()
+		prop.scale = Vector3.ONE * float(Tuning.PLAYER.tool_scale)
 		held_tool.add_child(prop)
 		tool_attachments[TOOL_IDS[index]] = prop
 		_prop_sockets[TOOL_IDS[index]] = {"L": prop.find_child("Grip_L", true, false),
-			"R": prop.find_child("Grip_R", true, false)}
+			"R": prop.find_child("Grip_R", true, false), "Emitter": prop.find_child("Emitter", true, false)}
 	set_tool_index(tool_index)
 	reset_pose()
 
@@ -100,13 +104,15 @@ func reset_pose() -> void:
 	walk_phase = 0
 	idle_phase = 0
 	stride_blend = 0
+	_kick = 0
+	_air_active = false
 	animation.play("Idle")
 	animation.seek(0, true)
 	animation.advance(0)
 	_fit_equipment()
 
 
-func step_visual(real_delta: float, planar_speed: float, max_speed: float = 6.0) -> void:
+func step_visual(real_delta: float, planar_speed: float, max_speed: float = 6.0, movement: Vector3 = Vector3.ZERO) -> void:
 	build()
 	if real_delta <= 0: return
 	var dt := minf(real_delta, .25)
@@ -117,10 +123,22 @@ func step_visual(real_delta: float, planar_speed: float, max_speed: float = 6.0)
 	if animation.current_animation != clip:
 		animation.play(clip, .12)
 	var rate := lerpf(.8, 2.2, stride_blend) if moving else 1.0
-	animation.advance(dt * rate)
+	# Reverse the planted gait when backing away, rather than walking forward
+	# while sliding backwards. A dedicated strafe/run clip remains an art task.
+	var direction := -1.0 if movement.z > .1 else 1.0
+	animation.advance(dt * rate * direction)
 	if moving: walk_phase += dt * rate * TAU
 	else: idle_phase += dt
 	_fit_equipment()
+
+
+func set_combat_pose(flash_timer: float, air_active: bool) -> void:
+	_kick = clampf(flash_timer / .14, 0, 1) * .065
+	_air_active = air_active
+
+
+func muzzle_position(index: int) -> Vector3:
+	return (_prop_sockets[TOOL_IDS[clampi(index,1,4)-1]]["Emitter"] as Node3D).global_position
 
 
 func _fit_equipment() -> void:
@@ -132,7 +150,10 @@ func _fit_equipment() -> void:
 	skeleton.force_update_all_bone_transforms()
 	var root_bone := skeleton.find_bone("root")
 	var bob := skeleton.get_bone_pose_position(root_bone).y
-	held_tool.position = MOUNTS[tool_index - 1] + Vector3(0, bob, 0)
+	var recoil := _kick if tool_index == 2 else 0.0
+	var flutter := sin(idle_phase * 28 + walk_phase) * .008 if tool_index == 3 and _air_active else 0.0
+	held_tool.position = MOUNTS[tool_index - 1] + Vector3(0, bob + flutter, recoil)
+	held_tool.rotation.x = -recoil * .4
 	for side in ["R", "L"]:
 		var socket: Node3D = _prop_sockets[tool_id][side]
 		var target := skeleton.global_transform.affine_inverse() * socket.global_transform

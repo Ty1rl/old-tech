@@ -249,7 +249,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		match code:
 			KEY_EQUAL, KEY_PLUS:
-				player.camera.size = maxf(16, player.camera.size - 2)
+				player.camera.size = maxf(10, player.camera.size - 2)
 				return
 			KEY_MINUS:
 				player.camera.size = minf(32, player.camera.size + 2)

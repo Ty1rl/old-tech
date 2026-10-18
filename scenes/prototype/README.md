@@ -13,7 +13,7 @@ The partner's original menu/game scenes and popup managers remain intact.
 
 - WASD moves; mouse aims. 1/2/3/4 equip ring/flash/cone/clock.
   Tab cycles forward; Shift+Tab cycles backward.
-- +/- zooms the view; R restores the default closer camera.
+- +/- zooms the view (10–32); R restores the closer default of 16.
 - Ring: hold left mouse to draw a floor path, release to launch.
 - Flash: hold left mouse to charge, release to fire. Quick taps are weaker.
 - Cone: hold left mouse for continuous heat and repeating shove/stun pulses.
@@ -68,7 +68,9 @@ The player uses the Blender protagonist with a skinned rig, idle/walk animations
 and four modeled tools. Both arms fit the real equipment handles; walking keeps
 the holding pose. Art remains 30% enlarged for readability. Animation advances
 only through the arena's real-time tick, so pause and inspection freeze it.
-Collision and history roots are unchanged; meshes and bones never enter snapshots.
+Tools are another 25% larger relative to the player. Collision and history roots
+are unchanged; meshes and bones never enter snapshots. Stopping and reversal
+are quicker without changing maximum speed; backing away reverses the walk cycle.
 The current gait is a stylized in-place cycle, with some knee/cloth compression
 and foot sliding at high movement speed. Detailed fingers are not animated.
 
@@ -86,6 +88,14 @@ The ring arcs harmlessly over cover to the start of the stroke. Only its
 floor-level cutting path deals damage or stops against cover. The return
 homes harmlessly to the moving player, including through cover. Preview
 colors distinguish reachable and blocked portions of the cutting path.
+
+Flash light starts at the modeled lens, with a narrow bright core and soft gold
+halo. A shot keeps its launch origin when the player moves and through rewind;
+the light extends only as far as its traveling collision pulse. Damage still
+occurs on contact. Cone air streams and expanding pressure arcs start at the
+nozzle, move in world time and stop against cover. A faint floor footprint
+retains range information. The effect uses one batched mesh rather than spawning
+objects for each wisp. The held camera kicks slightly and the bellows flutters.
 
 Flash has a 35-unit range, 30–100 damage over 0.9 seconds of charge, and a short
 cooldown. Visible pulses hit the first enemy or cover. Cone damages multiple
@@ -159,7 +169,7 @@ python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 
 Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
 resource_integration, integration, parts, feedback, scrub_view, presentation,
-player_visual, variants, readability.
+player_visual, variants, readability, weapon_presentation.
 Use import after script/scene changes.
 The shared lab runner bounds execution and saves full logs in seat state.
 On another machine: `timeout 60s godot --headless --path . --script

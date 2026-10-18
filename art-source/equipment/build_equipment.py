@@ -1,9 +1,9 @@
 """Procedural builder and refinement script for jam-3 equipment models.
 
 Builds four independent props following ART-BRIEF.txt:
-  1. ring_caster   (art/more/Pasted image (6).png)
-  2. flash_camera  (art/more/Pasted image (8).png)
-  3. heat_bellows  (art/more/Pasted image (5).png)
+  1. ring_caster   (art/equipment/ring-caster-detail.png)
+  2. flash_camera  (art/equipment/flash-camera-detail.png)
+  3. heat_bellows  (art/equipment/heat-bellows-detail.png)
   4. time_device   (art/current-ideas/metronome-tape-clock-concept.png)
 
 Shared attachment contract:
@@ -292,7 +292,7 @@ def horseshoe_point_and_tangent(t: float, sign: float):
 
 
 def build_ring_caster(b: PropBuilder, m: dict):
-    """1. Ring Caster (art/more/Pasted image (6).png & Pasted image (2).png)."""
+    """1. Ring Caster (art/equipment/ring-caster-detail.png & Pasted image (2).png)."""
     b.add_empty("Grip_R", (0.0, 0.0, 0.0))
     b.add_empty("Grip_L", (0.165, -0.35, -0.035))
     b.add_empty("Emitter", (0.0, -0.49, 0.015))
@@ -600,7 +600,7 @@ def build_ring_caster(b: PropBuilder, m: dict):
 
 
 def build_flash_camera(b: PropBuilder, m: dict):
-    """2. Flash Camera (art/more/Pasted image (8).png & Pasted image (9).png)."""
+    """2. Flash Camera (art/equipment/flash-camera-detail.png & Pasted image (9).png)."""
     cx = 0.21
     b.add_empty("Grip_R", (0.0, 0.0, 0.0))
     b.add_empty("Grip_L", (0.42, 0.0, 0.0))
@@ -755,7 +755,7 @@ def build_flash_camera(b: PropBuilder, m: dict):
 
 
 def build_heat_bellows(b: PropBuilder, m: dict):
-    """3. Heat Bellows (art/more/Pasted image (5).png & Pasted image (12).png)."""
+    """3. Heat Bellows (art/equipment/heat-bellows-detail.png & Pasted image (12).png)."""
     b.add_empty("Grip_R", (0.0, 0.0, 0.0))
     b.add_empty("Grip_L", (0.0, -0.37, -0.075))
     b.add_empty("Emitter", (0.0, -0.60, 0.105))

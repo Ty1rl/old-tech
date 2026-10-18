@@ -1,8 +1,9 @@
 extends RefCounted
 
 # Distances are world units; durations are real seconds unless stated otherwise.
-const PLAYER = {"speed": 6.0, "health": 100.0, "visual_scale": 1.3}
-const VIEW = {"camera_size": 22.0, "showcase_size": 18.0, "blue_assist_pixels": 22.0,
+const PLAYER = {"speed": 6.0, "health": 100.0, "visual_scale": 1.3, "tool_scale": 1.25}
+const MOVEMENT = {"acceleration": 48.0, "braking": 80.0, "reversal": 72.0}
+const VIEW = {"camera_size": 16.0, "showcase_size": 14.0, "blue_assist_pixels": 22.0,
 	"yellow_assist_pixels": 20.0}
 const SLOW = {"scale": 0.18, "drain": 1.0}
 const RING = {"range": 14.0, "length": 22.0, "minimum_length": 0.6,

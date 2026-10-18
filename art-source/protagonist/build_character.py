@@ -474,7 +474,7 @@ for ob in list(character.objects):
         bpy.ops.object.modifier_apply(modifier=mod.name)
     # The asset has a common feet-on-ground origin, metres, no armature.
     ob['asset_stage']='silhouette trial; awaiting visual review before rigging'
-    ob['reference']='art/more/Pasted image (4).png'
+    ob['reference']='art/character/protagonist-turnaround.png'
 
 bpy.ops.object.select_all(action='DESELECT')
 for ob in character.objects:

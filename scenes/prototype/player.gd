@@ -68,7 +68,22 @@ func step(delta: float, aim: Vector3, slow_held: Variant = null, repair_slow: bo
 	if direction.length_squared() > 0.001 and is_instance_valid(model):
 		model.global_basis = Basis.looking_at(direction)
 	if is_instance_valid(visual):
-		visual.step_visual(delta, Vector2(velocity.x, velocity.z).length(), speed)
+		var movement := model.global_basis.inverse() * Vector3(velocity.x, 0, velocity.z)
+		visual.step_visual(delta, movement.length(), speed, movement)
+
+
+func _update_velocity(delta: float) -> void:
+	var target := _get_move_direction() * speed
+	var planar := Vector3(velocity.x, 0, velocity.z)
+	var rate := float(Tuning.MOVEMENT.acceleration)
+	if target.length_squared() < .0001:
+		rate = float(Tuning.MOVEMENT.braking)
+	elif target.dot(planar) < 0:
+		rate = float(Tuning.MOVEMENT.reversal)
+	planar = planar.move_toward(target, rate * maxf(0, delta))
+	velocity.x = planar.x
+	velocity.z = planar.z
+	if not is_on_floor(): velocity += get_gravity() * maxf(0, delta)
 
 
 func _step_slow(delta: float, held: bool, automatic: bool = false) -> void:

@@ -6,6 +6,8 @@ const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EquipmentScript = preload("res://scenes/prototype/equipment.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
+const Presentation = preload("res://scenes/prototype/weapon_presentation.gd")
+var presentation: RefCounted = Presentation.new()
 
 const TOOL_IDS: Array[StringName] = [&"ring", &"beam", &"cone", &"clock"]
 
@@ -38,6 +40,7 @@ var beam_cooldown: float = 0.0
 var beam_flash_timer: float = 0.0
 var beam_start: Vector3 = Vector3.ZERO
 var beam_end: Vector3 = Vector3.ZERO
+var beam_visual_origin := Vector3.ZERO
 var beam_pulses: Array[Dictionary] = []
 
 # Tool 3 (Cone) state
@@ -79,6 +82,7 @@ func _setup_visuals() -> void:
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_draw_instance.material_override = mat
 	add_child(_draw_instance)
+	presentation.attach(self)
 
 
 func select_tool(tool_index: int) -> void:
@@ -206,7 +210,7 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 				ring_launch_origin = ring_points[0]
 			ring_pos = ring_launch_origin
 			last_feedback = "Ring launched"
-			combat_event.emit(&"ring_launch", ring_pos, 1.0)
+			combat_event.emit(&"ring_launch", Presentation.muzzle(player, 1), 1.0)
 		2:
 			if not beam_charging:
 				return
@@ -228,6 +232,7 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 			var origin_xz := Vector3(player.global_position.x, 0.0, player.global_position.z)
 			var dir := _aim_dir_xz(player.global_position, aim)
 			var pulse: Dictionary = {
+				"muzzle": Presentation.muzzle(player, 2),
 				"pos": origin_xz,
 				"dir": dir,
 				"speed": _beam_speed(),
@@ -238,10 +243,11 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 			}
 			beam_pulses.append(pulse)
 			beam_start = origin_xz
+			beam_visual_origin = pulse.muzzle
 			beam_end = origin_xz + Vector3(dir.x, 0.0, dir.y) * minf(1.5, _beam_max_range())
 			beam_flash_timer = 0.14
 			last_feedback = "Flash launched (%.0f dmg)" % dmg
-			combat_event.emit(&"flash_fire", origin_xz, 0.4 + charge_frac * 0.6)
+			combat_event.emit(&"flash_fire", pulse.muzzle, 0.4 + charge_frac * 0.6)
 		3:
 			if cone_active:
 				cone_active = false
@@ -254,6 +260,7 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 func step(delta: float, player: Node3D, aim: Vector3, enemies: Array, world_delta: float = -1.0) -> void:
 	last_aim = aim
 	var w_delta: float = delta if world_delta < 0.0 else world_delta
+	presentation.phase = fposmod(presentation.phase + maxf(0,w_delta),1024)
 
 	# Real delta drives cooldowns, Flash charge accumulation, and Ring drawing samples.
 	beam_cooldown = maxf(0.0, beam_cooldown - maxf(0.0, delta))
@@ -286,6 +293,10 @@ func step(delta: float, player: Node3D, aim: Vector3, enemies: Array, world_delt
 	elif w_delta > 0.0:
 		cone_burst_cooldown = maxf(0.0, cone_burst_cooldown - w_delta)
 
+	if player != null:
+		var visual: Variant = player.get("visual")
+		if is_instance_valid(visual) and visual.has_method("set_combat_pose"):
+			visual.set_combat_pose(beam_flash_timer,cone_active)
 	_rebuild_visuals(player, aim)
 
 
@@ -303,6 +314,8 @@ func cancel_input() -> void:
 
 
 func reset_state() -> void:
+	presentation.reset()
+	beam_visual_origin = Vector3.ZERO
 	selected_tool = 1
 	mouse_held = false
 	require_fresh_press = false
@@ -336,6 +349,7 @@ func capture_state() -> Dictionary:
 	for p in beam_pulses:
 		var p_dict: Dictionary = p
 		pulses_copy.append({
+			"muzzle": Vector3(p_dict.get("muzzle",p_dict["pos"])),
 			"pos": Vector3(p_dict["pos"]),
 			"dir": Vector2(p_dict["dir"]),
 			"speed": float(p_dict["speed"]),
@@ -356,6 +370,7 @@ func capture_state() -> Dictionary:
 		"beam_flash_timer": float(beam_flash_timer),
 		"beam_start": Vector3(beam_start),
 		"beam_end": Vector3(beam_end),
+		"beam_visual_origin": beam_visual_origin,
 		"beam_pulses": pulses_copy,
 		"cone_burst_cooldown": float(cone_burst_cooldown),
 		"cone_origin": Vector3(cone_origin),
@@ -398,6 +413,7 @@ func restore_state(data: Dictionary) -> void:
 	beam_flash_timer = maxf(0.0, float(data.get("beam_flash_timer", 0.0)))
 	beam_start = Vector3(data.get("beam_start", Vector3.ZERO))
 	beam_end = Vector3(data.get("beam_end", Vector3.ZERO))
+	beam_visual_origin = Vector3(data.get("beam_visual_origin", beam_start))
 
 	beam_pulses.clear()
 	var raw_pulses: Variant = data.get("beam_pulses", [])
@@ -406,6 +422,7 @@ func restore_state(data: Dictionary) -> void:
 			if p is Dictionary:
 				var p_dict: Dictionary = p
 				beam_pulses.append({
+					"muzzle": Vector3(p_dict.get("muzzle",p_dict.get("pos",Vector3.ZERO))),
 					"pos": Vector3(p_dict.get("pos", Vector3.ZERO)),
 					"dir": Vector2(p_dict.get("dir", Vector2(0.0, -1.0))),
 					"speed": float(p_dict.get("speed", _beam_speed())),
@@ -859,6 +876,7 @@ func _step_beam_pulses(w_delta: float, enemies: Array) -> void:
 				best_contact = contact_3d
 
 		beam_start = start_3d
+		beam_visual_origin = pulse.get("muzzle",start_3d)
 		if best_enemy != null:
 			beam_end = best_contact
 			beam_flash_timer = 0.14
@@ -947,7 +965,7 @@ func _step_cone(delta: float, w_delta: float, player: Node3D, enemies: Array) ->
 				cone_burst_cooldown = 0.0
 
 	if do_burst:
-		combat_event.emit(&"cone_pulse", player.global_position + Vector3(cone_forward.x, 0, cone_forward.y), burst_scale)
+		combat_event.emit(&"cone_pulse", Presentation.muzzle(player, 3), burst_scale)
 	var p_xz := Vector2(player.global_position.x, player.global_position.z)
 	var origin_3d := Vector3(p_xz.x, 0.0, p_xz.y)
 	var max_r := float(Tuning.CONE.range)
@@ -1081,6 +1099,7 @@ func _rebuild_visuals(player: Node3D, aim: Vector3) -> void:
 	if _draw_mesh == null:
 		return
 	_draw_mesh.clear_surfaces()
+	presentation.rebuild(self,player,aim)
 
 	if ring_drawing and preview_points.size() >= 1:
 		if player != null:
@@ -1106,33 +1125,11 @@ func _rebuild_visuals(player: Node3D, aim: Vector3) -> void:
 		var ring_y := maxf(0.22, ring_pos.y + 0.22) if ring_phase == "outbound" else 0.22
 		_draw_circle_outline(Vector3(ring_pos.x, ring_y, ring_pos.z), float(Tuning.RING.radius), ring_col)
 
-	if selected_tool == 2 and beam_charging and player != null:
-		var origin_xz := Vector3(player.global_position.x, 0.28, player.global_position.z)
-		var dir := _aim_dir_xz(player.global_position, aim)
-		var preview_len := lerpf(2.2, 6.5, beam_charge)
-		var tip := origin_xz + Vector3(dir.x, 0.0, dir.y) * preview_len
-		var charge_col := Color("f0d77b").lerp(Color("ffffff"), beam_charge * 0.6)
-		_draw_polyline_ribbon([origin_xz, tip], 0, 1, lerpf(0.06, 0.16, beam_charge), Color(charge_col, 0.75), 0.28)
-		_draw_circle_outline(origin_xz + Vector3(dir.x, 0.0, dir.y) * 0.9, lerpf(0.20, 0.50, beam_charge), charge_col)
-
-	for p in beam_pulses:
-		var pulse: Dictionary = p
-		var pos: Vector3 = pulse["pos"]
-		var dir: Vector2 = pulse["dir"]
-		var r_p: float = float(pulse["radius"])
-		var chg: float = float(pulse.get("charge", 0.5))
-		var tail_len := lerpf(1.1, 2.4, chg)
-		var head := Vector3(pos.x, 0.32, pos.z)
-		var tail := head - Vector3(dir.x, 0.0, dir.y) * tail_len
-		_draw_polyline_ribbon([tail, head], 0, 1, lerpf(0.09, 0.18, chg), ToolStyle.BEAM, 0.32)
-		_draw_circle_outline(head, r_p, Color("ffffff"))
-
-	if beam_flash_timer > 0.0:
-		_draw_polyline_ribbon([beam_start, beam_end], 0, 1, 0.10, Color(1.0, 0.94, 0.48, 0.65), 0.30)
-		_draw_circle_outline(Vector3(beam_end.x, 0.30, beam_end.z), _beam_radius(), ToolStyle.BEAM)
-
 	if selected_tool == 3 and cone_active and player != null:
-		_draw_cone_sector(Vector3(player.global_position.x, 0.10, player.global_position.z), cone_forward, float(Tuning.CONE.range), float(Tuning.CONE.half_angle), Color(1.0, 0.58, 0.22, 0.28))
+		# A faint floor footprint retains range information; moving air is drawn
+		# separately from the real nozzle by WeaponPresentation.
+		_draw_cone_sector(Vector3(player.global_position.x,.08,player.global_position.z), cone_forward,
+			float(Tuning.CONE.range),float(Tuning.CONE.half_angle),Color(1,.58,.22,.055))
 
 
 func _draw_arc_ribbon(start_pos: Vector3, end_pos: Vector3, peak_height: float, half_width: float, col: Color) -> void:

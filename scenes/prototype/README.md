@@ -150,3 +150,15 @@ requires a renderer. Never launch automated previews on Matt's desktop.
 
 Models and sound remain provisional. Human playtesting determines whether the
 resource budgets, repair interruptions and encounter pressure feel right.
+
+## Known limitations from the current review
+
+Emergency recovery currently rewinds weapon condition with the world. Choosing a
+moment before a repair can undo that completed repair without refunding its time
+cost; choosing a moment before firing can refund weapon wear. The next pass needs
+to settle whether condition should persist through recovery like time and charges.
+
+Remaining maintenance work: repair wiring accesses private popup/session fields;
+arena startup overrides authored camera settings; the Space action is registered
+at runtime and the time contract's wiring example needs updating. Historical
+`ui_preview_m` and `ranged_preview/capture_m.gd` scripts still use removed APIs.

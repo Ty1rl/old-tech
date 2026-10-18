@@ -60,6 +60,41 @@ func run() -> void:
 	plant.apply(skeleton, 0.28, 0.24)
 	expect(not plant.contacts.is_empty(), "Soft foot plant glides anchor instead of dropping contact mid-stride")
 	skeleton.queue_free()
+
+	# Real imported GLTF rig (protagonist.glb has non-identity thigh.L/R rest_euler ~ +-3.03 rad).
+	# Applying FootPlant must keep feet below knees and knees below hips, never flipping legs upward.
+	var character: Node3D = load("res://assets/characters/protagonist/protagonist.glb").instantiate()
+	root.add_child(character)
+	var real_skel: Skeleton3D = character.find_children("*", "Skeleton3D", true, false)[0]
+	var real_anim: AnimationPlayer = character.find_children("*", "AnimationPlayer", true, false)[0]
+	var real_plant := FootPlant.new()
+	var pelvis_idx := real_skel.find_bone("pelvis")
+	var shin_l := real_skel.find_bone("shin.L")
+	var shin_r := real_skel.find_bone("shin.R")
+	var foot_l := real_skel.find_bone("foot.L")
+	var foot_r := real_skel.find_bone("foot.R")
+	var max_real_foot_y := 0.0
+	var hierarchy_ok := true
+	real_anim.play("Walk")
+	for step_i in range(20):
+		character.position.z -= 0.12
+		real_skel.reset_bone_poses()
+		real_anim.seek(float(step_i) * 0.05, true)
+		real_anim.advance(0)
+		real_plant.apply(real_skel, 0.35, 0.24)
+		real_skel.force_update_all_bone_transforms()
+		var fl := real_skel.get_bone_global_pose(foot_l).origin
+		var fr := real_skel.get_bone_global_pose(foot_r).origin
+		var kl := real_skel.get_bone_global_pose(shin_l).origin
+		var kr := real_skel.get_bone_global_pose(shin_r).origin
+		var hp := real_skel.get_bone_global_pose(pelvis_idx).origin
+		max_real_foot_y = maxf(max_real_foot_y, maxf(fl.y, fr.y))
+		if not (fl.y < kl.y and kl.y < hp.y and fr.y < kr.y and kr.y < hp.y):
+			hierarchy_ok = false
+	expect(hierarchy_ok and max_real_foot_y < 0.36,
+		"Real GLTF skeleton with non-identity bone rests keeps feet grounded below knees/hips (max_foot_y %.3f)" % max_real_foot_y)
+	character.queue_free()
+
 	await process_frame
 	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures}))
 	quit(0 if failures.is_empty() else 1)

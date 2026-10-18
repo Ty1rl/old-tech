@@ -37,9 +37,6 @@ func apply(skeleton: Skeleton3D, strength: float = 1.0, max_hold: float = 0.7) -
 				"shin": shin,
 				"thigh": thigh,
 				"thigh_parent": skeleton.get_bone_parent(thigh),
-				"thigh_rest_inv": skeleton.get_bone_rest(thigh).basis.inverse(),
-				"shin_rest_inv": skeleton.get_bone_rest(shin).basis.inverse(),
-				"foot_rest_inv": skeleton.get_bone_rest(foot).basis.inverse(),
 				"height": skeleton.get_bone_global_rest(foot).origin.y,
 			})
 	var soft := strength < .999
@@ -91,14 +88,14 @@ func apply(skeleton: Skeleton3D, strength: float = 1.0, max_hold: float = 0.7) -
 		var reach_len := maxf(reach.length(), .001)
 		var axis := reach / reach_len
 		var bend := knee - hip
-		if soft:
-			bend += (-thigh_pose.basis.z) * 0.06
 		bend -= axis * bend.dot(axis)
 		if bend.length_squared() < .0001: bend = Vector3.FORWARD
 		var along := (upper * upper + reach_len * reach_len - lower * lower) / (2.0 * reach_len)
 		var joint := hip + axis * along + bend.normalized() * sqrt(maxf(0.0, upper * upper - along * along))
 
-		# Solve thigh -> shin -> foot in one pass without redundant full-skeleton updates.
+		# In Godot 4 Skeleton3D, bone_pose_rotation is the bone's local basis directly
+		# (global_basis = parent_global_basis * local_basis); multiplying by rest.inverse()
+		# inverted non-identity GLTF leg rests (~180 deg on thigh.L/R) and flipped the leg upward.
 		var from_upper := knee - hip
 		var to_upper := joint - hip
 		var thigh_global_basis := thigh_pose.basis
@@ -108,7 +105,7 @@ func apply(skeleton: Skeleton3D, strength: float = 1.0, max_hold: float = 0.7) -
 			thigh_global_basis = Basis(turn_upper) * thigh_pose.basis
 		var thigh_parent: int = leg.thigh_parent
 		var thigh_parent_basis := skeleton.get_bone_global_pose(thigh_parent).basis if thigh_parent >= 0 else Basis.IDENTITY
-		skeleton.set_bone_pose_rotation(thigh, ((leg.thigh_rest_inv as Basis) * thigh_parent_basis.inverse() * thigh_global_basis).get_rotation_quaternion())
+		skeleton.set_bone_pose_rotation(thigh, (thigh_parent_basis.inverse() * thigh_global_basis).get_rotation_quaternion())
 
 		var shin_mid_basis := Basis(turn_upper) * shin_pose.basis
 		var ankle_mid := joint + Basis(turn_upper) * (ankle - knee)
@@ -118,8 +115,8 @@ func apply(skeleton: Skeleton3D, strength: float = 1.0, max_hold: float = 0.7) -
 		if from_lower.length_squared() >= .00001 and to_lower.length_squared() >= .00001:
 			var turn_lower := Quaternion(from_lower.normalized(), to_lower.normalized())
 			shin_global_basis = Basis(turn_lower) * shin_mid_basis
-		skeleton.set_bone_pose_rotation(shin, ((leg.shin_rest_inv as Basis) * thigh_global_basis.inverse() * shin_global_basis).get_rotation_quaternion())
-		skeleton.set_bone_pose_rotation(foot, ((leg.foot_rest_inv as Basis) * shin_global_basis.inverse() * local_foot.basis).get_rotation_quaternion())
+		skeleton.set_bone_pose_rotation(shin, (thigh_global_basis.inverse() * shin_global_basis).get_rotation_quaternion())
+		skeleton.set_bone_pose_rotation(foot, (shin_global_basis.inverse() * local_foot.basis).get_rotation_quaternion())
 
 
 func point_bone(skeleton: Skeleton3D, bone: int, from: Vector3, to: Vector3) -> void:
@@ -131,5 +128,4 @@ func point_bone(skeleton: Skeleton3D, bone: int, from: Vector3, to: Vector3) -> 
 func set_basis(skeleton: Skeleton3D, bone: int, basis: Basis) -> void:
 	var parent := skeleton.get_bone_parent(bone)
 	var parent_basis := skeleton.get_bone_global_pose(parent).basis if parent >= 0 else Basis.IDENTITY
-	var rest := skeleton.get_bone_rest(bone).basis
-	skeleton.set_bone_pose_rotation(bone,(rest.inverse() * parent_basis.inverse() * basis).get_rotation_quaternion())
+	skeleton.set_bone_pose_rotation(bone, (parent_basis.inverse() * basis).get_rotation_quaternion())

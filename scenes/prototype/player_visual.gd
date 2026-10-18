@@ -47,7 +47,6 @@ var _sockets: Dictionary = {}
 var _prop_sockets: Dictionary = {}
 var _bones: Dictionary = {}
 var _bone_parents: Dictionary = {}
-var _rest_rot: Dictionary = {}
 var _clip_lengths: Dictionary = {}
 var _equipped_index := 0
 var _kick := 0.0
@@ -79,15 +78,13 @@ func build() -> void:
 		if b_idx >= 0:
 			_bones[bone_name] = b_idx
 			_bone_parents[b_idx] = skeleton.get_bone_parent(b_idx)
-			_rest_rot[b_idx] = skeleton.get_bone_rest(b_idx).basis.get_rotation_quaternion()
 	for side in ["L", "R"]:
-		for part in ["shoulder", "upper_arm", "forearm", "hand", "thigh", "shin", "foot"]:
+		for part in ["clavicle", "upper_arm", "forearm", "hand", "thigh", "shin", "foot"]:
 			var id: String = part + "." + side
 			var b_idx := skeleton.find_bone(id)
-			_bones[id] = b_idx
 			if b_idx >= 0:
+				_bones[id] = b_idx
 				_bone_parents[b_idx] = skeleton.get_bone_parent(b_idx)
-				_rest_rot[b_idx] = skeleton.get_bone_rest(b_idx).basis.get_rotation_quaternion()
 		var socket: Node3D = character.find_child("Grip_" + side, true, false)
 		_sockets[side] = socket.transform
 	for clip_name in ["Idle", "Walk", "Run", "BackWalk"]:
@@ -250,13 +247,7 @@ func step_visual(world_delta: float, planar_speed: float, max_speed: float = 6.0
 	var has_residual_motion := moving or stride_blend > .005 or _stop_settle > .005 or absf(_turn_sway) > .003
 	if has_residual_motion:
 		_apply_gait_shaping()
-		var plant_weight := .25 * stride_blend * (1.0 - .62 * absf(_strafe_blend)) * (1.0 - .35 * _run_blend)
-		if plant_weight > .015:
-			foot_plant.apply(skeleton, plant_weight, .24)
-		else:
-			foot_plant.reset()
-	else:
-		foot_plant.reset()
+	foot_plant.reset()
 	_fit_equipment()
 
 
@@ -264,58 +255,34 @@ func _apply_gait_shaping() -> void:
 	var root_idx: int = _bones.get("root", -1)
 	if root_idx >= 0:
 		var root_pos := skeleton.get_bone_pose_position(root_idx)
-		# Grounded crouch + braking settle, damping steep double-frequency pogo bounce.
-		var base_crouch := lerpf(-.018, -.044, _run_blend) * stride_blend - _stop_settle * .024 - absf(_turn_sway) * .04
-		var bob_damp := lerpf(.30, .38, _run_blend)
-		root_pos.y = base_crouch + (root_pos.y - base_crouch) * bob_damp
-		root_pos.x = root_pos.x * .55 + sin(walk_phase) * .024 * stride_blend - _strafe_blend * .025 - _turn_sway * .05
-		root_pos.z = root_pos.z * .5 - _accel_lean * .18 + _stop_settle * .018
+		# Keep authored root bounce bounded while preserving braking settle.
+		root_pos.y = clampf(root_pos.y * .72 - _stop_settle * .018 - absf(_turn_sway) * .015, -.056, .02)
+		root_pos.x = root_pos.x * .65 - _strafe_blend * .016 - _turn_sway * .028
+		root_pos.z = root_pos.z * .65 - _accel_lean * .12 + _stop_settle * .014
 		skeleton.set_bone_pose_position(root_idx, root_pos)
 
-	# Amplify thigh/shin swing excursion and add ankle heel-to-toe roll so steps read from -55 deg perspective.
-	var thigh_warp := lerpf(1.0, 1.36, stride_blend) + .12 * absf(_strafe_blend)
-	var shin_warp := lerpf(1.0, 1.18, stride_blend)
-	for side_idx in range(2):
-		var side := "L" if side_idx == 0 else "R"
-		var phase_sign := 1.0 if side_idx == 0 else -1.0
-		var thigh_idx: int = _bones.get("thigh." + side, -1)
-		if thigh_idx >= 0:
-			var r_rest: Quaternion = _rest_rot[thigh_idx]
-			var r_cur := skeleton.get_bone_pose_rotation(thigh_idx)
-			skeleton.set_bone_pose_rotation(thigh_idx, r_rest.slerp(r_cur, thigh_warp).normalized())
-		var shin_idx: int = _bones.get("shin." + side, -1)
-		if shin_idx >= 0:
-			var s_rest: Quaternion = _rest_rot[shin_idx]
-			var s_cur := skeleton.get_bone_pose_rotation(shin_idx)
-			skeleton.set_bone_pose_rotation(shin_idx, s_rest.slerp(s_cur, shin_warp).normalized())
-		var foot_idx: int = _bones.get("foot." + side, -1)
-		if foot_idx >= 0 and stride_blend > .02:
-			var ankle_roll := sin(walk_phase + (0.0 if phase_sign > 0.0 else PI)) * .13 * stride_blend
-			var f_cur := skeleton.get_bone_pose_rotation(foot_idx)
-			skeleton.set_bone_pose_rotation(foot_idx, (f_cur * Quaternion(Vector3.RIGHT, ankle_roll)).normalized())
-
-	# Steer pelvis into lateral strafe in model space while counter-twisting spine/chest so upper body stays aimed forward.
+	# Keep thigh, shin, and foot rotations strictly on the authored AnimationPlayer clips.
+	# Steer pelvis horizontally (Y-yaw only) into lateral strafes without pitching or rolling
+	# the hip sockets, and counter-twist spine/chest so the upper body and weapon stay aimed forward.
 	var strafe_sign := -1.0 if _forward_blend < -.1 else 1.0
-	var strafe_yaw := clampf(-_strafe_blend * strafe_sign * .46, -.44, .44)
-	var step_yaw := sin(walk_phase) * .075 * stride_blend
-	var step_sway := sin(walk_phase) * .044 * stride_blend
-	var forward_lean := -_forward_blend * (.048 + .048 * _run_blend) - _accel_lean * .45 + _stop_settle * .055
+	var strafe_yaw := clampf(-_strafe_blend * strafe_sign * .44, -.42, .42)
+	var forward_lean := -_forward_blend * (.046 + .044 * _run_blend) - _accel_lean * .42 + _stop_settle * .052
 	var pelvis_idx: int = _bones.get("pelvis", -1)
 	if pelvis_idx >= 0:
-		var p_model := Quaternion(Vector3.UP, strafe_yaw + step_yaw + _turn_sway * .35) * Quaternion(Vector3.BACK, -_strafe_blend * .048 + step_sway) * Quaternion(Vector3.RIGHT, forward_lean * .52)
+		var p_model := Quaternion(Vector3.UP, strafe_yaw + _turn_sway * .28)
 		_rotate_bone_model_space(pelvis_idx, p_model)
 	var spine_idx: int = _bones.get("spine", -1)
 	if spine_idx >= 0:
-		var sp_model := Quaternion(Vector3.UP, -strafe_yaw * .55 - step_yaw * .55 - _turn_sway * .22) * Quaternion(Vector3.BACK, -_strafe_blend * .032 - step_sway * .5 - _turn_sway * .18) * Quaternion(Vector3.RIGHT, forward_lean * .65)
+		var sp_model := Quaternion(Vector3.UP, -strafe_yaw * .55 - _turn_sway * .20) * Quaternion(Vector3.BACK, -_strafe_blend * .028 - _turn_sway * .16) * Quaternion(Vector3.RIGHT, forward_lean * .65)
 		_rotate_bone_model_space(spine_idx, sp_model)
 	var chest_idx: int = _bones.get("chest", -1)
 	if chest_idx >= 0:
-		var ch_model := Quaternion(Vector3.UP, -strafe_yaw * .45 - step_yaw * .45 - _turn_sway * .18) * Quaternion(Vector3.BACK, -_strafe_blend * .025 - step_sway * .4 - _turn_sway * .15) * Quaternion(Vector3.RIGHT, forward_lean * .60)
+		var ch_model := Quaternion(Vector3.UP, -strafe_yaw * .45 - _turn_sway * .16) * Quaternion(Vector3.BACK, -_strafe_blend * .022 - _turn_sway * .14) * Quaternion(Vector3.RIGHT, forward_lean * .60)
 		_rotate_bone_model_space(chest_idx, ch_model)
 	var neck_idx: int = _bones.get("neck", -1)
 	if neck_idx >= 0:
 		# Keep head and eyes level looking downrange rather than pitching toward the floor during run lean.
-		var neck_model := Quaternion(Vector3.UP, _turn_sway * .25) * Quaternion(Vector3.BACK, _strafe_blend * .035) * Quaternion(Vector3.RIGHT, -forward_lean * .75)
+		var neck_model := Quaternion(Vector3.UP, _turn_sway * .22) * Quaternion(Vector3.BACK, _strafe_blend * .030) * Quaternion(Vector3.RIGHT, -forward_lean * .75)
 		_rotate_bone_model_space(neck_idx, neck_model)
 
 
@@ -371,7 +338,8 @@ func _fit_equipment() -> void:
 	var skel_inv := skeleton.global_transform.affine_inverse()
 	for side in ["R", "L"]:
 		var socket: Node3D = _prop_sockets[tool_id][side]
-		var target := skel_inv * socket.global_transform
+		var raw := skel_inv * socket.global_transform
+		var target := Transform3D(raw.basis.orthonormalized(), raw.origin)
 		_solve_arm(side, target * (_sockets[side] as Transform3D).affine_inverse())
 	skeleton.force_update_all_bone_transforms()
 	force_update_count += 1

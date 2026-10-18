@@ -148,7 +148,83 @@ func run() -> void:
 		"Rewind scrub freezes gait phase and bone poses")
 	scrub.finish()
 
-	# 8. Profile repeated animation work: verify single full-skeleton update per step and fast execution.
+	# 8. Round N Wave 1: Bounded joint/foot regression across walk, run, turn, backward, strafe, and slow.
+	# Verifies the flying-leg regression (foot.y ~ 1.68 m, knee.y ~ 1.31 m in 2809608) is completely eliminated
+	# and that thigh/shin/foot rotations match the authored AnimationPlayer clips with zero procedural distortion.
+	var skel: Skeleton3D = visual.skeleton
+	var foot_l := skel.find_bone("foot.L")
+	var foot_r := skel.find_bone("foot.R")
+	var shin_l := skel.find_bone("shin.L")
+	var shin_r := skel.find_bone("shin.R")
+	var thigh_l := skel.find_bone("thigh.L")
+	var thigh_r := skel.find_bone("thigh.R")
+	var pelvis_b := skel.find_bone("pelvis")
+
+	var regimes := [
+		{"name": "walk", "vel": Vector3(0, 0, -3.0), "dt": 0.04, "yaw_step": 0.0},
+		{"name": "run", "vel": Vector3(0, 0, -6.0), "dt": 0.04, "yaw_step": 0.0},
+		{"name": "turn", "vel": Vector3(2.5, 0, -4.5), "dt": 0.04, "yaw_step": deg_to_rad(4.8)},
+		{"name": "backward", "vel": Vector3(0, 0, 4.5), "dt": 0.04, "yaw_step": 0.0},
+		{"name": "strafe", "vel": Vector3(5.5, 0, 0), "dt": 0.04, "yaw_step": 0.0},
+		{"name": "slow", "vel": Vector3(0, 0, -6.0), "dt": 0.04 * float(Tuning.SLOW.scale), "yaw_step": 0.0},
+	]
+	for reg: Dictionary in regimes:
+		player.reset_state()
+		var min_fy := 999.0
+		var max_fy := -999.0
+		var max_ky := -999.0
+		var min_hy := 999.0
+		var max_step_jump := 0.0
+		var prev_fl := Vector3.ZERO
+		var prev_fr := Vector3.ZERO
+		var hierarchy_valid := true
+		for step_i in range(40):
+			var dt: float = reg["dt"]
+			var v: Vector3 = reg["vel"]
+			player.model.rotation.y += float(reg["yaw_step"])
+			player.position += (player.model.global_basis * v) * dt
+			visual.step_visual(dt, v.length(), 6.0, v)
+			var fl := skel.get_bone_global_pose(foot_l).origin
+			var fr := skel.get_bone_global_pose(foot_r).origin
+			var kl := skel.get_bone_global_pose(shin_l).origin
+			var kr := skel.get_bone_global_pose(shin_r).origin
+			var hp := skel.get_bone_global_pose(pelvis_b).origin
+			min_fy = minf(min_fy, minf(fl.y, fr.y))
+			max_fy = maxf(max_fy, maxf(fl.y, fr.y))
+			max_ky = maxf(max_ky, maxf(kl.y, kr.y))
+			min_hy = minf(min_hy, hp.y)
+			if not (fl.y + 0.18 < kl.y and kl.y + 0.15 < hp.y and fr.y + 0.18 < kr.y and kr.y + 0.15 < hp.y):
+				hierarchy_valid = false
+			if step_i > 0:
+				max_step_jump = maxf(max_step_jump, maxf(fl.distance_to(prev_fl), fr.distance_to(prev_fr)))
+			prev_fl = fl
+			prev_fr = fr
+		expect(hierarchy_valid and min_fy >= 0.14 and max_fy <= 0.36 and max_ky <= 0.70 and max_step_jump <= 0.19,
+			"Regime '%s' keeps feet grounded and bounded below knees/hips (foot_y=[%.3f..%.3f], max_knee_y=%.3f, max_jump=%.3f)" % [
+				reg["name"], min_fy, max_fy, max_ky, max_step_jump
+			])
+
+	# Verify leg bone local rotations match authored AnimationPlayer clip evaluation with zero procedural distortion.
+	player.reset_state()
+	for tick in range(10):
+		visual.step_visual(0.04, 6.0, 6.0, Vector3(0, 0, -6.0))
+	var actual_leg_rots := [
+		skel.get_bone_pose_rotation(thigh_l), skel.get_bone_pose_rotation(shin_l), skel.get_bone_pose_rotation(foot_l),
+		skel.get_bone_pose_rotation(thigh_r), skel.get_bone_pose_rotation(shin_r), skel.get_bone_pose_rotation(foot_r),
+	]
+	skel.reset_bone_poses()
+	visual.animation.advance(0)
+	var authored_leg_rots := [
+		skel.get_bone_pose_rotation(thigh_l), skel.get_bone_pose_rotation(shin_l), skel.get_bone_pose_rotation(foot_l),
+		skel.get_bone_pose_rotation(thigh_r), skel.get_bone_pose_rotation(shin_r), skel.get_bone_pose_rotation(foot_r),
+	]
+	var max_leg_rot_diff := 0.0
+	for b_i in range(actual_leg_rots.size()):
+		max_leg_rot_diff = maxf(max_leg_rot_diff, (actual_leg_rots[b_i] as Quaternion).angle_to(authored_leg_rots[b_i] as Quaternion))
+	expect(max_leg_rot_diff < 0.0001 and visual.foot_plant.contacts.is_empty(),
+		"Thigh/shin/foot poses match authored AnimationPlayer clips with procedural planting disabled (rot diff %.6f rad)" % max_leg_rot_diff)
+
+	# 9. Profile repeated animation work: verify single full-skeleton update per step and fast execution.
 	player.reset_state()
 	var t0 := Time.get_ticks_usec()
 	var max_force_updates := 0
@@ -160,8 +236,8 @@ func run() -> void:
 		visual.step_visual(1.0 / 60.0, dir.length(), 6.0, dir)
 		max_force_updates = maxi(max_force_updates, visual.force_update_count)
 	var elapsed_ms := float(Time.get_ticks_usec() - t0) / 1000.0
-	expect(max_force_updates <= 2,
-		"Eliminated redundant full-skeleton transform rebuilds (max %d per tick vs 15 baseline)" % max_force_updates)
+	expect(max_force_updates <= 1,
+		"Single full-skeleton transform rebuild per step (max %d per tick vs 15 baseline)" % max_force_updates)
 	expect(elapsed_ms < 180.0, "240 varied gait+IK steps complete well within frame budget (%.2f ms)" % elapsed_ms)
 
 	arena.feedback.reset_state()

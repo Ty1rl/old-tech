@@ -1,0 +1,95 @@
+{
+  "asset": "res://assets/enemies/false_face/false_face.glb",
+  "runtime_kind": "front_guard",
+  "runtime_integrated": false,
+  "units": "metres",
+  "up": "+Y",
+  "forward": "-Z",
+  "height_m": 2.22,
+  "source_triangles": 17911,
+  "mesh_objects": 8,
+  "bones": [
+    "root",
+    "pelvis",
+    "chest",
+    "head",
+    "conduit",
+    "upper_arm.R",
+    "forearm.R",
+    "hand.R",
+    "upper_arm.L",
+    "forearm.L",
+    "hand.L",
+    "thigh.R",
+    "shin.R",
+    "foot.R",
+    "thigh.L",
+    "shin.L",
+    "foot.L",
+    "shield"
+  ],
+  "mesh_names": [
+    "Body",
+    "Cable_Blue",
+    "Cloth",
+    "Core_Yellow",
+    "Hardware",
+    "Harness",
+    "Shield_Orange",
+    "Shield_Rim"
+  ],
+  "clips": {
+    "Idle": {
+      "seconds": 2,
+      "loop": true
+    },
+    "Walk": {
+      "seconds": 1,
+      "loop": true
+    },
+    "ShieldOpen": {
+      "seconds": 1,
+      "loop": false,
+      "preview_only": true
+    }
+  },
+  "sockets_godot_rest": {
+    "CableEnd": [
+      -8.91712232942155e-08,
+      1.32000005245209,
+      -1.01999998092651
+    ],
+    "CableStart": [
+      -4.1962945118712e-08,
+      1.46999979019165,
+      -0.480000197887421
+    ],
+    "CoreSocket": [
+      -4.28371755845092e-08,
+      1.74999988079071,
+      -0.490000128746033
+    ],
+    "ShieldPivot": [
+      -9.6165052809738e-08,
+      1.32000005245209,
+      -1.10000002384186
+    ]
+  },
+  "target_meshes": {
+    "cut": "Cable_Blue",
+    "heat": "Shield_Orange",
+    "shield_rim": "Shield_Rim",
+    "exposed": "Core_Yellow"
+  },
+  "mechanism_bones": [
+    "shield",
+    "conduit"
+  ],
+  "limitations": [
+    "Runtime visual/hit-test alignment belongs to jam-1. Existing primitive core is at z=0; asset aperture at z=-0.49.",
+    "ShieldOpen moves the plate but does not stretch the conduit. Cut route hides Cable_Blue.",
+    "Some shield fixtures are skinned into Hardware; move the shield bone or account for these when hiding the plate.",
+    "In-place walk, no root motion, attack/death/finger clips."
+  ],
+  "glb_sha256": "fdf2b4881047ef13bd33508fa81e6f9308cf7192e62317e0b8c9c3ed31f55482"
+}

@@ -4,7 +4,10 @@ extends Node3D
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const EnemyNode = preload("res://scenes/prototype/enemy.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
+const Flow = preload("res://scenes/prototype/flow.gd")
 const MAX_LIVE_ENEMIES := 32
+var flow: RefCounted = Flow.new()
+var _arrival_mesh: ImmediateMesh
 
 var enemies: Array[Node3D] = []
 var cover: RefCounted
@@ -70,9 +73,22 @@ func step(world_delta: float, player: Node3D) -> void:
 				encounter_wave_index += 1
 
 	var snapshot: Array[Node3D] = enemies.duplicate()
+	var burst: Dictionary = flow.next_burst(world_delta, player)
+	if not burst.is_empty():
+		spawn_formation(burst.formation, burst.kinds, player, burst.seed)
+		snapshot = enemies.duplicate()
+	var holds: Dictionary = flow.advance(world_delta, snapshot, player)
 	for enemy in snapshot:
 		if is_instance_valid(enemy) and enemy.health > 0.0:
-			enemy.step_enemy(world_delta, player, snapshot)
+			var hold := float(holds.get(int(enemy.combat_id()), 0.0))
+			if hold > 0:
+				var speed := float(enemy.move_speed)
+				enemy.move_speed = 0.0
+				enemy.step_enemy(hold, player, snapshot)
+				enemy.move_speed = speed
+			if world_delta - hold > 0: enemy.step_enemy(world_delta - hold, player, snapshot)
+	flow.cohere(world_delta, snapshot, cover, holds)
+	_draw_arrivals()
 	_prune_dead_enemies()
 
 	if encounter_state == &"running":
@@ -144,6 +160,65 @@ func spawn_group() -> void:
 	spawn(&"orange", Vector3(4, 0, -10.5))
 
 
+func spawn_formation(formation: StringName, kinds: Array, player: Node3D, seed: int = 0) -> Array[Node3D]:
+	var result: Array[Node3D] = []
+	if not is_instance_valid(player) or kinds.is_empty(): return result
+	if cover == null: cover = CoverScript.new()
+	var slots: Array = flow.layout(formation, kinds, player.position, cover, seed, enemies)
+	for slot: Dictionary in slots:
+		var enemy := spawn(StringName(slot.kind), slot.position)
+		if enemy != null: result.append(enemy)
+	flow.add(formation, result)
+	_draw_arrivals()
+	return result
+
+
+# Optional finite three-burst sandbox exercise, not a room/campaign controller.
+# Existing start_encounter/debug paths keep their legacy scheduling and counts.
+func start_flow(player: Node3D, seed: int = 0) -> void:
+	clear()
+	flow.start_pressure(seed)
+	var burst: Dictionary = flow.next_burst(0, player)
+	if not burst.is_empty(): spawn_formation(burst.formation, burst.kinds, player, burst.seed)
+
+
+func _draw_arrivals() -> void:
+	if _arrival_mesh == null:
+		_arrival_mesh = ImmediateMesh.new()
+		var instance := MeshInstance3D.new()
+		instance.name = "FormationArrivalWarnings"
+		instance.mesh = _arrival_mesh
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.vertex_color_use_as_albedo = true
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		instance.material_override = mat
+		add_child(instance)
+	_arrival_mesh.clear_surfaces()
+	var warnings: Array[Dictionary] = []
+	for cohort: Dictionary in flow.cohorts:
+		if cohort.warning > 0: warnings.append(cohort)
+	if warnings.is_empty(): return
+	_arrival_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for cohort: Dictionary in warnings:
+		var color := Color("479cff")
+		if cohort.formation == &"line": color = Color("ffe066")
+		elif cohort.formation == &"cluster": color = Color("f9974b")
+		color.a = 0.55 + 0.35 * (1.0 - float(cohort.warning) / Flow.WARNING_SECONDS)
+		for offset: Vector3 in cohort.offsets:
+			var center: Vector3 = cohort.center + offset + Vector3.UP * 0.035
+			for i in range(24):
+				var a := TAU * float(i) / 24
+				var b := TAU * float(i + 1) / 24
+				var v0 := Vector3(cos(a), 0, sin(a))
+				var v1 := Vector3(cos(b), 0, sin(b))
+				for point in [v0 * 1.01, v0 * 1.09, v1 * 1.01, v0 * 1.09, v1 * 1.09, v1 * 1.01]:
+					_arrival_mesh.surface_set_color(color)
+					_arrival_mesh.surface_add_vertex(center + point)
+	_arrival_mesh.surface_end()
+
+
 func _cancel_encounter() -> void:
 	encounter_active = false
 	encounter_state = &"sandbox"
@@ -153,6 +228,8 @@ func _cancel_encounter() -> void:
 
 func clear() -> void:
 	_cancel_encounter()
+	flow.reset()
+	if _arrival_mesh != null: _arrival_mesh.clear_surfaces()
 	for enemy in enemies:
 		_retire_enemy_node(enemy)
 	enemies.clear()
@@ -183,6 +260,7 @@ func capture_state() -> Dictionary:
 			if roster_data.size() >= MAX_LIVE_ENEMIES:
 				break
 	return {
+		"flow": flow.capture_state(),
 		"spawn_counter": int(_spawn_counter),
 		"encounter_active": bool(encounter_active),
 		"encounter_state": String(encounter_state),
@@ -256,6 +334,8 @@ func restore_state(data: Dictionary) -> void:
 	enemies = restored_enemies
 	var saved_counter: int = maxi(0, int(data.get("spawn_counter", _spawn_counter)))
 	_spawn_counter = maxi(saved_counter, max_restored_id)
+	flow.restore_state(data.get("flow", {}))
+	_draw_arrivals()
 
 
 func status_text() -> String:

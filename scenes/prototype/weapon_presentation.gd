@@ -9,6 +9,33 @@ var vertices := 0
 var last_beam_start := Vector3.ZERO
 var last_air_origin := Vector3.ZERO
 var charge_glow_radius := 0.0
+var pierce_ready := false
+const STROKE_DEVIATION := 0.04 # 1/10 cutter radius, well below cut tolerance.
+
+
+static func stroke_display(raw: Array[Vector3], cover: RefCounted = null) -> Array[Vector3]:
+	var shown: Array[Vector3] = raw.duplicate()
+	for i in range(1, raw.size() - 1):
+		var incoming := raw[i] - raw[i - 1]
+		var outgoing := raw[i + 1] - raw[i]
+		if incoming.length_squared() < 0.000001 or outgoing.length_squared() < 0.000001: continue
+		# Pin deliberate turns; endpoints and duplicates are never moved.
+		if incoming.normalized().dot(outgoing.normalized()) < cos(deg_to_rad(30)): continue
+		var target := (raw[i - 1] + raw[i] * 2 + raw[i + 1]) * 0.25
+		var candidate := raw[i] + (target - raw[i]).limit_length(STROKE_DEVIATION)
+		if cover != null:
+			var blocked := false
+			for pair in [[raw[i - 1], raw[i]], [raw[i], raw[i + 1]], [raw[i - 1], candidate], [candidate, raw[i + 1]]]:
+				if cover.clip_segment(pair[0], pair[1], float(Tuning.RING.radius)).blocked: blocked = true
+			if blocked: continue
+		shown[i] = candidate
+	# Test the combined moved edge too, so adjacent changes cannot round cover.
+	if cover != null:
+		for i in range(raw.size() - 1):
+			if cover.clip_segment(shown[i], shown[i + 1], float(Tuning.RING.radius)).blocked:
+				shown[i] = raw[i]
+				shown[i + 1] = raw[i + 1]
+	return shown
 
 
 func attach(parent: Node3D) -> void:
@@ -42,17 +69,20 @@ func reset() -> void:
 	mesh.clear_surfaces()
 	vertices = 0
 	charge_glow_radius = 0
+	pierce_ready = false
 
 
 func rebuild(weapons: Node3D, player: Node3D, aim: Vector3) -> void:
 	mesh.clear_surfaces()
 	vertices = 0
 	charge_glow_radius = 0
+	pierce_ready = false
 	var overlay: Dictionary = weapons.presentation_state()
 	var tool := int(overlay.tool)
 	var charging := bool(overlay.charging)
 	var charge := float(overlay.charge)
 	var blowing := bool(overlay.air)
+	pierce_ready = charging and bool(overlay.get("ready", charge >= weapons.beam_pierce_threshold))
 	if weapons.beam_pulses.is_empty() and weapons.beam_flash_timer <= 0 and not charging and not blowing:
 		return
 	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -79,6 +109,10 @@ func rebuild(weapons: Node3D, player: Node3D, aim: Vector3) -> void:
 				vertices += 1
 			ribbon(start,end,.045,Color(1,.85,.3,.3+charge*.6))
 		ribbon(source-right*.045,source+right*.045,.04,Color(1,.98,.75,.45+charge*.5))
+		if pierce_ready:
+			# Four bright aperture ticks lock on at ready; no forward sight line.
+			for axis in [right, -right, up, -up]:
+				ribbon(source + axis * .25, source + axis * .31, .025, Color(1, 1, .8, .95))
 	for pulse: Dictionary in weapons.beam_pulses:
 		var source: Vector3 = pulse.get("muzzle", Vector3(pulse.pos.x, 1.2, pulse.pos.z))
 		var head := Vector3(pulse.pos.x, source.y, pulse.pos.z)
@@ -90,7 +124,7 @@ func rebuild(weapons: Node3D, player: Node3D, aim: Vector3) -> void:
 	if weapons.beam_flash_timer > 0 and weapons.beam_pulses.is_empty():
 		var source: Vector3 = weapons.beam_visual_origin
 		var end := Vector3(weapons.beam_end.x, source.y, weapons.beam_end.z)
-		light(source, end, .7, clampf(weapons.beam_flash_timer/.14,0,1))
+		light(source, end, weapons.beam_flash_charge, clampf(weapons.beam_flash_timer/.14,0,1))
 	if tool == 3 and blowing and player != null:
 		air(weapons, player)
 	# ImmediateMesh rejects an empty surface (e.g. a pulse still inside the gun).

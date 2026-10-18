@@ -9,11 +9,15 @@ const CoverScript = preload("res://scenes/prototype/cover.gd")
 const Presentation = preload("res://scenes/prototype/weapon_presentation.gd")
 var presentation: RefCounted = Presentation.new()
 var preview_overlay: Dictionary = {} # Display only; never restores held input.
+@export_range(0.0, 1.0) var beam_pierce_threshold := 0.9
+var cutter_display_smoothing := true # Visual only; raw samples always drive sweeps.
+var beam_flash_charge := 0.0
 
 
 func presentation_state() -> Dictionary:
 	if not preview_overlay.is_empty(): return preview_overlay
 	return {"tool": selected_tool,"charging": beam_charging,"charge": beam_charge,
+		"ready": beam_charging and beam_charge >= beam_pierce_threshold,
 		"air": cone_active,"phase": presentation.phase}
 
 const TOOL_IDS: Array[StringName] = [&"ring", &"beam", &"cone", &"clock"]
@@ -247,14 +251,18 @@ func _on_left_release(player: Node3D, aim: Vector3) -> void:
 				"radius": _beam_radius(),
 				"damage": dmg,
 				"charge": charge_frac,
+				"piercing": charge_frac >= beam_pierce_threshold,
+				"hit_ids": [],
 			}
 			beam_pulses.append(pulse)
 			beam_start = origin_xz
 			beam_visual_origin = pulse.muzzle
 			beam_end = origin_xz + Vector3(dir.x, 0.0, dir.y) * minf(1.5, _beam_max_range())
 			beam_flash_timer = 0.14
-			last_feedback = "Flash launched (%.0f dmg)" % dmg
+			beam_flash_charge = charge_frac
+			last_feedback = "Piercing flash launched" if pulse.piercing else "Flash launched (%.0f dmg)" % dmg
 			combat_event.emit(&"flash_fire", pulse.muzzle, 0.4 + charge_frac * 0.6)
+			if pulse.piercing: combat_event.emit(&"flash_pierce", pulse.muzzle, 1.0)
 		3:
 			if cone_active:
 				cone_active = false
@@ -280,9 +288,14 @@ func step(delta: float, player: Node3D, aim: Vector3, enemies: Array, world_delt
 			beam_charge = 0.0
 			last_feedback = "Flash empty — hold E for Repair"
 		elif delta > 0.0:
+			var was_ready := beam_charge >= beam_pierce_threshold
 			beam_charge_time += delta
 			beam_charge = clampf(beam_charge_time / _beam_charge_duration(), 0.0, 1.0)
-			last_feedback = "Charging Flash %.0f%%" % (beam_charge * 100.0)
+			if beam_charge >= beam_pierce_threshold:
+				last_feedback = "PIERCE READY — release to fire"
+				if not was_ready: combat_event.emit(&"flash_ready", Presentation.muzzle(player, 2), 1.0)
+			else:
+				last_feedback = "Charging Flash %.0f%%" % (beam_charge * 100.0)
 
 	if selected_tool == 1 and ring_drawing and player != null and not require_fresh_press:
 		_add_ring_sample(aim, player)
@@ -324,6 +337,7 @@ func reset_state() -> void:
 	preview_overlay.clear()
 	presentation.reset()
 	beam_visual_origin = Vector3.ZERO
+	beam_flash_charge = 0.0
 	selected_tool = 1
 	mouse_held = false
 	require_fresh_press = false
@@ -365,9 +379,12 @@ func capture_state() -> Dictionary:
 			"radius": float(p_dict["radius"]),
 			"damage": float(p_dict["damage"]),
 			"charge": float(p_dict.get("charge", 0.0)),
+			"piercing": bool(p_dict.get("piercing", float(p_dict.get("charge", 0.0)) >= beam_pierce_threshold)),
+			"hit_ids": _pulse_hit_ids(p_dict.get("hit_ids", [])),
 		})
 	return {
 		"overlay": {"tool": selected_tool,"charging": beam_charging,"charge": beam_charge,
+			"ready": beam_charging and beam_charge >= beam_pierce_threshold,
 			"air": cone_active,"phase": presentation.phase},
 		"selected_tool": int(selected_tool),
 		"ring_phase": String(ring_phase),
@@ -381,6 +398,7 @@ func capture_state() -> Dictionary:
 		"beam_start": Vector3(beam_start),
 		"beam_end": Vector3(beam_end),
 		"beam_visual_origin": beam_visual_origin,
+		"beam_flash_charge": beam_flash_charge,
 		"beam_pulses": pulses_copy,
 		"cone_burst_cooldown": float(cone_burst_cooldown),
 		"cone_origin": Vector3(cone_origin),
@@ -425,6 +443,7 @@ func restore_state(data: Dictionary) -> void:
 	beam_start = Vector3(data.get("beam_start", Vector3.ZERO))
 	beam_end = Vector3(data.get("beam_end", Vector3.ZERO))
 	beam_visual_origin = Vector3(data.get("beam_visual_origin", beam_start))
+	beam_flash_charge = clampf(float(data.get("beam_flash_charge", 0.0)), 0.0, 1.0)
 
 	beam_pulses.clear()
 	var raw_pulses: Variant = data.get("beam_pulses", [])
@@ -441,6 +460,8 @@ func restore_state(data: Dictionary) -> void:
 					"radius": float(p_dict.get("radius", _beam_radius())),
 					"damage": float(p_dict.get("damage", _beam_min_damage())),
 					"charge": float(p_dict.get("charge", 0.0)),
+					"piercing": bool(p_dict.get("piercing", float(p_dict.get("charge", 0.0)) >= beam_pierce_threshold)),
+					"hit_ids": _pulse_hit_ids(p_dict.get("hit_ids", [])),
 				})
 
 	cone_burst_cooldown = maxf(0.0, float(data.get("cone_burst_cooldown", 0.0)))
@@ -778,7 +799,7 @@ func _sweep_ring_segment(seg_start: Vector3, seg_end: Vector3, enemies: Array) -
 			continue
 		var enemy_node := enemy as Node3D
 		var id: int = _enemy_combat_id(enemy_node)
-		if ring_hit_ids.has(id) and not (enemy_node.has_method("has_cuttable_part") and enemy_node.call("has_cuttable_part")):
+		if ring_hit_ids.has(id) and not enemy_node.has_method("lesson_state") and not (enemy_node.has_method("has_cuttable_part") and enemy_node.call("has_cuttable_part")):
 			continue
 		var c := Vector2(enemy_node.global_position.x, enemy_node.global_position.z)
 		var r_enemy: float = float(enemy_node.get("radius"))
@@ -825,88 +846,83 @@ func _sweep_ring_segment(seg_start: Vector3, seg_end: Vector3, enemies: Array) -
 
 # --- Tool 2: Charged Traveling Flash Pulses ---
 
+# Value-only stable IDs, never object IDs in stored pulses when combat_id exists.
+func _pulse_hit_ids(raw: Variant) -> Array[int]:
+	var result: Array[int] = []
+	if raw is Array:
+		for id in raw:
+			if int(id) > 0 and not result.has(int(id)): result.append(int(id))
+	result.sort()
+	return result
+
+
 func _step_beam_pulses(w_delta: float, enemies: Array) -> void:
-	if w_delta <= 0.0 or beam_pulses.is_empty():
-		return
+	if w_delta <= 0.0 or beam_pulses.is_empty(): return
 	var surviving: Array[Dictionary] = []
-	for p in beam_pulses:
-		var pulse: Dictionary = p
-		var start_pos: Vector3 = pulse["pos"]
-		var dir: Vector2 = pulse["dir"]
-		var speed: float = float(pulse["speed"])
-		var rem_range: float = float(pulse["remaining_range"])
-		var r_beam: float = float(pulse["radius"])
-		var dmg: float = float(pulse["damage"])
-
-		if rem_range <= 1e-5 or speed <= 0.0:
-			continue
-
-		var step_dist := minf(rem_range, speed * w_delta)
-		var start_xz := Vector2(start_pos.x, start_pos.z)
-		var raw_end_xz := start_xz + dir * step_dist
-		var start_3d := Vector3(start_xz.x, 0.0, start_xz.y)
-		var raw_end_3d := Vector3(raw_end_xz.x, 0.0, raw_end_xz.y)
-
-		var wall_blocked := false
-		var wall_pos := raw_end_3d
-		var effective_dist := step_dist
+	for pulse: Dictionary in beam_pulses:
+		var start: Vector3 = pulse.pos
+		var direction: Vector2 = pulse.dir
+		var remaining := float(pulse.remaining_range)
+		var distance := minf(remaining, float(pulse.speed) * w_delta)
+		if distance <= 0.00001: continue
+		var raw_end := start + Vector3(direction.x, 0, direction.y) * distance
+		var end := raw_end
+		var blocked := false
 		if cover != null:
-			var clip: Dictionary = cover.clip_segment(start_3d, raw_end_3d, 0.0)
-			wall_blocked = bool(clip["blocked"])
-			wall_pos = clip["position"]
-			effective_dist = step_dist * float(clip["fraction"])
-		var end_xz := Vector2(wall_pos.x, wall_pos.z)
-
-		var best_t := 2.0
-		var best_enemy: Node3D = null
-		var best_contact := Vector3.ZERO
-
-		if effective_dist > 1e-6 or start_xz.distance_to(end_xz) <= 1e-6:
-			for enemy in enemies:
-				if not _is_live_enemy(enemy):
-					continue
-				var enemy_node := enemy as Node3D
-				var c := Vector2(enemy_node.global_position.x, enemy_node.global_position.z)
-				var r_enemy: float = float(enemy_node.get("radius"))
-				var t := _swept_circle_entry_t(start_xz, end_xz, c, r_beam + r_enemy)
-				if t < 0.0 or t >= best_t:
-					continue
-				var pulse_pt := start_xz + dir * (effective_dist * t)
-				var from_enemy := pulse_pt - c
-				var c_dir := from_enemy.normalized() if from_enemy.length_squared() > 1e-6 else -dir
-				var contact_xz := c + c_dir * r_enemy
-				var contact_3d := Vector3(contact_xz.x, 0.0, contact_xz.y)
-				var enemy_3d := Vector3(c.x, 0.0, c.y)
-				if cover != null:
-					var los_center: Dictionary = cover.clip_segment(start_3d, enemy_3d, 0.0)
-					var los_contact: Dictionary = cover.clip_segment(start_3d, contact_3d, 0.0)
-					if bool(los_center["blocked"]) or bool(los_contact["blocked"]):
-						continue
-				best_t = t
-				best_enemy = enemy_node
-				best_contact = contact_3d
-
-		beam_start = start_3d
-		beam_visual_origin = pulse.get("muzzle",start_3d)
-		if best_enemy != null:
-			beam_end = best_contact
+			var clip: Dictionary = cover.clip_segment(start, raw_end)
+			blocked = clip.blocked
+			end = clip.position
+		var a := Vector2(start.x, start.z)
+		var b := Vector2(end.x, end.z)
+		var hit_ids := _pulse_hit_ids(pulse.get("hit_ids", []))
+		var piercing := bool(pulse.get("piercing", float(pulse.get("charge", 0)) >= beam_pierce_threshold))
+		var hits: Array[Dictionary] = []
+		for enemy in enemies:
+			if not _is_live_enemy(enemy): continue
+			var node := enemy as Node3D
+			var id := _enemy_combat_id(node)
+			if hit_ids.has(id): continue
+			var center := Vector2(node.global_position.x, node.global_position.z)
+			var radius := float(node.get("radius"))
+			var t := _swept_circle_entry_t(a, b, center, float(pulse.radius) + radius)
+			if t < 0.0: continue
+			var toward := a.lerp(b, t) - center
+			var normal := toward.normalized() if toward.length_squared() > 0.000001 else -direction
+			var contact := center + normal * radius
+			var contact3 := Vector3(contact.x, 0, contact.y)
+			# A wide pulse touching an edge must never hit through solid cover.
+			if cover != null and (cover.clip_segment(start, node.global_position).blocked or cover.clip_segment(start, contact3).blocked): continue
+			hits.append({"t": t, "node": node, "id": id, "contact": contact3})
+		hits.sort_custom(func(x: Dictionary, y: Dictionary) -> bool:
+			return float(x.t) < float(y.t) if not is_equal_approx(float(x.t), float(y.t)) else int(x.id) < int(y.id))
+		beam_start = start
+		beam_visual_origin = pulse.get("muzzle", start)
+		beam_flash_charge = float(pulse.get("charge", 0))
+		var consumed := false
+		for hit: Dictionary in hits:
+			if not _is_live_enemy(hit.node): continue
+			# The authoritative swept segment is clipped at the wall, with no
+			# target search beyond this straight pulse or bonus chain targeting.
+			var result := _attack_enemy(hit.node, &"beam", float(pulse.damage), hit.contact,
+				{"segment_start": start, "segment_end": end, "radius": float(pulse.radius),
+				"charge": float(pulse.get("charge", 0)), "piercing": piercing})
+			hit_ids.append(int(hit.id))
 			beam_flash_timer = 0.14
-			var res := _attack_enemy(best_enemy, &"beam", dmg, best_contact,
-				{"segment_start": start_3d, "segment_end": raw_end_3d,
-				"radius": r_beam, "charge": float(pulse.get("charge", 0.0))})
-			_record_hit_feedback("Flash", res)
-		elif wall_blocked:
-			beam_end = Vector3(wall_pos.x, 0.0, wall_pos.z)
+			_record_hit_feedback("Piercing flash" if piercing else "Flash", result)
+			if not piercing:
+				end = hit.contact
+				consumed = true
+				break
+		beam_end = end
+		if blocked:
 			beam_flash_timer = 0.14
-			last_feedback = "Flash blocked by cover"
-		else:
-			pulse["pos"] = raw_end_3d
-			pulse["remaining_range"] = rem_range - step_dist
-			beam_end = raw_end_3d
-			if float(pulse["remaining_range"]) <= 1e-5:
-				last_feedback = "Flash missed"
-			else:
-				surviving.append(pulse)
+			last_feedback = "Flash stopped by cover"
+		if consumed or blocked: continue
+		pulse.pos = raw_end
+		pulse.remaining_range = maxf(0, remaining - distance)
+		pulse.hit_ids = hit_ids
+		pulse.piercing = piercing
+		if pulse.remaining_range > 0.00001: surviving.append(pulse)
 	beam_pulses = surviving
 
 
@@ -1118,20 +1134,20 @@ func _rebuild_visuals(player: Node3D, aim: Vector3) -> void:
 			_draw_circle_outline(p_ground, float(Tuning.RING.range), Color(0.4, 0.78, 0.96, 0.22))
 			_draw_arc_ribbon(p_ground, preview_points[0], _ring_arc_height(), 0.07, Color(0.55, 0.85, 1.0, 0.45))
 		if preview_unblocked_points.size() >= 2:
-			_draw_polyline_ribbon(preview_unblocked_points, 0, preview_unblocked_points.size() - 1, 0.12, ToolStyle.RING, 0.10)
+			_draw_stroke_ribbon(preview_unblocked_points, 0, preview_unblocked_points.size() - 1, 0.12, ToolStyle.RING, 0.10)
 		if preview_blocked:
 			_draw_circle_outline(Vector3(preview_cutoff_point.x, 0.16, preview_cutoff_point.z), float(Tuning.RING.radius), Color("ff5c4d"))
 			if preview_blocked_points.size() >= 2:
-				_draw_polyline_ribbon(preview_blocked_points, 0, preview_blocked_points.size() - 1, 0.09, Color(0.95, 0.34, 0.28, 0.45), 0.08)
+				_draw_stroke_ribbon(preview_blocked_points, 0, preview_blocked_points.size() - 1, 0.09, Color(0.95, 0.34, 0.28, 0.45), 0.08)
 
 	if ring_phase != "idle" and ring_points.size() >= 2:
 		if ring_phase == "outbound":
 			_draw_arc_ribbon(ring_launch_origin, ring_points[0], _ring_arc_height(), 0.08, Color(0.55, 0.85, 1.0, 0.55))
 			_draw_circle_outline(Vector3(ring_pos.x, 0.08, ring_pos.z), float(Tuning.RING.radius) * 0.75, Color(0.2, 0.35, 0.45, 0.35))
 		if ring_stroke_index > 0:
-			_draw_polyline_ribbon(ring_points, 0, ring_stroke_index, 0.10, Color("4b8a63"), 0.08)
+			_draw_stroke_ribbon(ring_points, 0, ring_stroke_index, 0.10, Color("4b8a63"), 0.08)
 		if ring_stroke_index < ring_points.size() - 1:
-			_draw_polyline_ribbon(ring_points, ring_stroke_index, ring_points.size() - 1, 0.14, Color(ToolStyle.RING, 0.45), 0.11)
+			_draw_stroke_ribbon(ring_points, ring_stroke_index, ring_points.size() - 1, 0.14, Color(ToolStyle.RING, 0.45), 0.11)
 		var ring_col := ToolStyle.RING.lightened(0.25) if ring_phase == "stroke" else ToolStyle.RING
 		var ring_y := maxf(0.22, ring_pos.y + 0.22) if ring_phase == "outbound" else 0.22
 		_draw_circle_outline(Vector3(ring_pos.x, ring_y, ring_pos.z), float(Tuning.RING.radius), ring_col)
@@ -1170,6 +1186,22 @@ func _draw_arc_ribbon(start_pos: Vector3, end_pos: Vector3, peak_height: float, 
 		_draw_mesh.surface_add_vertex(p4)
 		_draw_mesh.surface_add_vertex(p3)
 	_draw_mesh.surface_end()
+
+
+func display_stroke(points: Array[Vector3]) -> Array[Vector3]:
+	return Presentation.stroke_display(points, cover) if cutter_display_smoothing else points.duplicate()
+
+
+func _draw_stroke_ribbon(points: Array[Vector3], start: int, end: int, width: float, color: Color, height: float) -> void:
+	if end <= start: return
+	var raw: Array[Vector3] = []
+	raw.assign(points.slice(start, end + 1))
+	# Anchor the active ring head; only the rendered, untraveled guide changes.
+	if points == ring_points and ring_phase == "stroke":
+		if end == ring_stroke_index: raw.append(ring_pos)
+		elif start == ring_stroke_index: raw[0] = ring_pos
+	var shown := display_stroke(raw)
+	_draw_polyline_ribbon(shown, 0, shown.size() - 1, width, color, height)
 
 
 func _draw_polyline_ribbon(pts: Array[Vector3], start_idx: int, end_idx: int, half_width: float, col: Color, y_height: float) -> void:

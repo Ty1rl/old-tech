@@ -7,216 +7,221 @@ extends RefCounted
 
 const TOOL_ORDER: Array[StringName] = [&"ring", &"beam", &"cone"]
 const BOARD_SIZE := Vector2(520.0, 260.0)
-const TRACE_CORRIDOR := 24.0
+const TRACE_CORRIDOR := 26.0
 const TRACE_CONTACT := 20.0
-const SPIN_RADIAL_INNER_PAD := 36.0
-const SPIN_RADIAL_OUTER_PAD := 68.0
-const SPIN_ACTIVE_OUTER_PAD := 95.0
-const SPIN_HUB_DEADZONE := 9.0
+const SPIN_RADIAL_INNER_PAD := 42.0
+const SPIN_RADIAL_OUTER_PAD := 76.0
+const SPIN_ACTIVE_OUTER_PAD := 105.0
+const SPIN_HUB_DEADZONE := 10.0
 const SPIN_MIN_RADIANS := PI * 0.45
 const SPIN_FULL_RADIANS := PI * 1.15
-const CONNECT_RADIUS := 22.0
-const CONNECT_CORRIDOR := 46.0
+const CONNECT_RADIUS := 24.0
+const CONNECT_CORRIDOR := 52.0
 
-const TOOL_SPECS := {
-	"ring": {
-		"id": &"ring",
-		"title": "Ring Cutter",
-		"accent": Color("67c9f5"),
-		"glb": "res://assets/equipment/ring_caster.glb",
-		"cam_pos": Vector3(0.0, 1.45, 1.15),
-		"cam_target": Vector3(0.0, 0.0, 0.0),
-		"cam_size": 0.80,
-		"model_pos": Vector3(-0.12, -0.04, -0.02),
-		"model_rot_deg": Vector3(14.0, -132.0, 4.0),
-		"operations": [
-			{
-				"index": 0,
-				"kind": &"spin",
-				"tag": "1 · WIND TAPE",
-				"short": "Wind Tape",
-				"prompt": "Drag around the cassette reel in either direction to wind the tape.",
-				"center": Vector2(245.0, 112.0),
-				"radius": 28.0,
-				"dir": 1.0,
-				"start_angle": -PI * 0.65,
-				"badge_pos": Vector2(68.0, 32.0),
-			},
-			{
-				"index": 1,
-				"kind": &"connect",
-				"tag": "2 · PAIR CONTACTS",
-				"short": "Pair Contacts",
-				"prompt": "Click matching triangle and square contacts along the arch.",
-				"badge_pos": Vector2(46.0, 166.0),
-				"pairs": [
-					{
-						"pair_id": &"A",
-						"shape": &"triangle",
-						"label": "A",
-						"a": Vector2(254.0, 145.0),
-						"b": Vector2(278.0, 161.0),
-					},
-					{
-						"pair_id": &"B",
-						"shape": &"square",
-						"label": "B",
-						"a": Vector2(243.0, 184.0),
-						"b": Vector2(259.0, 213.0),
-					},
-				],
-			},
-			{
-				"index": 2,
-				"kind": &"trace",
-				"tag": "3 · TRACE TO ALIGN",
-				"short": "Align Blade",
-				"prompt": "Trace along the saw ring arc from start to end.",
-				"badge_pos": Vector2(310.0, 134.0),
-				"points": [
-					Vector2(302.0, 210.0),
-					Vector2(322.0, 178.0),
-					Vector2(354.0, 174.0),
-					Vector2(376.0, 202.0),
-				],
-			},
-		],
-	},
-	"beam": {
-		"id": &"beam",
-		"title": "Focused Flash",
-		"accent": Color("f3d56b"),
-		"glb": "res://assets/equipment/flash_camera.glb",
-		"cam_pos": Vector3(0.0, 1.25, 1.35),
-		"cam_target": Vector3(0.0, 0.0, 0.0),
-		"cam_size": 0.60,
-		"model_pos": Vector3(-0.14, -0.04, -0.10),
-		"model_rot_deg": Vector3(8.0, 142.0, 0.0),
-		"operations": [
-			{
-				"index": 0,
-				"kind": &"spin",
-				"tag": "1 · SPIN LENS",
-				"short": "Lens Spin",
-				"prompt": "Drag around the brass lens barrel in either direction to focus the aperture.",
-				"center": Vector2(184.0, 201.0),
-				"radius": 42.0,
-				"dir": -1.0,
-				"start_angle": -PI * 0.5,
-				"badge_pos": Vector2(46.0, 118.0),
-			},
-			{
-				"index": 1,
-				"kind": &"connect",
-				"tag": "2 · CONNECT TERMINALS",
-				"short": "Terminals",
-				"prompt": "Click matching triangle and square ceramic insulator terminals.",
-				"badge_pos": Vector2(218.0, 28.0),
-				"pairs": [
-					{
-						"pair_id": &"A",
-						"shape": &"triangle",
-						"label": "A",
-						"a": Vector2(244.0, 68.0),
-						"b": Vector2(278.0, 83.0),
-					},
-					{
-						"pair_id": &"B",
-						"shape": &"square",
-						"label": "B",
-						"a": Vector2(197.0, 71.0),
-						"b": Vector2(344.0, 150.0),
-					},
-				],
-			},
-			{
-				"index": 2,
-				"kind": &"trace",
-				"tag": "3 · DRAW BELLOWS",
-				"short": "Bellows Trace",
-				"prompt": "Trace the pleated bellows seam from bottom to top.",
-				"badge_pos": Vector2(336.0, 212.0),
-				"points": [
-					Vector2(242.0, 215.0),
-					Vector2(258.0, 192.0),
-					Vector2(274.0, 166.0),
-					Vector2(286.0, 140.0),
-				],
-			},
-		],
-	},
-	"cone": {
-		"id": &"cone",
-		"title": "Heat Bellows",
-		"accent": Color("f2985a"),
-		"glb": "res://assets/equipment/heat_bellows.glb",
-		"cam_pos": Vector3(0.0, 1.15, 1.45),
-		"cam_target": Vector3(0.0, 0.0, 0.0),
-		"cam_size": 0.68,
-		"model_pos": Vector3(0.10, -0.03, -0.08),
-		"model_rot_deg": Vector3(6.0, 112.0, -4.0),
-		"open_cover_and_grille": true,
-		"operations": [
-			{
-				"index": 0,
-				"kind": &"spin",
-				"tag": "1 · SPIN FAN",
-				"short": "Fan Spin",
-				"prompt": "With the rear fan cover open, spin the intake fan in either direction.",
-				"center": Vector2(338.0, 78.0),
-				"radius": 38.0,
-				"dir": 1.0,
-				"start_angle": -PI * 0.6,
-				"badge_pos": Vector2(368.0, 168.0),
-			},
-			{
-				"index": 1,
-				"kind": &"trace",
-				"tag": "2 · TRACE LEATHER",
-				"short": "Leather Trace",
-				"prompt": "Trace across the leather bellows stitch seams in order.",
-				"badge_pos": Vector2(216.0, 178.0),
-				"points": [
-					Vector2(226.0, 82.0),
-					Vector2(294.0, 76.0),
-					Vector2(232.0, 118.0),
-					Vector2(298.0, 112.0),
-				],
-			},
-			{
-				"index": 2,
-				"kind": &"connect",
-				"tag": "3 · COIL CONTACTS",
-				"short": "Coil Contacts",
-				"prompt": "With the front grille open, click matching triangle and square heating coils.",
-				"badge_pos": Vector2(56.0, 82.0),
-				"pairs": [
-					{
-						"pair_id": &"A",
-						"shape": &"triangle",
-						"label": "A",
-						"a": Vector2(82.0, 106.0),
-						"b": Vector2(114.0, 126.0),
-					},
-					{
-						"pair_id": &"B",
-						"shape": &"square",
-						"label": "B",
-						"a": Vector2(82.0, 156.0),
-						"b": Vector2(114.0, 176.0),
-					},
-				],
-			},
-		],
-	},
+const TOOL_SPEC_RESOURCES := {
+	"ring": preload("res://scenes/prototype/settings/repair_ring.tres"),
+	"beam": preload("res://scenes/prototype/settings/repair_beam.tres"),
+	"cone": preload("res://scenes/prototype/settings/repair_cone.tres"),
 }
+
+static var _cached_specs: Dictionary = {}
+static var TOOL_SPECS: Dictionary:
+	get:
+		for k in ["ring", "beam", "cone"]:
+			if not _cached_specs.has(k):
+				_cached_specs[k] = _build_spec_dict(k)
+		return _cached_specs
+
+
+# Exact orthogonal projection matching SubViewport (520x260) + PreviewCamera (keep_aspect = KEEP_HEIGHT).
+static func project_local_to_board(
+	cam_pos: Vector3,
+	cam_target: Vector3,
+	cam_size: float,
+	model_pos: Vector3,
+	model_rot_deg: Vector3,
+	local_point: Vector3,
+	viewport_size: Vector2 = BOARD_SIZE
+) -> Vector2:
+	var model_basis := Basis.from_euler(
+		Vector3(deg_to_rad(model_rot_deg.x), deg_to_rad(model_rot_deg.y), deg_to_rad(model_rot_deg.z))
+	)
+	var world_pt := model_pos + model_basis * local_point
+	var cam_xform := Transform3D(Basis.IDENTITY, cam_pos).looking_at(cam_target, Vector3.UP)
+	var cam_local := cam_xform.affine_inverse() * world_pt
+	var aspect := viewport_size.x / maxf(1.0, viewport_size.y)
+	var half_h := maxf(0.01, cam_size * 0.5)
+	var half_w := half_h * aspect
+	var u := 0.5 + (cam_local.x / (half_w * 2.0))
+	var v := 0.5 - (cam_local.y / (half_h * 2.0))
+	return Vector2(u * viewport_size.x, v * viewport_size.y)
+
+
+static func _project_operation_dict(
+	raw_op: Dictionary,
+	cam_pos: Vector3,
+	cam_target: Vector3,
+	cam_size: float,
+	model_pos: Vector3,
+	model_rot_deg: Vector3
+) -> Dictionary:
+	var op := raw_op.duplicate(true)
+	var kind := StringName(op.get("kind", &"spin"))
+	op["kind"] = kind
+	var badge_pos: Vector2 = op.get("badge_pos", Vector2(32.0, 32.0))
+	var badge_center := badge_pos + Vector2(64.0, 10.0)
+	if kind == &"spin":
+		var center_local: Vector3 = op.get("center_local", Vector3.ZERO)
+		var center_2d := project_local_to_board(cam_pos, cam_target, cam_size, model_pos, model_rot_deg, center_local)
+		op["center"] = center_2d
+		var radius := float(op.get("radius", 32.0))
+		var dir_to_badge := (badge_center - center_2d)
+		if dir_to_badge.length() > 1.0:
+			op["leader_target"] = center_2d + dir_to_badge.normalized() * radius
+		else:
+			op["leader_target"] = center_2d
+	elif kind == &"connect":
+		var raw_pairs: Array = op.get("pairs", [])
+		var projected_pairs: Array = []
+		var nearest_pt := badge_center
+		var best_d := INF
+		for p_raw in raw_pairs:
+			var p: Dictionary = (p_raw as Dictionary).duplicate(true)
+			p["pair_id"] = StringName(p.get("pair_id", &"A"))
+			p["shape"] = StringName(p.get("shape", &"triangle"))
+			var a_2d: Vector2 = p.get("a", Vector2.ZERO)
+			var b_2d: Vector2 = p.get("b", Vector2.ZERO)
+			if p.has("a_local"):
+				a_2d = project_local_to_board(cam_pos, cam_target, cam_size, model_pos, model_rot_deg, p["a_local"])
+			if p.has("b_local"):
+				b_2d = project_local_to_board(cam_pos, cam_target, cam_size, model_pos, model_rot_deg, p["b_local"])
+			p["a"] = a_2d
+			p["b"] = b_2d
+			for candidate in [a_2d, b_2d]:
+				var d := badge_center.distance_to(candidate)
+				if d < best_d:
+					best_d = d
+					nearest_pt = candidate
+			projected_pairs.append(p)
+		op["pairs"] = projected_pairs
+		op["leader_target"] = nearest_pt
+	elif kind == &"trace":
+		var pts_2d: Array[Vector2] = []
+		if op.has("points_local"):
+			for pt3 in op["points_local"]:
+				pts_2d.append(project_local_to_board(cam_pos, cam_target, cam_size, model_pos, model_rot_deg, Vector3(pt3)))
+		elif op.has("points"):
+			pts_2d.assign(op["points"])
+		op["points"] = pts_2d
+		var nearest_pt := badge_center
+		var best_d := INF
+		for candidate in pts_2d:
+			var d := badge_center.distance_to(candidate)
+			if d < best_d:
+				best_d = d
+				nearest_pt = candidate
+		op["leader_target"] = nearest_pt
+	return op
+
+
+static func _unproject_to_board(cam: Camera3D, world_pos: Vector3) -> Vector2:
+	var vp := cam.get_viewport()
+	var vp_size := Vector2(vp.size) if vp != null else BOARD_SIZE
+	if vp_size.x <= 1.0 or vp_size.y <= 1.0:
+		vp_size = BOARD_SIZE
+	var raw := cam.unproject_position(world_pos)
+	return Vector2(raw.x * (BOARD_SIZE.x / vp_size.x), raw.y * (BOARD_SIZE.y / vp_size.y))
+
+
+# Live 3D node-to-board projection when the SubViewport camera and model holder are active.
+static func project_operation_with_camera(raw_op: Dictionary, holder: Node3D, cam: Camera3D) -> Dictionary:
+	if holder == null or cam == null or not holder.is_inside_tree() or not cam.is_inside_tree():
+		return raw_op
+	var op := raw_op.duplicate(true)
+	var kind := StringName(op.get("kind", &"spin"))
+	var part_name := String(op.get("part_node", ""))
+	var part_node: Node3D = holder.find_child(part_name, true, false) as Node3D if part_name != "" else null
+	op["part_resolved"] = (part_node != null)
+	var base_xform: Transform3D = holder.global_transform
+	var badge_pos: Vector2 = op.get("badge_pos", Vector2(32.0, 32.0))
+	var badge_center := badge_pos + Vector2(64.0, 10.0)
+	if kind == &"spin" and op.has("center_local"):
+		var world_center := base_xform * Vector3(op["center_local"])
+		var center_2d := _unproject_to_board(cam, world_center)
+		op["center"] = center_2d
+		var radius := float(op.get("radius", 32.0))
+		var dir_to_badge := badge_center - center_2d
+		op["leader_target"] = center_2d + dir_to_badge.normalized() * radius if dir_to_badge.length() > 1.0 else center_2d
+	elif kind == &"connect":
+		var raw_pairs: Array = op.get("pairs", [])
+		var projected_pairs: Array = []
+		var nearest_pt := badge_center
+		var best_d := INF
+		for p_raw in raw_pairs:
+			var p: Dictionary = (p_raw as Dictionary).duplicate(true)
+			if p.has("a_local"):
+				p["a"] = _unproject_to_board(cam, base_xform * Vector3(p["a_local"]))
+			if p.has("b_local"):
+				p["b"] = _unproject_to_board(cam, base_xform * Vector3(p["b_local"]))
+			for candidate in [p["a"], p["b"]]:
+				var d := badge_center.distance_to(candidate)
+				if d < best_d:
+					best_d = d
+					nearest_pt = candidate
+			projected_pairs.append(p)
+		op["pairs"] = projected_pairs
+		op["leader_target"] = nearest_pt
+	elif kind == &"trace" and op.has("points_local"):
+		var pts_2d: Array[Vector2] = []
+		var nearest_pt := badge_center
+		var best_d := INF
+		for pt3 in op["points_local"]:
+			var p2 := _unproject_to_board(cam, base_xform * Vector3(pt3))
+			pts_2d.append(p2)
+			var d := badge_center.distance_to(p2)
+			if d < best_d:
+				best_d = d
+				nearest_pt = p2
+		op["points"] = pts_2d
+		op["leader_target"] = nearest_pt
+	return op
+
+
+static func _build_spec_dict(key: String) -> Dictionary:
+	var res: Resource = TOOL_SPEC_RESOURCES.get(key, TOOL_SPEC_RESOURCES["ring"])
+	var cam_pos: Vector3 = res.get("cam_pos")
+	var cam_target: Vector3 = res.get("cam_target")
+	var cam_size: float = float(res.get("cam_size"))
+	var model_pos: Vector3 = res.get("model_pos")
+	var model_rot_deg: Vector3 = res.get("model_rot_deg")
+	var ops_out: Array = []
+	var raw_ops: Array = res.get("operations")
+	for raw_op in raw_ops:
+		ops_out.append(_project_operation_dict(raw_op, cam_pos, cam_target, cam_size, model_pos, model_rot_deg))
+	return {
+		"id": StringName(res.get("id")),
+		"title": String(res.get("title")),
+		"accent": Color(res.get("accent")),
+		"glb": String(res.get("glb")),
+		"cam_pos": cam_pos,
+		"cam_target": cam_target,
+		"cam_size": cam_size,
+		"model_pos": model_pos,
+		"model_rot_deg": model_rot_deg,
+		"open_cover_and_grille": bool(res.get("open_cover_and_grille")),
+		"spin_part_pivots": (res.get("spin_part_pivots") as Dictionary).duplicate(true),
+		"operations": ops_out,
+		"resource": res,
+	}
 
 
 static func tool_spec(tool: StringName) -> Dictionary:
 	var key := String(tool)
-	if TOOL_SPECS.has(key):
-		return TOOL_SPECS[key]
-	return TOOL_SPECS["ring"]
+	if not TOOL_SPEC_RESOURCES.has(key):
+		key = "ring"
+	if not _cached_specs.has(key):
+		_cached_specs[key] = _build_spec_dict(key)
+	return _cached_specs[key]
 
 
 # Selects the repair target: equipped weapon if damaged, otherwise the most damaged
@@ -427,7 +432,7 @@ static func spin_step(op: Dictionary, prev_point: Vector2, next_point: Vector2, 
 		if dist < SPIN_HUB_DEADZONE or last_dist < SPIN_HUB_DEADZONE:
 			# Center crossing: glide across hub without polar angle spikes or resetting.
 			if dir != 0.0 and accum > 0.05:
-				accum += (last_pt.distance_to(pt) / maxf(radius, 24.0)) * 0.35
+				accum += (last_pt.distance_to(pt) / maxf(radius, 24.0)) * 0.30
 			last_pt = pt
 			continue
 		var a0 := (last_pt - center).angle()

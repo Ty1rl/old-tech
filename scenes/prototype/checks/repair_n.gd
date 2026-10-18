@@ -111,21 +111,82 @@ func complete_active_operation(panel: Control) -> void:
 		stroke_points(panel, panel.route)
 
 
+class MockRepairConditionView extends Control:
+	var bound_equipment: WeaponEquipment = null
+	var bound_tool: StringName = &""
+	var bind_calls: int = 0
+
+	func bind_equipment(next_equipment: WeaponEquipment, next_tool: StringName) -> void:
+		bound_equipment = next_equipment
+		bound_tool = next_tool
+		bind_calls += 1
+
+	func segment_count() -> int:
+		return bound_equipment.repair_steps if bound_equipment != null else 4
+
+	func filled_segments() -> int:
+		if bound_equipment == null:
+			return 0
+		return segment_count() if bound_equipment.is_full(bound_tool) else bound_equipment.stage(bound_tool)
+
+
 func run() -> void:
 	root.size = Vector2i(1280, 800)
 
-	# 1. Editable Repair Scene Hierarchy & Three-Weapon Spec Check
-	var standalone_repair: Control = RepairScene.instantiate()
+	# 1. Editable Repair Scene Hierarchy, RepairToolSpec 3D Part Alignment, Public API & ConditionSlot Check
+	var standalone_repair: WeaponRepair = RepairScene.instantiate() as WeaponRepair
 	standalone_repair._allow_full_preview = true
+	var mock_cond := MockRepairConditionView.new()
+	standalone_repair.get_node("Panel/Margin/Column/Board/ConditionSlot").add_child(mock_cond)
+	var test_gear := WeaponEquipment.new()
+	test_gear.spend(&"ring", test_gear.capacity(&"ring"))
+	test_gear.spend(&"beam", test_gear.capacity(&"beam") * 0.62) # partial wear within stage 1
+	test_gear.spend(&"cone", test_gear.capacity(&"cone"))
+	var emitted_stages: Array[String] = []
+	standalone_repair.stage_changed.connect(func(t: StringName, s: int):
+		emitted_stages.append("%s:%d" % [String(t), s]))
 	root.add_child(standalone_repair)
+	standalone_repair.setup({"equipment": test_gear, "tool": &"ring", "allow_full_preview": true})
 	await frames()
 	expect(standalone_repair.get_node_or_null("Panel/Margin/Column/HeaderRow/Heading") != null
 		and standalone_repair.get_node_or_null("Panel/Margin/Column/Board/ToolBackdropViewport/SubViewport/PreviewCamera") != null
 		and standalone_repair.get_node_or_null("Panel/Margin/Column/Board/GestureOverlay") != null
+		and standalone_repair.get_node_or_null("Panel/Margin/Column/Board/ConditionSlot") != null
 		and standalone_repair.get_node_or_null("Panel/Margin/Column/Feedback") != null,
-		"repair.tscn authors static named UI hierarchy bound via @onready")
+		"repair.tscn authors static named UI hierarchy including ConditionSlot bound via @onready")
 	expect(Gestures.TOOL_ORDER == [&"ring", &"beam", &"cone"] and not Gestures.TOOL_SPECS.has("clock"),
 		"Three weapons only (ring, beam, cone); clock removed from repair_gestures.gd")
+	expect(standalone_repair.has_active_session(&"ring") and not standalone_repair.has_active_session(&"beam"),
+		"WeaponRepair.has_active_session reports active repair session for selected damaged tool")
+	standalone_repair.show_message("Custom teaching prompt")
+	expect(standalone_repair.feedback.text == "Custom teaching prompt",
+		"WeaponRepair.show_message updates feedback label cleanly")
+	standalone_repair.show_stage_hint("Hint: Spin the cassette reel")
+	expect(standalone_repair._stage_hint_active and standalone_repair.instructions.text == "Hint: Spin the cassette reel",
+		"WeaponRepair.show_stage_hint activates non-blocking stage demonstration overlay")
+	standalone_repair.clear_stage_hint()
+	expect(not standalone_repair._stage_hint_active,
+		"WeaponRepair.clear_stage_hint restores standard stage prompt")
+	expect(mock_cond.bind_calls > 0 and mock_cond.bound_tool == &"ring" and mock_cond.segment_count() == 4 and mock_cond.filled_segments() == 0,
+		"ConditionSlot binds RepairConditionView to active equipment and tool with 4 segments")
+
+	# Verify all 3 weapons resolve named 3D model parts and project inside the 520x260 board
+	for t_id in Gestures.TOOL_ORDER:
+		standalone_repair.switch_tool(t_id)
+		await frames(1)
+		var all_resolved := standalone_repair.projected_operations.size() == 3
+		for op in standalone_repair.projected_operations:
+			if not bool(op.get("part_resolved", false)):
+				all_resolved = false
+		expect(all_resolved, "%s resolves all 3 named 3D GLB part nodes and projects coordinates via PreviewCamera" % String(t_id))
+	var cone_holder: Node3D = standalone_repair.model_instances.get("cone")
+	expect(cone_holder != null
+		and cone_holder.find_child("Intake_Fan_Rotor", true, false) != null
+		and cone_holder.find_child("Open_Fan_Cover", true, false) != null
+		and cone_holder.find_child("Open_Front_Grille", true, false) != null,
+		"Heat Bellows (cone) attaches open rear fan cover, intake fan rotor, and open front heating-coil grille")
+	expect(emitted_stages.size() >= 3,
+		"WeaponRepair.stage_changed signal emits on tool setup and tool switching")
 	standalone_repair.queue_free()
 	await frames()
 
@@ -316,6 +377,8 @@ func run() -> void:
 		panel = arena._active_repair_panel()
 		expect(panel != null and panel.tool == tool_id and panel.active_kind == &"spin",
 			"%s opens on Spin operation" % String(tool_id))
+		if panel == null:
+			break
 
 		var center: Vector2 = panel.active_op["center"]
 		var radius: float = float(panel.active_op["radius"])

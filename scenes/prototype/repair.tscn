@@ -133,6 +133,14 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
+[node name="ConditionSlot" type="Control" parent="Panel/Margin/Column/Board"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 206.0
+offset_bottom = 159.0
+mouse_filter = 2
+
 [node name="Feedback" type="Label" parent="Panel/Margin/Column"]
 custom_minimum_size = Vector2(240, 20)
 layout_mode = 2

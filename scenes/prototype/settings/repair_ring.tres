@@ -1,0 +1,74 @@
+[gd_resource type="Resource" script_class="RepairToolSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/prototype/repair_tool_spec.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ring"
+title = "Ring Cutter"
+accent = Color(0.403922, 0.788235, 0.960784, 1)
+glb = "res://assets/equipment/ring_caster.glb"
+cam_pos = Vector3(0, 1.45, 1.15)
+cam_target = Vector3(0, 0, 0)
+cam_size = 0.72
+model_pos = Vector3(-0.08, -0.02, -0.02)
+model_rot_deg = Vector3(14, -132, 4)
+open_cover_and_grille = false
+spin_part_pivots = {
+"Handwheel_Crank": {
+"axis": Vector3(1, 0, 0),
+"pivot": Vector3(-0.1225, 0.075, -0.145),
+"scale": 1.0
+},
+"Suspended_Saw_Ring": {
+"axis": Vector3(0, 1, 0),
+"pivot": Vector3(0, 0.015, -0.49),
+"scale": 0.65
+}
+}
+operations = [{
+"badge_pos": Vector2(168, 10),
+"center_local": Vector3(0.004, 0.125, -0.145),
+"dir": 1.0,
+"index": 0,
+"kind": &"spin",
+"part_label": "Cassette Spool",
+"part_node": "RingCaster_Oatmeal_Linen",
+"prompt": "Drag around the cassette reel in either direction to wind the tape.",
+"radius": 30.0,
+"short": "Wind Tape",
+"start_angle": -2.04204,
+"tag": "1 · WIND TAPE"
+}, {
+"badge_pos": Vector2(14, 184),
+"index": 1,
+"kind": &"connect",
+"pairs": [{
+"a_local": Vector3(0.135, 0.105, -0.215),
+"b_local": Vector3(0.175, 0.065, -0.280),
+"label": "A",
+"pair_id": &"A",
+"shape": &"triangle"
+}, {
+"a_local": Vector3(0.218, 0.022, -0.348),
+"b_local": Vector3(0.262, -0.018, -0.422),
+"label": "B",
+"pair_id": &"B",
+"shape": &"square"
+}],
+"part_label": "Arch Contacts",
+"part_node": "RingCaster_Accent_Cyan",
+"prompt": "Click or drag matching triangle and square contacts along the arch.",
+"short": "Pair Contacts",
+"tag": "2 · PAIR CONTACTS"
+}, {
+"badge_pos": Vector2(372, 232),
+"index": 2,
+"kind": &"trace",
+"part_label": "Saw Ring Rim",
+"part_node": "Suspended_Saw_Ring",
+"points_local": [Vector3(0.132, 0.015, -0.44), Vector3(0.085, 0.015, -0.602), Vector3(-0.032, 0.015, -0.625), Vector3(-0.128, 0.015, -0.54)],
+"prompt": "Trace along the saw ring blade rim from 1 to 4.",
+"short": "Align Blade",
+"tag": "3 · TRACE TO ALIGN"
+}]

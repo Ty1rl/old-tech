@@ -609,7 +609,11 @@ func _update_hud() -> void:
 	if not hud.visible:
 		return
 	var next_text: String = "WASD move | 1/2/3/4 or Tab equip | +/- zoom | LMB draw / charge / hold | Space slow / clock inspect | Esc pause\n"
-	next_text += "E toggle repair | Wheel scrub clock | R reset | F1 target / F2 blue / F3 yellow / F4 orange | F5 pack | F6 encounter | F8 side / F9 front guard | M sound | Backspace clear\n"
+	next_text += "E toggle repair | Wheel scrub clock | M sound | "
+	if has_method("retry_room"):
+		next_text += "R retry room | F10 encounters\n"
+	else:
+		next_text += "R reset | F1 target / F2 blue / F3 yellow / F4 orange | F5 pack | F6 encounter | F8 side / F9 front guard | Backspace clear\n"
 	next_text += "HP %.0f | Enemies %d | World %.2fx\n" % [player.health, director.enemies.size(), player.world_scale]
 	next_text += player.status_text() + "\n" + weapons.status_text()
 	next_text += "\n" + equipment.status_text() + " | " + director.status_text()

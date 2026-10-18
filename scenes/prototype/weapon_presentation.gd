@@ -13,6 +13,15 @@ var pierce_ready := false
 const STROKE_DEVIATION := 0.04 # 1/10 cutter radius, well below cut tolerance.
 
 
+# Conservative broad phase: only sweep against cover near these points. Include
+# the entire bend and smoothing deviation, so this never skips a possible hit.
+static func _near_cover(a: Vector3, b: Vector3, c: Vector3, cover: RefCounted, padding: float) -> bool:
+	var bounds := Rect2(Vector2(a.x,a.z), Vector2.ZERO).expand(Vector2(b.x,b.z)).expand(Vector2(c.x,c.z)).grow(padding + 0.0001)
+	for rectangle: Rect2 in cover.rectangles:
+		if bounds.intersects(rectangle, true): return true
+	return false
+
+
 static func stroke_display(raw: Array[Vector3], cover: RefCounted = null) -> Array[Vector3]:
 	var shown: Array[Vector3] = raw.duplicate()
 	for i in range(1, raw.size() - 1):
@@ -23,16 +32,18 @@ static func stroke_display(raw: Array[Vector3], cover: RefCounted = null) -> Arr
 		if incoming.normalized().dot(outgoing.normalized()) < cos(deg_to_rad(30)): continue
 		var target := (raw[i - 1] + raw[i] * 2 + raw[i + 1]) * 0.25
 		var candidate := raw[i] + (target - raw[i]).limit_length(STROKE_DEVIATION)
-		if cover != null:
+		if cover != null and _near_cover(raw[i-1],raw[i],raw[i+1],cover,float(Tuning.RING.radius)+STROKE_DEVIATION):
 			var blocked := false
 			for pair in [[raw[i - 1], raw[i]], [raw[i], raw[i + 1]], [raw[i - 1], candidate], [candidate, raw[i + 1]]]:
-				if cover.clip_segment(pair[0], pair[1], float(Tuning.RING.radius)).blocked: blocked = true
+				if cover.clip_segment(pair[0], pair[1], float(Tuning.RING.radius)).blocked:
+					blocked = true
+					break
 			if blocked: continue
 		shown[i] = candidate
 	# Test the combined moved edge too, so adjacent changes cannot round cover.
 	if cover != null:
 		for i in range(raw.size() - 1):
-			if cover.clip_segment(shown[i], shown[i + 1], float(Tuning.RING.radius)).blocked:
+			if _near_cover(shown[i],shown[i+1],shown[i+1],cover,float(Tuning.RING.radius)) and cover.clip_segment(shown[i], shown[i + 1], float(Tuning.RING.radius)).blocked:
 				shown[i] = raw[i]
 				shown[i + 1] = raw[i + 1]
 	return shown

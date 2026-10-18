@@ -328,7 +328,7 @@ func step(delta: float, player: Node3D, aim: Vector3, enemies: Array, world_delt
 	if player != null:
 		var visual: Variant = player.get("visual")
 		if is_instance_valid(visual) and visual.has_method("set_combat_pose"):
-			visual.set_combat_pose(beam_flash_timer,cone_active)
+			visual.set_combat_pose(beam_flash_timer,cone_active,beam_charge)
 	_rebuild_visuals(player, aim)
 
 

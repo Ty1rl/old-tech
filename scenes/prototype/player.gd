@@ -161,7 +161,7 @@ func status_text() -> String:
 	if equipment != null and equipment.repairing == &"clock":
 		hint = "clock repair; slow disabled"
 	elif slow_charge <= 0.0:
-		hint = "empty; 4 then hold E to repair clock"
+		hint = "empty; select 4 and press E to repair clock"
 	elif _slow_release_required:
 		hint = "release Space to re-arm"
 	elif _slow_held:

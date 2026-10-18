@@ -12,7 +12,7 @@ order: yellow flash camera, orange heat bellows, blue cutter, purple time device
 
 WASD moves; mouse aims; 1–4 or Tab equips collected tools. Hold Space to slow;
 with the clock equipped, scroll down to rewind and release Space to commit.
-Hold E to repair, release E to return. R retries the room; Escape pauses.
+Press E to toggle repair; Tab/1–4 switches items inside repair and WASD still moves. R retries the room; Escape pauses.
 
 **Testing shortcuts:** Encounter select on the menu/pause screen, or F10 in play.
 Choose an area, encounter and optional boss phase. Required equipment is supplied.

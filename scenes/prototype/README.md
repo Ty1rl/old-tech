@@ -1,297 +1,138 @@
-# Some Assembly Required — playable museum run
+# Some Assembly Required — gameplay and testing
 
-Launch the project from your Ubuntu host, then choose **New Game**:
+Use **Godot 4.7.2 Standard / Compatibility**. From the Ubuntu host:
 
 ```sh
 ~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo
 ```
 
-New Game follows Public Galleries → Connected Collections → Restoration Rooms →
-Burial Exhibition, with the Loop Curator, Sequence Warden, and Burial Device bosses.
-Equipment is acquired physically: yellow → orange → blue → purple. Each safe
-attempt is followed by a finite staged encounter, not another immediate lesson. The first appearance of each mechanic
-freezes the world, marks the actual targets, then gives a safe attempt. Real
-success unlocks pressure. Completed lessons persist when retrying a room.
-
-The steep perspective camera keeps zoom controls and floor-correct mouse aiming.
-WASD moves; mouse aims; 1–4/Tab selects collected equipment. Hold Space to slow movement
-and attacks while drawing/aiming stays responsive. With 4 equipped, hold Space
-and scroll down to go back, up toward now; release commits, Escape cancels.
-Space stays held across weapon switches: equip 4 to inspect; switch away to
-cancel the uncommitted preview and keep slowing. Only releasing Space commits.
-Time abilities remain locked until the clock is acquired.
-Campaign history retains up to 12 seconds / 240 samples, with the same 64 KiB
-per-snapshot bound (at most one extra backup payload during review). Only combat
-values are encoded. History clears at lesson/wave/room boundaries. No mesh data.
-
-Hold E to repair the selected tool; release to return. The large transparent weapon overlay
-has Spin, Trace and matching-shape contact operations. The world remains visible.
-Only the current step is highlighted, with one transform for model/input/gestures. Completed capacity checkpoints
-survive interruption. A fully charged yellow pulse pierces actual enemies on its
-line, respecting solid cover. Pattern units reward a charged core finisher;
-quick taps remain useful for simple yellow targets and A/B sequences.
-
-Only the most recent wound can regenerate after five quiet seconds, at 12 HP/s.
-Another hit resets that wait. Room retry/entry fully restores health and gear.
-After acquiring the clock, lethal injury leaves six real seconds to start a rewind;
-before that, use room retry.
-During review the health readout shows the selected return's health. Regeneration
-never revives a dead player. R retries the current room; Escape pauses. Pause,
-settings, retry, return to main and the result screen use the teammate's managers.
-Sound/volume, fullscreen, teaching and HUD settings persist. Tutorial off skips
-its gates; the sandbox remains available through SceneManager.start_play(true).
-
-The final boss uses A/B → zigzag → loop → final core. Incomplete pattern timers
-restore links/shutters but retain body damage and destroyed orange. Successful
-cut patterns stay open. Ordinary damage always remains a slower kill route.
-The Loop Curator repeats cut/open/core phases with rotating connections; the
-Sequence Warden uses paired valves and charged core finishes. Their attacks
-have different radial/fan patterns. Ranged enemies lock an aimed shot after a
-visible windup; their bolts respect cover, slow time and rewind.
-Audio is still synthesized/stubbed;
-movement and crowd balance need human playtesting. Rendered doorway thresholds
-are floor cues, not solid cover; actual raised cover shares collision/query data.
-
-## Encounter shortcuts
-
-Use **Encounter select** from the main or pause menu, or press F10 in play.
-Choose a room, any authored encounter, and a valid boss phase. The jump grants
-only equipment available by that checkpoint and skips its teaching. Opening the
-selector freezes combat; Back returns to the previous screen. Disable all normal
+Restart an already running game after source updates. Choose **New Game** for the
+campaign. **Encounter select** in the main/pause menu, or F10 during play, jumps to
+a room, encounter or valid boss phase with the required equipment. Disable these
 entrypoints with `SceneManager.developer_tools = false`.
-
-The ordinary run contains 124 scheduled enemies plus three bosses, in bounded
-arrivals of two or three and 4–6 live enemies. Condition budgets are starting
-values: 48 flash shots, 18 cutter launches, 18 cone seconds, 12 clock seconds.
-Room checkpoints fully restore gear; between encounters, repairs pause the next
-arrival. During active pressure, displacement and positioning earn repair time.
-Clearing the room opens a broad green doorway; approach it when ready to leave.
-
-## Sandbox mechanics and controls
-
-Godot 4.7.2 Standard / Compatibility. From the Ubuntu host:
-
-```sh
-~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo res://scenes/prototype/arena.tscn
-```
-
-Or open the root project, open `scenes/prototype/arena.tscn`, then F6.
-The partner's original menu/game scenes and popup managers remain intact.
 
 ## Controls
 
-- WASD moves; mouse aims. 1/2/3/4 equip ring/flash/cone/clock.
-  Tab cycles forward; Shift+Tab cycles backward.
-- +/- zooms the view (10–32); R restores the wider default of 22.
-- Ring: hold left mouse to draw a floor path, release to launch.
-- Flash: hold left mouse to charge, release to fire. Quick taps are weaker.
-- Cone: hold left mouse for continuous heat and repeating shove/stun pulses.
-- Hold E to repair the equipped item; release E to resume. Full gear ignores E.
-- Space with ring/flash/cone: slow player/enemy movement, gait and attack flight;
-  cursor aiming and drawing remain responsive.
-- Space with clock: freeze and inspect history. Wheel down goes backward, up
-  returns toward now. Release Space to jump to the selected moment. At NOW,
-  release simply resumes. Escape cancels to the original present.
-- R resets. F1 spawns a stationary target; F2 blue, F3 yellow, F4 orange.
-  F8 spawns a side-attachment guard. F5 adds a mixed pack; F6 starts/restarts
-  the bounded encounter. Backspace clears enemies.
-- Escape normally pauses. F7 cycles upper numbers through full/dim/hidden;
-  the preference persists. Player gauges remain visible in every mode.
-- F9 starts the front-plate guard showcase with a closer camera. R returns to
-  the normal sandbox. M toggles sound and saves the choice across launches.
+| Input | Action |
+|---|---|
+| WASD | Move, including while repairing |
+| Mouse | Aim |
+| 1–4 | Equip cutter, flash camera, heat bellows, clock, once collected |
+| Tab / Shift+Tab | Cycle collected tools, including inside repair |
+| Left mouse | Draw/release cutter; charge/release flash; hold cone |
+| E | Toggle repair for the selected item; release E does nothing |
+| Escape | Close repair, cancel a rewind preview, or pause ordinary play |
+| Space | Manual slow; with the clock outside repair, enter rewind review |
+| Wheel down / up | During review, go backward / toward the present |
+| Release Space | Commit the selected rewind; NOW simply resumes |
+| +/- | Zoom the perspective camera |
+| R | Retry the current room |
+| F7 | Full/dim/hidden diagnostic numbers, saved across launches |
+| M | Toggle sound, saved across launches |
 
-## Colored-part enemies
+Holding Space survives tool switches. Switching to the clock enters review;
+switching away cancels an uncommitted preview and keeps slowing while Space is
+held. Inside repair, selecting the clock stays in repair rather than entering
+review. The clock cannot power its own repair.
 
-- **Blue connector:** cutting across it kills a blue-only enemy. A curved stroke
-  can kill several; the cutter continues through enemies. It still stops at cover.
-- **Yellow target:** an accurate flash shot kills it, including a quick tap.
-- **Orange covering:** sustained cone heat breaks it and kills an orange-only enemy.
-- **Side-attachment / front-plate guards:** cut the blue connector OR heat the
-  orange covering, then shoot the exposed yellow target. Both openings are
-  permanent; charge an accurate core shot to clean up. Body shots before
-  opening do not receive the core kill.
+## Repair and condition
 
-Every tool can kill every enemy through ordinary damage. New enemies have high
-health and take 12% ordinary body damage: a blue enemy takes about 30 fully charged
-body shots versus one cable cut. This spends existing equipment condition; there
-is no extra ammunition system. Correct part hits are decisive, not immunity rules.
-These initial values need playtesting.
+Repair shows a large transparent model over the moving world. Drag the highlighted
+part to spin it in either direction, trace the highlighted route, or connect
+matching shapes. Spin accepts uneven circles, partial turns and regrips.
 
-Blue connectors are thicker and accept nearby cursor strokes at their visible
-height, rather than targeting the floor behind them. Yellow cores sit above
-the hull and remain readable from every facing. Removed orange panels disappear.
-Cursor assistance only resolves nearby visible blue/yellow targets; actual
-attacks still collide with enemies and cover.
+E or Escape closes repair. Full gear stays visible as Ready so another item can
+be selected without reopening the interface. Completed condition checkpoints
+survive interruption; ordinary damage does not dismiss the panel. Death, leaving
+play or losing application focus still cleans up the interaction. Weapons cannot
+fire through the repair UI.
 
-Blue connectors and guards approach in small cohorts that seek spaced slots on
-a shrinking arc around the player. They release formation close to contact, so
-packing never prevents attacks. Cohesion, spacing and approach are in `Tuning.PACK`;
-set strength to zero for direct chasing. Cover avoidance still applies.
+**Repair never starts time slow automatically.** Hold Space manually if desired
+and the clock is available. Movement and enemies continue; repairs grant no damage
+immunity. Equipment condition is consumed by use, not by idle time:
 
-New enemies wind up before striking, then stop during recovery. Cone pulses
-shove light enemies farther and stun for about two world seconds. Heavy guards
-move less but still stun, so heating remains practical. Correct kills, recovery
-and shove are intended to earn repair windows. No damage immunity is granted
-while repairing. Mechanisms, windups, recovery and pack placement rewind.
+| Tool | Full condition |
+|---|---|
+| Cutter | 24 launches |
+| Flash | 64 shots |
+| Cone | 24 seconds, with extra wear for displacement pulses |
+| Clock | 18 seconds; no passive recharge |
 
-The player uses the Blender protagonist with a skinned rig, idle/walk animations
-and four modeled tools. Both arms fit the real equipment handles; walking keeps
-the holding pose. Art remains 30% enlarged for readability. Animation advances
-only through the arena's world-time tick, so pause and inspection freeze it.
-Tools are another 25% larger relative to the player. Collision and history roots
-are unchanged; meshes and bones never enter snapshots. Stopping and reversal
-are quicker without changing maximum speed; backing away uses BackWalk.
-The rig now uses Idle, Walk, Run and BackWalk clips. Playback follows authored
-stride lengths; the equipment arm pose stays fitted over the gait. These remain
-stylized in-place cycles with some cloth compression. A shared foot-plant pass
-holds grounded feet in world space until lift-off, limiting skating; it releases
-on jumps, excessive reach and state restoration. Fingers
-are not animated.
+Yellow remains protected during the opening lessons and encounters. A deliberate
+safe break teaches repair before ordinary yellow wear begins. Completing that
+lesson restores the acquired tools. These are playtest budgets, not final balance.
 
-Tool colors are shared across HUD, parts and effects. Placeholder sounds include
-weapon loops, impacts, mechanism breaks, repair clicks and clock speed ramps.
-M mutes them. Historical browsing never replays hit/break cues.
+## Campaign and combat
 
-## Equipment and repairs
+A burial device beneath the museum assembles bodies from its exhibits. The run
+crosses Public Galleries, Connected Collections, Restoration Rooms and Burial
+Exhibition. Equipment is found in order: yellow, orange, blue, purple.
 
-Cyan/yellow/orange/violet arcs show remaining ring/flash/cone/clock condition.
-The center stays open around the player. Selected equipment has a thin outer
-highlight and readiness text; a short straight inner bar shows health.
+New mechanics get a brief explanation and safe attempt, followed by finite staged
+combat. Early encounters refill promptly when almost cleared; arrivals remain
+warned and capped. Loop and multi-cut spawns reserve their full interactive span
+and drawing clearance, including future boss phases. Clear rooms open a broad
+green doorway; repair before walking through when ready.
 
-The ring arcs harmlessly over cover to the start of the stroke. Only its
-floor-level cutting path deals damage or stops against cover. The return
-homes harmlessly to the moving player, including through cover. Preview
-colors distinguish reachable and blocked portions of the cutting path.
+| Part | Efficient interaction |
+|---|---|
+| Blue | Cross the connection with the cutter; one stroke can cut several units |
+| Orange | Heat away protection with the cone; shove/stagger creates room |
+| Yellow | Aim at the exposed target; quick shots work on simple yellow units |
+| Guard | Cut or heat protection, then charge a shot into the exposed core |
+| Pair | Quick shot at A opens B briefly; complete the sequence |
+| Loop / zigzag | Complete the cut pattern, then charge the exposed core |
 
-Charging grows a local glow on the aperture; it emits no beam before firing.
-Flash light starts at the modeled lens, with a narrow bright core and soft gold
-halo. A shot keeps its launch origin when the player moves and through rewind;
-the light extends only as far as its traveling collision pulse. Damage still
-occurs on contact. Cone air streams and expanding pressure arcs start at the
-nozzle, move in world time and stop against cover. A faint floor footprint
-retains range information. The effect uses one batched mesh rather than spawning
-objects for each wisp. The held camera kicks slightly and the bellows flutters.
+The Loop Curator has three cut/open/core phases; the Sequence Warden has three
+paired-shot/core phases. The Burial Device tests pair, zigzag, loop and final core.
+Body damage remains a slow alternative to every intended pattern. Partial pattern
+timeouts reset links/shutters, not body damage or destroyed orange armor.
 
-Flash has a 35-unit range, 30–100 damage over 0.9 seconds of charge, and a short
-cooldown. Quick pulses hit the first enemy; fully charged pulses pierce intervening
-enemies once each, stopping at cover. Cone damages multiple
-enemies and shoves/staggers at 1.2-world-second intervals while held. Brutes
-travel less but still visibly stagger. All tools can kill every archetype; correct colored-part contacts are much
-more efficient than ordinary body damage.
+Fully charged flash shots pierce intersected enemies; solid cover stops them.
+The cutter arcs harmlessly to its start, cuts along the stroke, and returns to the
+moving player. Hit samples stay unchanged; only its displayed path is smoothed.
 
-Starting condition: 32 ring launches, 48 flash shots, 45 cone firing-seconds,
-24 clock slow-seconds. Cone pulses add wear. Clock has no passive recharge.
-These are generous initial values to tune through play, not final balance.
+Hostile projectiles have locked windups, outlined red/ivory heads and short trails.
+They can be dodged through movement, respect cover, slow with the world and rewind.
+Their projected heads stay visible over the repair model. Dead owners, clear/retry
+and lethal player damage remove their shots. There is no separate defense ability.
 
-Wear determines which repair operations remain. Each tool has a Spin, a Trace,
-and a matching-contact operation on its modeled backdrop. Light damage skips
-completed operations; the existing capacity checkpoints survive interruption.
-Full repair closes automatically. Only the unfinished gesture is lost on E
-release, damage, pause or focus loss. The repair panel stays beside the player.
-Movement/enemies continue during repairs. Repairing ring/flash/cone automatically
-uses clock-powered slow, spending clock condition at its normal real-time rate.
-An empty clock leaves repairs at normal speed; the clock cannot power its own
-repair. Release E to stop the automatic slow. No separate T repair path exists.
+## Time, health and state
 
-## Rewind
+Slow scales player/enemy movement, gait, attack travel and combat timers. Cursor
+input, drawing, charging and resource wear use real elapsed time. Clock review
+freezes combat; positions interpolate between previews while discrete state stays
+recorded. Releasing Space commits; Escape or switching tools cancels the preview.
 
-Equipping 4 does not activate time manipulation. A fresh Space press begins
-inspection; changing tools while already holding Space requires release first.
-A cool screen tint and TIME SLOW label mark slowed world time; player movement
-and animation slow with the world; cursor input and stroke sampling stay responsive. Clock inspection uses a violet
-tint and TIME FROZEN label, with movement and animation stopped.
+Campaign history is bounded to 12 seconds / 240 snapshots, at most 64 KiB per
+snapshot plus one backup. Only value data is stored. Reference/type, depth and size
+validation remain enabled. History clears at progression boundaries; learned
+controls and acquired equipment remain permanent within the run. Reinforcement
+debt and in-flight threats rewind with the combat roster.
 
-Inspection blocks movement, attacks, repair and debug mutations. Its nearby
-readout shows NOW or selected age, proposed jump wear, and a short timeline.
-Positions and orientations ease between selected snapshots over 0.14 real
-seconds. Health, destroyed parts and other discrete state stay recorded values;
-commit/cancel restores the exact selected state before gameplay resumes.
+Review costs 0.2 clock units per real second; jumping additionally costs one unit
+per second rewound. Previewing never refunds worn clock condition.
 
-Inspection costs 0.2 clock units per real second. A committed jump additionally
-costs 1 clock unit per second rewound. Preview never refunds clock condition;
-committed clock is capped at the lesser of its restored and live values before
-the jump cost. Other equipment, health, enemy roster/behavior, encounter state,
-and launched attacks restore to the selected snapshot. The clock stays equipped;
-held attacks/drawing/charge must start afresh after leaving inspection.
-While browsing, the held model, gauge selection, charge glow and cone effect
-show the recorded weapon. A few display-only values are stored with each
-snapshot; they never restore held inputs or apply damage. Clock controls stay
-active during review. These cosmetic poses remain approximate.
+Only the latest wound regenerates after five quiet WORLD seconds, at 12 HP/s.
+Another hit restarts the wait. Room retry/entry restores health and condition.
+After finding the clock, lethal damage leaves a short rewind opportunity; otherwise
+retry the room. Regeneration never revives a dead player.
 
-Cancellation preserves the original present and charges inspection wear only.
-An unaffordable wheel selection is rejected; exhausting condition while browsing
-cancels to the present rather than forcing a jump. Focus loss cancels before
-pausing. A committed jump discards the abandoned future; scrolling does not.
-Death freezes normal simulation and preserves recent history for a do-over.
+## Source and verification
 
-History samples explicit gameplay values at 20 Hz, retaining up to five seconds
-and 100 encoded snapshots. Each snapshot is limited to 64 KiB, with at most 32
-live enemies, bounded attack paths and eight flash pulses. During inspection,
-cancel backup shares existing payloads and may retain one extra evicted payload.
-This bounds encoded storage to 101 payloads; decoded state/engine overhead is
-additional. No scenes, textures, materials or live Node references are copied.
-Reset and debug spawns/clears erase history; HUD preferences do not rewind.
+`arena.gd` coordinates input and the single simulation clock. `campaign.gd` owns
+progression; `rooms.gd` contains rosters/layouts. Equipment/repair, weapons, enemy
+controllers/visuals, history, and HUD remain separate. The directory's historical
+`prototype` name is retained; teammate scenes and popup managers are still used.
 
-## Timing and verification
+For the isolated sandbox, open `scenes/prototype/arena.tscn` and press F6. F1–F4
+spawn targets/color units; F5 a pack, F6 an encounter, F8/F9 guards; Backspace clears.
+Campaign blocks those sandbox keys.
 
-`tuning.gd` holds gameplay values; arena owns the tick and Engine.time_scale
-stays 1. Player input, flash charge, cooldowns, wear and repair use real time.
-Player movement/gait, enemy behavior/gait, attack flight, cone damage and shove
-cadence use world time. Drawing is sampled in real time into fixed world points. During inspection only its real-time clock wear advances.
+Use the shared project `check.py --seat jam-N --suite NAME` for bounded feature
+checks. Keep full logs in seat state and report totals/failures. Automated graphical
+previews must use `render.py` on its private virtual display, never Matt's desktop.
+Current integration receipts live in `state/old-tech-jam-1/exports/round-m/`.
 
-F5 adds two blues, both opening layouts, one yellow and one orange. F6 begins
-with three blues, adds yellow/orange at 12 seconds and guards at 24 seconds.
-There are no new arrivals at the 36-second checkpoint; reinforcements resume
-at 48 seconds. Clear current enemies to earn that breathing room. The encounter
-lasts 75 world seconds and caps live enemies at eight; clear survivors to win.
-Bosses and authored levels are later work.
-Tests establish behavior and state restoration, not enjoyable balance.
-
-```sh
-python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
-```
-
-Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
-resource_integration, integration, parts, feedback, scrub_view, presentation,
-player_visual, variants, readability, weapon_presentation, presentation_j,
-art_integration, foot_plant, combat_k, flow_k, patterns, pattern_weapons,
-rooms, tutorial_ui, campaign, complete_run, review_regressions.
-Use import after script/scene changes.
-The shared lab runner bounds execution and saves full logs in seat state.
-On another machine: `timeout 60s godot --headless --path . --script
-res://scenes/prototype/checks/rewind.gd` (one shell line).
-
-## Current models and museum
-
-All five colored-part roles now use the completed Blender models:
-
-- F2 blue: Conjoined, joined by the cuttable blue connector.
-- F3 yellow: Patient, with a raised yellow lens.
-- F4 orange: Bellows Belly, with an orange covering.
-- F8 side guard: Borrowed Heart and its attached crawler.
-- F9 front guard showcase: False Face and its face-shaped shield.
-
-F5 adds a mixed group; Backspace clears it. The models use the existing enemy
-behavior and part rules. Removed cables/covers stay removed until rewind/reset.
-Animation advances in world time and freezes during inspection. The crawler
-belongs to one guard rig and has no independent AI. No attack/death clips yet;
-silhouettes can extend beyond the unchanged movement collider.
-
-The arena uses the teammate's museum walls/columns and floor geometry. The
-combat wrapper replaces its checker pattern with plain charcoal stone grain;
-cover tops use quiet gray stone. The original imported textures stay available. Existing floor/cover physics still
-control movement and attack blocking; the museum adds visual geometry only.
-The original menu/game scenes remain separate. Editable .blend sources stay
-under art-source; only explicit GLBs enter the game. Twelve verified duplicate
-wall/floor textures were removed; their referenced originals remain.
-
-The first mixed-pack shader/skin draw is warmed in a private 64x64 SubViewport
-at startup, then discarded. This adds no gameplay enemies or history. It is
-skipped in headless checks. Model construction and frame timing are recorded
-in seat state; hardware playtesting still establishes whether the hitch is gone.
-
-Current Blender model references (all 16 exported models, front/rear):
-~/game-jams/projects/old-tech/asset-index/index.html
-The adjacent asset-references.zip and manifest.json are intended for sharing
-with repair-mockup sessions. Four equipment cards are shown first. Source .blend
-files and game GLBs were not changed while making these reference renders.
+Models remain stylized, boss assemblies are simple, and audio remains provisional.
+Human playtesting determines whether repair, pressure and movement feel right.

@@ -186,14 +186,15 @@ func _prepare_mesh(src_mesh: Mesh, flip_inside_out: bool, tint: Color, roughness
 				mat.albedo_color = tint
 				mat.roughness = roughness_val
 				if flatten_up_normals:
-					# Keep the teammate's tile pattern, with lower contrast so small
-					# colored mechanisms and aim paths remain readable above it.
+					# Quiet stone grain; the teammate's original tile texture remains
+					# available in the imported scene, outside this combat wrapper.
 					var shader := Shader.new()
 					shader.code = """shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D floor_texture : source_color;
 void fragment() {
-	ALBEDO = mix(vec3(0.20, 0.22, 0.24), texture(floor_texture, UV).rgb, 0.16);
+	float grain = fract(sin(dot(UV * 4096.0, vec2(12.9898, 78.233))) * 43758.5453);
+	ALBEDO = vec3(0.20, 0.22, 0.23) + (grain - 0.5) * 0.012;
 	ROUGHNESS = 0.94;
 }
 """
@@ -372,11 +373,11 @@ func _build_cover_decorations() -> void:
 	var wall_aabb: AABB = _shared_aabbs["leftWallSingle"]
 	var cover_height := 2.22
 	var cap_mat := StandardMaterial3D.new()
-	cap_mat.albedo_color = Color(0.68, 0.62, 0.52)
+	cap_mat.albedo_color = Color(0.30, 0.33, 0.34)
 	cap_mat.roughness = 0.65
 
 	var trim_mat := StandardMaterial3D.new()
-	trim_mat.albedo_color = Color(0.82, 0.72, 0.54)
+	trim_mat.albedo_color = Color(0.39, 0.37, 0.30)
 	trim_mat.roughness = 0.45
 	trim_mat.metallic = 0.25
 

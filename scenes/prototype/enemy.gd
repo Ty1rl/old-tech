@@ -188,6 +188,7 @@ func capture_state() -> Dictionary:
 
 
 func restore_state(data: Dictionary) -> void:
+	if is_instance_valid(part_visual): part_visual.foot_plant.reset()
 	if cover == null:
 		cover = CoverScript.new()
 	var target_kind := StringName(String(data.get("kind", kind)))

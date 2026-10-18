@@ -18,7 +18,8 @@ The partner's original menu/game scenes and popup managers remain intact.
 - Flash: hold left mouse to charge, release to fire. Quick taps are weaker.
 - Cone: hold left mouse for continuous heat and repeating shove/stun pulses.
 - Hold E to repair the equipped item; release E to resume. Full gear ignores E.
-- Space with ring/flash/cone: slow the world; movement and aiming remain normal.
+- Space with ring/flash/cone: slow player/enemy movement, gait and attack flight;
+  cursor aiming and drawing remain responsive.
 - Space with clock: freeze and inspect history. Wheel down goes backward, up
   returns toward now. Release Space to jump to the selected moment. At NOW,
   release simply resumes. Escape cancels to the original present.
@@ -67,13 +68,15 @@ while repairing. Mechanisms, windups, recovery and pack placement rewind.
 The player uses the Blender protagonist with a skinned rig, idle/walk animations
 and four modeled tools. Both arms fit the real equipment handles; walking keeps
 the holding pose. Art remains 30% enlarged for readability. Animation advances
-only through the arena's real-time tick, so pause and inspection freeze it.
+only through the arena's world-time tick, so pause and inspection freeze it.
 Tools are another 25% larger relative to the player. Collision and history roots
 are unchanged; meshes and bones never enter snapshots. Stopping and reversal
 are quicker without changing maximum speed; backing away uses BackWalk.
 The rig now uses Idle, Walk, Run and BackWalk clips. Playback follows authored
 stride lengths; the equipment arm pose stays fitted over the gait. These remain
-stylized in-place cycles with some cloth compression and foot sliding. Fingers
+stylized in-place cycles with some cloth compression. A shared foot-plant pass
+holds grounded feet in world space until lift-off, limiting skating; it releases
+on jumps, excessive reach and state restoration. Fingers
 are not animated.
 
 Tool colors are shared across HUD, parts and effects. Placeholder sounds include
@@ -125,7 +128,7 @@ repair. Release E to stop the automatic slow. No separate T repair path exists.
 Equipping 4 does not activate time manipulation. A fresh Space press begins
 inspection; changing tools while already holding Space requires release first.
 A cool screen tint and TIME SLOW label mark slowed world time; player movement
-and animation intentionally remain responsive. Clock inspection uses a violet
+and animation slow with the world; cursor input and stroke sampling stay responsive. Clock inspection uses a violet
 tint and TIME FROZEN label, with movement and animation stopped.
 
 Inspection blocks movement, attacks, repair and debug mutations. Its nearby
@@ -162,9 +165,9 @@ Reset and debug spawns/clears erase history; HUD preferences do not rewind.
 ## Timing and verification
 
 `tuning.gd` holds gameplay values; arena owns the tick and Engine.time_scale
-stays 1. Player input, movement, flash charge, cooldowns, wear and repair use
-real time. Enemy behavior, attack flight, cone damage and shove cadence use
-world time. During inspection only its real-time clock wear advances.
+stays 1. Player input, flash charge, cooldowns, wear and repair use real time.
+Player movement/gait, enemy behavior/gait, attack flight, cone damage and shove
+cadence use world time. Drawing is sampled in real time into fixed world points. During inspection only its real-time clock wear advances.
 
 F5 adds two blues, both opening layouts, one yellow and one orange. F6 begins
 with three blues, adds yellow/orange at 12 seconds and guards at 24 seconds.
@@ -181,7 +184,7 @@ python3 ~/game-jams/projects/old-tech/check.py --seat jam-1 --suite rewind
 Other suites: equipment, foundation, player, repairs, weapons, enemies, history,
 resource_integration, integration, parts, feedback, scrub_view, presentation,
 player_visual, variants, readability, weapon_presentation, presentation_j,
-art_integration.
+art_integration, foot_plant.
 Use import after script/scene changes.
 The shared lab runner bounds execution and saves full logs in seat state.
 On another machine: `timeout 60s godot --headless --path . --script
@@ -203,9 +206,21 @@ Animation advances in world time and freezes during inspection. The crawler
 belongs to one guard rig and has no independent AI. No attack/death clips yet;
 silhouettes can extend beyond the unchanged movement collider.
 
-The arena now uses the teammate's museum floor, walls and columns, with lower
-floor contrast for weak-point readability. Existing floor/cover physics still
+The arena uses the teammate's museum walls/columns and floor geometry. The
+combat wrapper replaces its checker pattern with plain charcoal stone grain;
+cover tops use quiet gray stone. The original imported textures stay available. Existing floor/cover physics still
 control movement and attack blocking; the museum adds visual geometry only.
 The original menu/game scenes remain separate. Editable .blend sources stay
 under art-source; only explicit GLBs enter the game. Twelve verified duplicate
 wall/floor textures were removed; their referenced originals remain.
+
+The first mixed-pack shader/skin draw is warmed in a private 64x64 SubViewport
+at startup, then discarded. This adds no gameplay enemies or history. It is
+skipped in headless checks. Model construction and frame timing are recorded
+in seat state; hardware playtesting still establishes whether the hitch is gone.
+
+Current Blender model references (all 16 exported models, front/rear):
+~/game-jams/projects/old-tech/asset-index/index.html
+The adjacent asset-references.zip and manifest.json are intended for sharing
+with repair-mockup sessions. Four equipment cards are shown first. Source .blend
+files and game GLBs were not changed while making these reference renders.

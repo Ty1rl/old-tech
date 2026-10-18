@@ -112,9 +112,24 @@ func run() -> void:
 	Input.action_press("move_right")
 	await ticks(player, 12, Vector3(0, 0, -20))
 	expect(is_equal_approx(player.world_scale, Tuning.SLOW.scale), "Public step polls held Space and slows the enemy clock")
-	expect(is_equal_approx(flat(player.velocity).length(), Tuning.PLAYER.speed), "Player retains normal movement speed while slowing enemies")
+	expect(flat(player.velocity).length() > 0 and flat(player.velocity).length() <= Tuning.PLAYER.speed, "Slow-time acceleration remains bounded in world units")
 	expect(absf(player.slow_charge - (arena.equipment.capacity(&"clock") - 12.0 / float(Engine.physics_ticks_per_second) * Tuning.SLOW.drain)) < 0.00001, "Live Space charge drains using real physics delta")
 	expect((-player.model.global_basis.z).z < -0.99, "Mouse-facing remains independent during slow time")
+	player.velocity = Vector3(Tuning.PLAYER.speed, 0, 0)
+	origin = player.position
+	var phase_before: float = player.visual.walk_phase
+	await ticks(player, 12, Vector3(20, 0, player.position.z))
+	var slowed_distance := flat(player.position - origin).length()
+	var slowed_phase: float = player.visual.walk_phase - phase_before
+	expect(absf(slowed_distance - Tuning.PLAYER.speed * (12.0 / Engine.physics_ticks_per_second) * Tuning.SLOW.scale) < .025, "Player displacement uses slowed world time: actual %.4f, expected %.4f" % [slowed_distance, Tuning.PLAYER.speed * (12.0 / Engine.physics_ticks_per_second) * Tuning.SLOW.scale])
+	space(false)
+	origin = player.position
+	phase_before = player.visual.walk_phase
+	await ticks(player, 12, Vector3(20, 0, player.position.z))
+	var normal_distance := flat(player.position - origin).length()
+	var normal_phase: float = player.visual.walk_phase - phase_before
+	expect(absf(slowed_distance / normal_distance - Tuning.SLOW.scale) < .025, "Slow and normal walking cover the expected distance ratio")
+	expect(absf(slowed_phase / normal_phase - Tuning.SLOW.scale) < .025, "Walking animation slows by the same ratio as movement")
 	space(false)
 	release_actions()
 	var charge_before: float = player.slow_charge

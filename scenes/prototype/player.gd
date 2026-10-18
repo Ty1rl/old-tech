@@ -9,7 +9,7 @@ var health: float = Tuning.PLAYER.health
 var slow_charge: float:
 	get:
 		return equipment.remaining(&"clock") if equipment != null else 0.0
-# Effective enemy-clock multiplier for the current arena tick. On the tick
+# Effective world-clock multiplier (player movement and enemies) for the current arena tick. On the tick
 # that runs out of charge it averages the slowed and normal portions.
 var world_scale: float = 1.0
 var _slow_held := false
@@ -61,15 +61,20 @@ func step(delta: float, aim: Vector3, slow_held: Variant = null, repair_slow: bo
 	_step_slow(delta, Input.is_physical_key_pressed(KEY_SPACE) if slow_held == null else bool(slow_held), repair_slow)
 	_input_dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	speed = Tuning.PLAYER.speed
-	_update_velocity(delta)
+	var world_delta := delta * world_scale
+	_update_velocity(world_delta)
+	# CharacterBody uses the engine's real physics delta. Scale the move only,
+	# then retain velocity in world units for snapshots and gait cadence.
+	velocity *= world_scale
 	move_and_slide()
+	velocity /= world_scale
 	var direction := aim - global_position
 	direction.y = 0.0
 	if direction.length_squared() > 0.001 and is_instance_valid(model):
 		model.global_basis = Basis.looking_at(direction)
 	if is_instance_valid(visual):
 		var movement := model.global_basis.inverse() * Vector3(velocity.x, 0, velocity.z)
-		visual.step_visual(delta, movement.length(), speed, movement)
+		visual.step_visual(world_delta, movement.length(), speed, movement)
 
 
 func _update_velocity(delta: float) -> void:
@@ -167,6 +172,7 @@ func capture_state() -> Dictionary:
 
 
 func restore_state(data: Dictionary) -> void:
+	if is_instance_valid(visual): visual.foot_plant.reset()
 	reset_input()
 	position = data.position
 	velocity = data.velocity

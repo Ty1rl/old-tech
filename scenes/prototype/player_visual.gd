@@ -1,7 +1,8 @@
 extends Node3D
 
-# Cosmetic only: the arena advances animation in real time. No independent tick
+# Cosmetic only: the arena advances animation in world time. No independent tick
 # or rig data enters the bounded gameplay history.
+const FootPlant = preload("res://scenes/prototype/foot_plant.gd")
 const Character = preload("res://assets/characters/protagonist/protagonist.glb")
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const TOOLS = [preload("res://assets/equipment/ring_caster.glb"),
@@ -15,6 +16,7 @@ const HOLDS = ["RingHold", "FlashHold", "ConeHold", "ClockHold"]
 const MOUNTS = [Vector3(.10, 1.36, -.02), Vector3(.265, 1.34, -.19),
 	Vector3(-.04, 1.40, .02), Vector3(.145, 1.32, -.23)]
 
+var foot_plant := FootPlant.new()
 var character: Node3D
 var skeleton: Skeleton3D
 var animation: AnimationPlayer
@@ -101,6 +103,7 @@ func set_tool_index(index: int) -> void:
 
 func reset_pose() -> void:
 	build()
+	foot_plant.reset()
 	walk_phase = 0
 	idle_phase = 0
 	stride_blend = 0
@@ -112,10 +115,10 @@ func reset_pose() -> void:
 	_fit_equipment()
 
 
-func step_visual(real_delta: float, planar_speed: float, max_speed: float = 6.0, movement: Vector3 = Vector3.ZERO) -> void:
+func step_visual(world_delta: float, planar_speed: float, max_speed: float = 6.0, movement: Vector3 = Vector3.ZERO) -> void:
 	build()
-	if real_delta <= 0: return
-	var dt := minf(real_delta, .25)
+	if world_delta <= 0: return
+	var dt := minf(world_delta, .25)
 	var ratio := clampf(planar_speed / maxf(.001, max_speed), 0, 1)
 	stride_blend = move_toward(stride_blend, ratio, dt * 8)
 	var moving := stride_blend > .05
@@ -127,8 +130,9 @@ func step_visual(real_delta: float, planar_speed: float, max_speed: float = 6.0,
 	# Match cadence to authored scaled stride length (metres per clip cycle).
 	var stride := 1.248 if backing else (1.976 if clip == "Run" else 1.456)
 	var cycle := animation.get_animation(clip).length
-	var rate := clampf(planar_speed * cycle / stride, .5, 2.5) if moving else 1.0
+	var rate := clampf(planar_speed * cycle / stride, .05, 6.0) if moving else 1.0
 	animation.advance(dt * rate)
+	foot_plant.apply(skeleton)
 	if moving: walk_phase += dt * rate * TAU
 	else: idle_phase += dt
 	_fit_equipment()

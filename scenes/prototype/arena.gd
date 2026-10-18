@@ -1,5 +1,6 @@
 extends Node3D
 
+const CreatureVisual = preload("res://scenes/prototype/creature_visual.gd")
 const MuseumEnvironment = preload("res://scenes/prototype/museum_environment.gd")
 const Tuning = preload("res://scenes/prototype/tuning.gd")
 const PlayerScene = preload("res://scenes/player.tscn")
@@ -77,6 +78,7 @@ func _ready() -> void:
 	SceneManager.popup_closed.connect(_on_popup_closed)
 	GameState.start_game()
 	reset_arena()
+	CreatureVisual.warmup(self)
 
 
 func _build_cover() -> void:

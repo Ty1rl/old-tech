@@ -1,4 +1,7 @@
+class_name CombatEnemy
 extends Node3D
+
+signal enemy_event(enemy_kind: StringName, event: StringName, point: Vector3, strength: float)
 
 # No independent _process or _physics_process clock.
 const Tuning = preload("res://scenes/prototype/tuning.gd")
@@ -11,6 +14,9 @@ const MAX_KNOCKBACK_SPEED := 32.0
 const HOSTILE_RADIUS := 0.24
 const RANGED_WINDUP := 0.95
 const RANGED_RECOVERY := 1.8
+const WARNING_TURN_RATE := 2.4
+const HURT_CUE_INTERVAL := .35
+var hurt_cue_timer := 0.0
 
 var cover: RefCounted
 
@@ -91,6 +97,7 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	radius = float(cfg.get("radius", 0.7))
 	contact_damage = float(cfg.get("damage", 0.0))
 	contact_cooldown = 0.0
+	hurt_cue_timer = 0.0
 	cable_cut = false
 	plate_broken = false
 	attack_phase = &"approach"
@@ -174,6 +181,7 @@ func capture_state() -> Dictionary:
 		"facing": facing,
 		"health": float(health),
 		"contact_cooldown": float(contact_cooldown),
+		"hurt_cue_timer": hurt_cue_timer,
 		"knockback_vel": knockback_vel,
 		"stagger_timer": float(stagger_timer),
 		"skirmish_phase": String(skirmish_phase),
@@ -222,6 +230,7 @@ func restore_state(data: Dictionary) -> void:
 	facing = data.get("facing", facing)
 	health = clampf(float(data.get("health", max_health)), 0.0, max_health)
 	contact_cooldown = maxf(0.0, float(data.get("contact_cooldown", data.get("contact_timer", 0.0))))
+	hurt_cue_timer = clampf(float(data.get("hurt_cue_timer", 0)), 0, HURT_CUE_INTERVAL)
 	cable_cut = bool(data.get("cable_cut", false))
 	plate_broken = bool(data.get("plate_broken", false))
 	attack_phase = StringName(data.get("attack_phase", "approach"))
@@ -669,6 +678,11 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 	var dealt := minf(health, maxf(0.0, effective))
 	health = maxf(0.0, health - dealt)
 	var killed := health <= 0.0
+	if killed:
+		_emit_enemy_event(&"death", position)
+	elif dealt > 0 and hurt_cue_timer <= 0:
+		hurt_cue_timer = HURT_CUE_INTERVAL
+		_emit_enemy_event(&"hurt", contact_world, clampf(dealt / 80.0, .2, 1.0))
 
 	flash_timer = 0.15
 	feedback_timer = 0.65
@@ -696,6 +710,7 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 	if health <= 0.0:
 		return
+	hurt_cue_timer = maxf(0, hurt_cue_timer - maxf(0, world_delta))
 	if mechanism() != &"" and world_delta > 0.0:
 		shield_heat = maxf(0.0, shield_heat - world_delta * float(Tuning.MATCHUPS.heat_decay))
 		_update_warden_visuals()
@@ -784,7 +799,7 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 				move_dir = _steer_around_cover(self_xz, raw_dir, self_xz + raw_dir * 3.0)
 		&"ranged":
 			if attack_phase == &"approach":
-				facing = _rotate_xz_toward(facing, dir_to_player, active_ai_delta * 3)
+				_track_approach_aim(dir_to_player, active_ai_delta)
 				if dist > 8.0:
 					move_dir = _steer_around_cover(self_xz, dir_to_player, player_xz)
 				elif dist < 4.0:
@@ -792,10 +807,10 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 
 	if mechanism() != &"":
 		if attack_phase == &"approach":
-			facing = _rotate_xz_toward(facing, dir_to_player, 3.0 * active_ai_delta)
+			_track_approach_aim(dir_to_player, active_ai_delta)
 		var destination := pack_target(player_xz, neighbors)
 		var pack_direction := destination - self_xz
-		var blend := float(Tuning.PACK.strength) if mechanism() in [&"cut", &"open"] else 0.0
+		var blend := float(Tuning.PACK.strength) if mechanism() in [&"cut", &"open"] else (.45 if mechanism() == &"shot" else 0.0)
 		var approach := dir_to_player.lerp(pack_direction.normalized(), blend)
 		var separation := _compute_separation(neighbors, radius * 2.0 + 0.15)
 		approach += separation * float(Tuning.PACK.separation)
@@ -805,7 +820,10 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 
 	var stop_dist := radius + PLAYER_CONTACT_RADIUS - 0.04
 	if dist > stop_dist and move_dir.length_squared() > 0.0001:
-		var step_len := move_speed * active_ai_delta
+		# Stable six-percent stride variance opens gentle gaps without timers or
+		# changing configured speed/attack balance. No corrections touch raw strokes.
+		var stride := 1.0 + float(posmod(combat_id() * 17, 7) - 3) * .02 if kind in [&"blue", &"yellow"] else 1.0
+		var step_len := move_speed * stride * active_ai_delta
 		position = _move_step_cover_safe(self_xz, move_dir * step_len, false)
 
 	# Recompute XZ distance for contact damage (suppressed while staggered)
@@ -825,7 +843,25 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 				skirmish_phase = &"orbit"
 				skirmish_timer = 0.0
 				skirmish_strafe_sign = -skirmish_strafe_sign
+			_emit_enemy_event(&"attack", position)
 			player.take_damage(contact_damage)
+
+
+func _emit_enemy_event(event: StringName, point: Vector3, strength: float = 1.0) -> void:
+	# No events are emitted by visual sync, configure or restore. Hurt barks have
+	# a world-time cooldown; warning/release/death are actual state transitions.
+	enemy_event.emit(kind, event, point, strength)
+
+
+func _track_approach_aim(direction: Vector3, dt: float) -> void:
+	facing = _rotate_xz_toward(facing, direction, WARNING_TURN_RATE * maxf(0, dt))
+
+
+func _lock_warning_aim() -> void:
+	# Shared by the ordinary lens and all pattern bosses. Approach has gentle
+	# turn lag; the complete visible warning and committed release stay fixed.
+	ranged_aim = Vector3(facing.x, 0, facing.z).normalized()
+	if ranged_aim.length_squared() < .001: ranged_aim = Vector3.FORWARD
 
 
 func projectile_origin(direction: Vector3) -> Vector3:
@@ -904,33 +940,30 @@ func _step_ranged(dt: float, player: Node3D, distance: float) -> void:
 	if health <= 0 or dt <= 0 or not is_instance_valid(player) or not player.can_act: return
 	if attack_phase == &"approach":
 		if distance <= 11.5:
-			ranged_aim = Vector3(player.position.x - position.x, 0, player.position.z - position.z).normalized()
-			if ranged_aim.length_squared() < .001: ranged_aim = facing
-			facing = ranged_aim
+			_lock_warning_aim()
 			attack_phase = &"windup"
 			attack_timer = RANGED_WINDUP
+			_emit_enemy_event(&"warning", position)
 			feedback_label.text = "MOVE ASIDE"
 			feedback_label.modulate = Color("ffad95")
 			feedback_timer = RANGED_WINDUP
-			var director := get_parent()
-			if director != null and director.has_method("hostile_cue"): director.hostile_cue(&"hostile_warning", projectile_origin(ranged_aim), .5)
 	else:
 		attack_timer = maxf(0, attack_timer - dt)
 		if attack_timer <= 0:
 			if attack_phase == &"windup":
+				attack_phase = &"recover"
+				attack_timer = RANGED_RECOVERY
 				var director := get_parent()
 				if director != null and director.has_method("launch_projectile"):
 					if director.launch_projectile(projectile_origin(ranged_aim), ranged_aim, contact_damage, 7.5, combat_id()):
-						if director.has_method("hostile_cue"): director.hostile_cue(&"hostile_fire", projectile_origin(ranged_aim), .7)
-				attack_phase = &"recover"
-				attack_timer = RANGED_RECOVERY
+						_emit_enemy_event(&"attack", projectile_origin(ranged_aim))
 			else:
 				attack_phase = &"approach"
 	_sync_ranged_visual()
 
 
 func pack_target(player_position: Vector3, neighbors: Array) -> Vector3:
-	if mechanism() not in [&"cut", &"open"]:
+	if mechanism() not in [&"cut", &"open", &"shot"]:
 		return player_position
 	var members: Array = []
 	var pack_size := int(Tuning.PACK.size)
@@ -938,7 +971,8 @@ func pack_target(player_position: Vector3, neighbors: Array) -> Vector3:
 	for other in neighbors:
 		if not is_instance_valid(other) or other.health <= 0 or not other.has_method("mechanism"):
 			continue
-		if other.mechanism() not in [&"cut", &"open"] or floori(float(other.combat_id() - 1) / pack_size) != cohort:
+		var compatible: bool = other.mechanism() == &"shot" if mechanism() == &"shot" else other.mechanism() in [&"cut", &"open"]
+		if not compatible or floori(float(other.combat_id() - 1) / pack_size) != cohort:
 			continue
 		if position.distance_to(other.position) <= float(Tuning.PACK.neighbor_range):
 			members.append(other)
@@ -951,10 +985,16 @@ func pack_target(player_position: Vector3, neighbors: Array) -> Vector3:
 	center /= members.size()
 	var radial := Vector2(center.x - player_position.x, center.z - player_position.z)
 	# Release the formation near contact so cohesion never prevents an attack.
-	if radial.length() < float(Tuning.PACK.break_distance):
+	if radial.length() < float(Tuning.PACK.break_distance) or position.distance_to(player_position) < float(Tuning.PACK.break_distance):
 		return player_position
 	var distance := maxf(1.7, radial.length() - float(Tuning.PACK.advance))
 	var slot := float(members.find(self)) - float(members.size() - 1) * 0.5
+	if mechanism() == &"shot":
+		# A loose radial file offers piercing while still following ordinary
+		# steering/cover and releasing near contact. No position snaps or rails.
+		var direction := Vector3(radial.x, 0, radial.y).normalized()
+		var side := Vector3(-direction.z, 0, direction.x)
+		return player_position + direction * maxf(2.0, distance + slot * 1.9) + side * float(posmod(combat_id(), 3) - 1) * .12
 	var angle := radial.angle() + slot * float(Tuning.PACK.spacing) / distance
 	return player_position + Vector3(cos(angle), 0, sin(angle)) * distance
 
@@ -968,6 +1008,7 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 			attack_timer = float(Tuning.MATCHUPS.attack_windup)
 			feedback_label.text = "!"
 			feedback_timer = attack_timer
+			_emit_enemy_event(&"warning", position)
 		return
 	attack_timer = maxf(0.0, attack_timer - world_delta)
 	if attack_timer > 0.0:
@@ -975,10 +1016,15 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 	if attack_phase == &"windup":
 		attack_phase = &"recover"
 		attack_timer = float(Tuning.MATCHUPS.attack_recovery)
+		_emit_enemy_event(&"attack", position)
 		if distance <= reach and player.can_act:
 			player.take_damage(contact_damage)
 	else:
 		attack_phase = &"approach"
+
+
+func movement_radius() -> float:
+	return radius
 
 
 func overlaps_cover(margin: float = -0.01) -> bool:
@@ -986,13 +1032,13 @@ func overlaps_cover(margin: float = -0.01) -> bool:
 		return false
 	var pt := Vector2(position.x, position.z)
 	for rect: Rect2 in cover.rectangles:
-		if rect.grow(maxf(0.0, radius + margin)).has_point(pt):
+		if rect.grow(maxf(0.0, movement_radius() + margin)).has_point(pt):
 			return true
 	return false
 
 
 func _clamp_to_arena(pos: Vector3) -> Vector3:
-	var limit := float(Tuning.ARENA_HALF_SIZE) - 1.0
+	var limit := float(Tuning.ARENA_HALF_SIZE) - maxf(1.0, movement_radius())
 	return Vector3(clampf(pos.x, -limit, limit), 0.0, clampf(pos.z, -limit, limit))
 
 
@@ -1001,7 +1047,7 @@ func _resolve_cover_overlap(pos: Vector3) -> Vector3:
 		return pos
 	var out := Vector3(pos.x, 0.0, pos.z)
 	for rect: Rect2 in cover.rectangles:
-		var expanded := rect.grow(radius + 0.003)
+		var expanded := rect.grow(movement_radius() + 0.003)
 		if expanded.has_point(Vector2(out.x, out.z)):
 			var d_left := absf(out.x - expanded.position.x)
 			var d_right := absf(expanded.end.x - out.x)
@@ -1026,7 +1072,7 @@ func _move_step_cover_safe(start_pos: Vector3, delta_vec: Vector3, is_knockback:
 		return _clamp_to_arena(clean_start + flat_delta)
 
 	var finish := clean_start + flat_delta
-	var hit: Dictionary = cover.clip_segment(clean_start, finish, radius)
+	var hit: Dictionary = cover.clip_segment(clean_start, finish, movement_radius())
 	if not hit.get("blocked", false):
 		return _resolve_cover_overlap(_clamp_to_arena(finish))
 
@@ -1041,7 +1087,7 @@ func _move_step_cover_safe(start_pos: Vector3, delta_vec: Vector3, is_knockback:
 	var remaining := flat_delta * (1.0 - frac)
 	var slide := remaining - normal * remaining.dot(normal)
 	if slide.length_squared() > 0.000001:
-		var hit2: Dictionary = cover.clip_segment(safe_pos, safe_pos + slide, radius)
+		var hit2: Dictionary = cover.clip_segment(safe_pos, safe_pos + slide, movement_radius())
 		if not hit2.get("blocked", false):
 			safe_pos += slide
 		else:
@@ -1057,7 +1103,7 @@ func _steer_around_cover(self_xz: Vector3, desired_dir: Vector3, goal_xz: Vector
 		return desired_dir
 	var dist_to_goal := self_xz.distance_to(goal_xz)
 	var lookahead := minf(maxf(dist_to_goal, 0.5), 2.6)
-	var probe: Dictionary = cover.clip_segment(self_xz, self_xz + desired_dir * lookahead, radius + 0.04)
+	var probe: Dictionary = cover.clip_segment(self_xz, self_xz + desired_dir * lookahead, movement_radius() + 0.04)
 	if not probe.get("blocked", false):
 		return desired_dir
 
@@ -1065,7 +1111,7 @@ func _steer_around_cover(self_xz: Vector3, desired_dir: Vector3, goal_xz: Vector
 	var best_dir := Vector3.ZERO
 	var best_cost := INF
 	for rect: Rect2 in cover.rectangles:
-		var wp_rect := rect.grow(radius + 0.32)
+		var wp_rect := rect.grow(movement_radius() + 0.32)
 		var corners: Array[Vector3] = [
 			Vector3(wp_rect.position.x, 0.0, wp_rect.position.y),
 			Vector3(wp_rect.end.x, 0.0, wp_rect.position.y),
@@ -1076,10 +1122,10 @@ func _steer_around_cover(self_xz: Vector3, desired_dir: Vector3, goal_xz: Vector
 			var d_self := self_xz.distance_to(c)
 			if d_self < 0.18:
 				continue
-			var to_c: Dictionary = cover.clip_segment(self_xz, c, radius + 0.01)
+			var to_c: Dictionary = cover.clip_segment(self_xz, c, movement_radius() + 0.01)
 			if to_c.get("blocked", false):
 				continue
-			var to_goal: Dictionary = cover.clip_segment(c, goal_xz, radius + 0.01)
+			var to_goal: Dictionary = cover.clip_segment(c, goal_xz, movement_radius() + 0.01)
 			var penalty := 4.0 if to_goal.get("blocked", false) else 0.0
 			var cost := d_self + c.distance_to(goal_xz) + penalty
 			if cost < best_cost:

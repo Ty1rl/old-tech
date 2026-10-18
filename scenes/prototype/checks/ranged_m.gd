@@ -7,6 +7,7 @@ var failures: Array[String] = []
 var director: Node3D
 var player: Node3D
 var cues: Array[StringName] = []
+var enemy_cues: Array[StringName] = []
 var metrics := {}
 
 class PlayerProbe extends Node3D:
@@ -36,6 +37,7 @@ func fresh() -> void:
 	player.position = Vector3.ZERO
 	player.begin_attempt(100)
 	cues.clear()
+	enemy_cues.clear()
 
 
 func values_only(value: Variant) -> bool:
@@ -62,12 +64,13 @@ func run() -> void:
 	player = PlayerProbe.new()
 	root.add_child(player)
 	director.combat_event.connect(func(kind, _point, _strength): cues.append(kind))
+	director.enemy_event.connect(func(_kind, event, _point, _strength): enemy_cues.append(event))
 	fresh()
 	var shooter: Node3D = director.spawn(&"ranged", Vector3(0, 0, -8))
 	director.step(.01, player)
 	var aim: Vector3 = shooter.ranged_aim
 	expect(shooter.attack_phase == &"windup" and shooter.ranged_warning.visible, "shooter has a visible pre-impact warning")
-	expect(cues.count(&"hostile_warning") == 1, "windup cue is emitted once")
+	expect(enemy_cues.count(&"warning") == 1, "windup cue is emitted once")
 	expect(shooter.ranged_lens.global_position.distance_to(shooter.projectile_origin(aim)) < .001, "visible muzzle and emitted origin agree")
 	var windup: Dictionary = director.capture_state()
 	player.position.x = 3
@@ -81,7 +84,7 @@ func run() -> void:
 	var shot: Dictionary = director.projectiles[0]
 	expect(shot.owner_id == shooter.combat_id() and shot.position == shooter.projectile_origin(aim), "emission carries stable owner ID and authoritative origin")
 	expect(is_equal_approx(shot.radius, .24) and is_equal_approx(director._projectile_visuals[0].mesh.size.x, 2 * shot.radius), "visible head diameter equals collision diameter")
-	expect(cues.count(&"hostile_fire") == 1, "release has one semantic cue")
+	expect(enemy_cues.count(&"attack") == 1, "release has one semantic cue")
 	var start: Vector3 = shot.position
 	director._step_projectiles(.1 * .18, player)
 	expect(is_equal_approx(start.distance_to(director.projectiles[0].position), 7.5 * .018), "slow time drives the same velocity for flight and visuals")
@@ -93,9 +96,9 @@ func run() -> void:
 	director._step_projectiles(.2, player)
 	director.restore_state(flying)
 	expect(director.capture_state() == flying and director._projectile_visuals[0].position == flying.projectiles[0].position, "rewind restores radius, owner, age, flight and visuals exactly")
-	var cue_count := cues.size()
+	var cue_count := cues.size() + enemy_cues.size()
 	director.restore_state(windup)
-	expect(cues.size() == cue_count and director.projectiles.is_empty() and shooter.ranged_warning.visible, "restoring windup redraws warning without replaying release/audio")
+	expect(cues.size() + enemy_cues.size() == cue_count and director.projectiles.is_empty() and shooter.ranged_warning.visible, "restoring windup redraws warning without replaying release/audio")
 	# A human-scale delayed sidestep, using only ordinary movement speed.
 	for dt: float in [1.0 / 30, 1.0 / 60, 1.0 / 240]:
 		fresh()

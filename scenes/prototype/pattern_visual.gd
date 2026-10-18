@@ -1,6 +1,7 @@
+class_name CombatPatternVisual
 extends Node3D
 # All interactive geometry is built from these same local query anchors.
-const BLUE := Color("168eff")
+const BLUE := Color("39b6ff")
 const ORANGE := Color("f58024")
 const YELLOW := Color("ffe538")
 const STONE := Color("92918b")
@@ -10,6 +11,7 @@ static var _materials: Dictionary = {}
 static var _boxes: Dictionary = {}
 static var _balls: Dictionary = {}
 static var _rods: Dictionary = {}
+static var _silhouettes: Dictionary = {}
 var lit_valve: StandardMaterial3D
 var dim_valve: StandardMaterial3D
 var links: Array[MeshInstance3D] = []
@@ -19,6 +21,8 @@ var sections: Array[Node3D] = []
 var valves: Array[MeshInstance3D] = []
 var valve_labels: Array[Label3D] = []
 var link_sections: Array[Node3D] = []
+var cut_ends: Array[Node3D] = []
+var valve_gates: Array[MeshInstance3D] = []
 var core: MeshInstance3D
 var countdown: Label3D
 var warning: Node3D
@@ -28,36 +32,38 @@ var boss := false
 
 static func spans(mode: StringName, stage := 0) -> Array:
 	if mode == &"loop":
-		var anchors := [[Vector3(-0.65, 0.7, -0.65), Vector3(-1.8, 0.7, -1.8)],
-			[Vector3(0.65, 0.7, -0.65), Vector3(1.8, 0.7, -1.8)],
-			[Vector3(0.65, 0.7, 0.65), Vector3(1.8, 0.7, 1.8)],
-			[Vector3(-0.65, 0.7, 0.65), Vector3(-1.8, 0.7, 1.8)]]
+		var anchors := [[Vector3(-0.85, 0.85, -0.85), Vector3(-2.15, 0.85, -2.15)],
+			[Vector3(0.85, 0.85, -0.85), Vector3(2.15, 0.85, -2.15)],
+			[Vector3(0.85, 0.85, 0.85), Vector3(2.15, 0.85, 2.15)],
+			[Vector3(-0.85, 0.85, 0.85), Vector3(-2.15, 0.85, 2.15)]]
 		# Later boss shells rotate the four physical links into a fresh arrangement.
 		for span: Array in anchors:
 			for i in range(2): span[i] = span[i].rotated(Vector3.UP, stage * PI / 8)
 		return anchors
 	if mode == &"zigzag":
-		return [[Vector3(-2.0, 0.7, -1.25), Vector3(-1.2, 0.7, -0.75)],
-			[Vector3(1.2, 0.7, -0.25), Vector3(2.0, 0.7, 0.25)],
-			[Vector3(-2.0, 0.7, 0.75), Vector3(-1.2, 0.7, 1.25)]]
+		return [[Vector3(-2.35, 0.85, -1.55), Vector3(-1.35, 0.85, -0.95)],
+			[Vector3(1.35, 0.85, -0.30), Vector3(2.35, 0.85, 0.30)],
+			[Vector3(-2.35, 0.85, 0.95), Vector3(-1.35, 0.85, 1.55)]]
 	return []
 
 # Spawn reservation derives from the actual link endpoints and pod half-diagonal.
 # Bosses reserve later phases too, so dismantling never grows into nearby cover.
 static func silhouette_radius(identity: StringName) -> float:
-	var extent := 2.65 if String(identity).ends_with("_boss") else 1.35
+	if _silhouettes.has(identity): return float(_silhouettes[identity])
+	var extent := 2.65 if String(identity).ends_with("_boss") else (2.0 if identity == &"pair" else 1.35)
 	var modes := [&"loop", &"zigzag"] if identity == &"final_boss" else [&"loop" if identity == &"loop_boss" else identity]
 	for mode: StringName in modes:
 		for span: Array in spans(mode):
 			for point: Vector3 in span:
 				extent = maxf(extent, Vector2(point.x, point.z).length() + 0.54)
+	_silhouettes[identity] = extent
 	return extent
 
 static func core_anchor(is_boss := false) -> Vector3:
 	return Vector3(0, 2.0 if is_boss else 1.85, -1.3 if is_boss else -0.95)
 
 static func valve_anchor(index: int, is_boss := false) -> Vector3:
-	return Vector3(-0.8 if index == 0 else 0.8, 2.2 if is_boss else 1.95, -1.4 if is_boss else -0.95)
+	return Vector3(-1.1 if index == 0 else 1.1, 2.2 if is_boss else 1.95, -1.4 if is_boss else -0.95)
 
 func mat(color: Color, unlit := false) -> StandardMaterial3D:
 	var key := color.to_html() + ("_unlit" if unlit else "_lit")
@@ -130,9 +136,22 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 		box(self, Vector3(x, 0.7, -0.3), Vector3(0.34, 1.05, 0.44), STONE.darkened(0.12))
 		plates.append(box(self, Vector3(x, 1.15, -0.4), Vector3(0.48, 0.5, 0.5), ORANGE))
 	plates.append(box(self, core_anchor(boss), Vector3(1.1, 0.82, 0.18), ORANGE))
-	core = ball(self, core_anchor(boss), 0.4 if boss else .34, YELLOW)
+	# Core has a large halo and stays still; quick targets are a pair of small
+	# square sockets with moving shutters, readable without relying on labels.
+	var core_halo := TorusMesh.new()
+	core_halo.inner_radius = .48
+	core_halo.outer_radius = .60
+	var core_rim := MeshInstance3D.new()
+	core_rim.mesh = core_halo
+	core_rim.rotation.x = PI / 2
+	core_rim.position = core_anchor(boss)
+	core_rim.material_override = mat(Color("574914"), true)
+	add_child(core_rim)
+	core = ball(self, core_anchor(boss), .44, YELLOW)
 	for i in range(2):
-		valves.append(ball(self, valve_anchor(i, boss), 0.36, YELLOW))
+		valves.append(box(self, valve_anchor(i, boss), Vector3(.78, .78, .28), YELLOW))
+		var gate := box(self, valve_anchor(i, boss) + Vector3(0, 0, -.18), Vector3(.86, .20, .12), Color("64717b"))
+		valve_gates.append(gate)
 		var letter := Label3D.new()
 		letter.text = "A" if i == 0 else "B"
 		letter.position = valve_anchor(i, boss) + Vector3(0, 0.46, 0)
@@ -144,7 +163,12 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 		add_child(letter)
 		valve_labels.append(letter)
 	for span: Array in spans(mode, stage if identity == &"loop_boss" else 0):
-		links.append(rod(self, span[0], span[1], 0.2, BLUE))
+		links.append(rod(self, span[0], span[1], .28, BLUE))
+		var ends := Node3D.new()
+		add_child(ends)
+		cut_ends.append(ends)
+		rod(ends, span[0], span[0].lerp(span[1], .18), .28, BLUE)
+		rod(ends, span[1].lerp(span[0], .18), span[1], .28, BLUE)
 		var number := Label3D.new()
 		number.text = str(links.size())
 		number.position = (span[0] + span[1]) * 0.5 + Vector3(0, 0.48, 0)
@@ -218,22 +242,31 @@ func sync(mask: int, opened: bool, bare: bool, progress: int, timer: float, phas
 	for i in range(links.size()):
 		links[i].visible = not bool(mask & (1 << i)) and alive
 		link_labels[i].visible = links[i].visible
-		link_sections[i].visible = links[i].visible
+		# Cutting a link leaves its stone support in place. Only the cable breaks;
+		# a timeout reconnects it once instead of repeatedly losing entire legs.
+		link_sections[i].visible = alive
+		cut_ends[i].visible = alive and bool(mask & (1 << i))
 	for plate in plates: plate.visible = not bare and not opened and alive
 	core.visible = opened and pattern != &"pair" and alive
 	for i in range(valves.size()):
 		valves[i].visible = pattern == &"pair" and alive and not opened
 		valves[i].material_override = lit_valve if i == progress else dim_valve
 		valve_labels[i].visible = valves[i].visible
+		valve_gates[i].visible = valves[i].visible
+		valve_gates[i].position.y = valve_anchor(i, boss).y + (.52 if i == progress else 0.0)
 	if pattern == &"pair" and opened: core.visible = alive
 	for i in range(sections.size()): sections[i].visible = i >= phase and alive
 	warning.visible = attack in [&"windup", &"commit"] and alive
 	warning.scale = Vector3.ONE
-	countdown.text = "CHARGE YELLOW CORE" if opened else ("A → B" if pattern == &"pair" else "ONE BLUE LAUNCH")
+	countdown.text = "CHARGE YELLOW CORE" if opened else ("A → B" if pattern == &"pair" else "CUT BLUE LINKS")
 	if timer > 0 and not opened: countdown.text = ("B " if pattern == &"pair" else "%d/%d " % [progress, links.size()]) + "%.1fs" % timer
 	if not alive: countdown.text = "DISMANTLED"
 
 func pose(clock: float, speed: float, attack: StringName, timer: float) -> void:
+	# A gentle socket pulse marks the next quick shot; the exposed round core is
+	# steady and larger. These cosmetic scales never move query anchors.
+	for i in range(valves.size()):
+		valves[i].scale = Vector3.ONE * (1.0 + .09 * sin(clock * 1.8) if valves[i].material_override == lit_valve else .88)
 	var moving := clampf(speed, 0, 1)
 	for i in range(feet.size()):
 		var stride := sin(clock + i * PI) * moving

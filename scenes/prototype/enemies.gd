@@ -1,5 +1,6 @@
 extends Node3D
 
+signal enemy_event(enemy_kind: StringName, event: StringName, point: Vector3, strength: float)
 signal combat_event(kind: StringName, point: Vector3, strength: float)
 
 # Arena drives this director with world time; there is no independent clock.
@@ -41,7 +42,7 @@ class RepairShotHeads extends Control:
 			draw_circle(head.point, head.radius * .46, Color("fff5d9"))
 var projectiles: Array[Dictionary] = []
 var _projectile_visuals: Array[MeshInstance3D] = []
-var flow: RefCounted = Flow.new()
+var flow: CombatFlow = Flow.new()
 var _arrival_mesh: ImmediateMesh
 
 var enemies: Array[Node3D] = []
@@ -123,7 +124,11 @@ func step(world_delta: float, player: Node3D) -> void:
 				enemy.step_enemy(hold, player, snapshot)
 				enemy.move_speed = speed
 				if revision != _world_revision or _suspend_for_player(player): return
-			if world_delta - hold > 0: enemy.step_enemy(world_delta - hold, player, snapshot)
+			if world_delta - hold > 0:
+				var speed := float(enemy.move_speed)
+				enemy.move_speed = speed * flow.approach_scale(int(enemy.combat_id()))
+				enemy.step_enemy(world_delta - hold, player, snapshot)
+				enemy.move_speed = speed
 			if revision != _world_revision or _suspend_for_player(player): return
 	flow.cohere(world_delta, snapshot, cover, holds)
 	_draw_arrivals()
@@ -169,7 +174,7 @@ func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
 		return null
 	if cover == null:
 		cover = CoverScript.new()
-	var enemy: Node3D = PatternEnemy.new() if PatternEnemy.handles(kind) else EnemyNode.new()
+	var enemy: CombatEnemy = PatternEnemy.new() if PatternEnemy.handles(kind) else EnemyNode.new()
 	enemy.cover = cover
 	_spawn_counter += 1
 	enemy.rewind_id = _spawn_counter
@@ -179,6 +184,7 @@ func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
 		0.0,
 		clampf(spawn_position.z, -limit, limit)
 	)
+	_bind_enemy_cues(enemy)
 	add_child(enemy)
 	enemy.configure(kind, clamped_pos, _spawn_counter)
 	enemies.append(enemy)
@@ -365,7 +371,7 @@ func restore_state(data: Dictionary) -> void:
 		used_ids[eid] = true
 		max_restored_id = maxi(max_restored_id, eid)
 
-		var enemy: Node3D = null
+		var enemy: CombatEnemy = null
 		if existing_by_id.has(eid):
 			enemy = existing_by_id[eid]
 			existing_by_id.erase(eid)
@@ -381,6 +387,7 @@ func restore_state(data: Dictionary) -> void:
 			var entry_pos: Vector3 = entry.get("position", Vector3.ZERO)
 			enemy.configure(entry_kind, entry_pos, eid)
 
+		_bind_enemy_cues(enemy)
 		enemy.restore_state(entry)
 		restored_enemies.append(enemy)
 
@@ -438,6 +445,17 @@ func launch_projectile(origin: Vector3, direction: Vector3, damage: float, speed
 		"radius": PROJECTILE_RADIUS, "owner_id": owner_id, "id": _projectile_sequence})
 	_sync_projectile_visuals()
 	return true
+
+
+# Jam-1 connects this signal to CombatFeedback.enemy_cue. No audio implementation,
+# replayed barks or private feedback lookup is needed for these semantic events.
+func _bind_enemy_cues(enemy: CombatEnemy) -> void:
+	if not enemy.enemy_event.is_connected(_on_enemy_event):
+		enemy.enemy_event.connect(_on_enemy_event)
+
+
+func _on_enemy_event(enemy_kind: StringName, event: StringName, point: Vector3, strength: float) -> void:
+	enemy_event.emit(enemy_kind, event, point, strength)
 
 
 func hostile_cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:

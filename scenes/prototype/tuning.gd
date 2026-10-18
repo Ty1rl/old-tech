@@ -29,11 +29,12 @@ const ENEMIES = {
 	"front_guard": {"health": 500.0, "speed": 1.6, "radius": 0.8, "damage": 10.0, "mechanism": "open", "layout": "front"},
 }
 # Pattern windows and attack timing use WORLD seconds.
-const PATTERNS = {"window": 3.0, "pair_window": 2.4, "core_charge": 0.85,
+# Partial links keep one fixed deadline across launches; repeated cuts cannot extend it.
+const PATTERNS = {"window": 6.5, "pair_window": 2.4, "core_charge": 0.85,
 	"body_armored": 0.12, "body_bare": 0.3, "windup": 0.8, "commit": 0.18,
-	"recovery": 1.9, "link_radius": 0.16, "target_radius": 0.28}
+	"recovery": 1.9, "link_radius": 0.28, "target_radius": 0.40}
 const MATCHUPS = {"body_damage": 0.12, "heat_seconds": 0.9, "heat_decay": 0.15,
-	"cut_radius": 0.28, "core_radius": 0.38, "attack_windup": 0.5, "attack_recovery": 1.7,
+	"cut_radius": 0.40, "core_radius": 0.38, "attack_windup": 0.5, "attack_recovery": 1.7,
 	"push_light": 1.25, "push_heavy": 0.15, "stagger_scale": 2.4}
 # Slots follow a shrinking arc around the player; 0 strength restores direct chase.
 const PACK = {"size": 5, "neighbor_range": 14.0, "spacing": 1.8,

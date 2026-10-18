@@ -56,7 +56,7 @@ func run() -> void:
 		if formation == &"line":
 			var width := 0.0
 			for node in nodes: width = maxf(width, absf(node.position.x))
-			expect(width < .04 and nodes[0].position.distance_to(nodes[-1].position) > 7, "yellow loose radial line is pierceable")
+			expect(width < .15 and nodes[0].position.distance_to(nodes[-1].position) > 7, "yellow varied radial file stays within piercing width")
 		elif formation == &"curve":
 			expect(nodes[0].position.distance_to(nodes[-1].position) > 6 and absf(nodes[0].position.z - nodes[2].position.z) > .3, "blue curve is wide and naturally bowed")
 		elif formation == &"cluster":

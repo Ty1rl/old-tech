@@ -1,3 +1,4 @@
+class_name CombatFlow
 extends RefCounted
 
 # Small, value-only world-time formation state. The director remains the owner
@@ -29,11 +30,11 @@ func reset() -> void:
 # collision radius remains controller-owned; this is an arrival reservation.
 const PatternVisual = preload("res://scenes/prototype/pattern_visual.gd")
 const UNIT_CLEARANCE = {&"blue": 1.5, &"yellow": 0.85, &"orange": 1.1,
-	&"side_guard": 2.15, &"front_guard": 1.25, &"warden": 1.8, &"pair": 1.35}
+	&"side_guard": 2.15, &"front_guard": 1.25, &"warden": 1.8, &"pair": 1.8}
 
 static func placement_radius(kind: StringName) -> float:
 	var body := float(Tuning.ENEMIES.get(String(kind), {}).get("radius", 0.8))
-	return maxf(body, PatternVisual.silhouette_radius(kind) + float(Tuning.RING.radius) + 0.2) if kind in [&"loop", &"zigzag", &"loop_boss", &"sequence_boss", &"final_boss"] else maxf(body, float(UNIT_CLEARANCE.get(kind, body)))
+	return maxf(body, PatternVisual.silhouette_radius(kind) + float(Tuning.RING.radius) + 0.2) if kind in [&"loop", &"zigzag", &"pair", &"loop_boss", &"sequence_boss", &"final_boss"] else maxf(body, float(UNIT_CLEARANCE.get(kind, body)))
 
 # Prefer complete silhouettes inside the normal gameplay perspective. This is
 # only a candidate preference: a crowded room can still use a safe off-axis
@@ -52,7 +53,7 @@ static func readable_from_player(point: Vector3, extent: float, player: Vector3)
 func _free_slot(point: Vector3, extent: float, player_position: Vector3, cover: RefCounted, occupied: Array, slots: Array[Dictionary], kind: StringName) -> bool:
 	if not safe(point, extent, player_position, cover): return false
 	# A clear support ring behind a cabinet still gives a blocked first launch.
-	if kind in [&"loop", &"zigzag", &"loop_boss", &"sequence_boss", &"final_boss"] and cover != null and cover.clip_segment(player_position, point, float(Tuning.RING.radius)).blocked: return false
+	if kind in [&"loop", &"zigzag", &"pair", &"loop_boss", &"sequence_boss", &"final_boss"] and cover != null and cover.clip_segment(player_position, point, float(Tuning.RING.radius)).blocked: return false
 	for node in occupied:
 		if is_instance_valid(node) and node.health > 0 and point.distance_to(Vector3(node.position.x, 0, node.position.z)) < extent + placement_radius(StringName(node.kind)) + 0.25: return false
 	for prior: Dictionary in slots:
@@ -70,7 +71,7 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 	var extents: Array[float] = []
 	var widest := 0.0
 	for i in range(count):
-		jitter.append(rng.randf_range(-0.10, 0.10))
+		jitter.append(rng.randf_range(-0.22, 0.22))
 		extents.append(placement_radius(StringName(kinds[i])))
 		widest = maxf(widest, extents[-1])
 	# First use the authored formation at one entrance, scaled for its members.
@@ -89,8 +90,8 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 				match formation:
 					&"line":
 						var along := distance - 2.2
-						for j in range(i): along += extents[j] + extents[j + 1] + 0.15
-						point = player + radial * along + side * jitter[i] * 0.30
+						for j in range(i): along += extents[j] + extents[j + 1] + 0.45
+						point = player + radial * (along + jitter[i] * .30) + side * jitter[i] * .50
 					&"cluster":
 						point += side * (float(i % 3) - float(mini(count, 3) - 1) * 0.5) * spacing
 						point += radial * float(i / 3) * spacing + side * jitter[i] * 0.2
@@ -207,9 +208,19 @@ func cohere(dt: float, nodes: Array[Node3D], cover: RefCounted, holds: Dictionar
 			var forward: Vector3 = node.facing
 			toward -= forward * toward.dot(forward)
 			var active_dt := maxf(0, dt - float(holds.get(int(node.combat_id()), 0.0)))
-			var correction := toward.limit_length(0.35 * minf(active_dt, float(cohort.window)))
-			if cover == null or not cover.clip_segment(node.position, node.position + correction, float(node.radius)).blocked:
+			var correction := toward.limit_length(0.35 * minf(active_dt, float(cohort.window)) * clampf(float(cohort.window) / OPPORTUNITY_SECONDS, 0, 1))
+			if cover == null or not cover.clip_segment(node.position, node.position + correction, float(node.movement_radius())).blocked:
 				node.position += correction
+
+
+func approach_scale(id: int) -> float:
+	# A brief easing out of the arrival hold gives a hand-drawn sweep time to
+	# travel. Speed returns smoothly to normal; contact/control releases it.
+	# The existing finite cohort window is the only state and cannot renew.
+	for cohort: Dictionary in cohorts:
+		if id in cohort.ids and cohort.warning <= 0:
+			return lerpf(1.0, .72, clampf(float(cohort.window) / OPPORTUNITY_SECONDS, 0, 1))
+	return 1.0
 
 
 func start_pressure(seed: int) -> void:

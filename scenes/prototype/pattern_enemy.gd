@@ -1,8 +1,9 @@
+class_name CombatPatternEnemy
 extends "res://scenes/prototype/enemy.gd"
 # Drop-in enemy implementation; the campaign director selects this via handles().
 const PatternVisual = preload("res://scenes/prototype/pattern_visual.gd")
 const PHASES := [&"pair", &"zigzag", &"loop", &"core"]
-var pattern_visual: Node3D
+var pattern_visual: CombatPatternVisual
 var phase := 0
 var link_mask := 0
 var pair_progress := 0
@@ -61,8 +62,13 @@ func is_core_exposed() -> bool:
 func has_cuttable_part() -> bool:
 	return health > 0 and active_pattern() in [&"loop", &"zigzag"] and not pattern_open
 
+func movement_radius() -> float:
+	# Wide links/supports keep their physical room while turning or being shoved;
+	# body contact damage still uses the smaller configured body radius.
+	return PatternVisual.silhouette_radius(kind) if handles(kind) else radius
+
 func attack_radius(_tool: StringName) -> float:
-	return 2.85 if active_pattern() == &"loop" else (2.85 if active_pattern() == &"zigzag" else radius)
+	return PatternVisual.silhouette_radius(kind)
 
 # Flat pairs of anchors, NOT an implied continuous polyline. Receive_attack tests
 # each physical span separately, so empty gaps never become cuttable connections.
@@ -189,11 +195,8 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 	var cue: StringName = &""
 	var decisive := false
 	var mode := active_pattern()
-	if tool == &"ring" and not already and not pattern_open:
-		# The baseline weapon's first connected segment carries already_hit=false;
-		# all later segments of that launch carry true, including cuts after a body hit.
-		# A fresh launch starts a fresh pattern; separate launches cannot accumulate.
-		_reset_partial()
+	# Launch dedup controls body damage only. Link progress belongs to the enemy
+	# until the first cut's fixed deadline expires; fresh launches never reset it.
 	if cuts != 0:
 		var previous := link_mask
 		link_mask |= cuts
@@ -297,12 +300,10 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 	var trigger := 9.5 if is_boss() and mode in [&"pair", &"zigzag", &"core"] else reach
 	if attack_phase == &"approach":
 		if distance <= trigger:
-			ranged_aim = facing.normalized()
+			_lock_warning_aim()
 			attack_phase = &"windup"
 			attack_timer = 1.1 if is_boss() else float(Tuning.PATTERNS.windup)
-			var director := get_parent()
-			if is_boss() and director != null and director.has_method("hostile_cue"):
-				director.hostile_cue(&"hostile_warning", projectile_origin(ranged_aim), .7)
+			_emit_enemy_event(&"warning", position)
 		_sync_pattern_attack_warning()
 		return
 	attack_timer = maxf(0, attack_timer - world_delta)
@@ -322,8 +323,11 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 				var emitted := false
 				for direction in hostile_shot_directions():
 					emitted = director.launch_projectile(projectile_origin(direction), direction, contact_damage, 5.6, combat_id()) or emitted
-				if emitted and director.has_method("hostile_cue"): director.hostile_cue(&"hostile_fire", projectile_origin(ranged_aim), 1.0)
-		elif distance <= reach and player.can_act:
+				if emitted:
+					_emit_enemy_event(&"attack", projectile_origin(ranged_aim))
+		else:
+			_emit_enemy_event(&"attack", position)
+		if (not is_boss() or mode == &"loop") and distance <= reach and player.can_act:
 			var toward: Vector3 = player.position - position
 			if is_boss() or toward.normalized().dot(facing) > .2:
 				var controller: TimeController = player.time_controller

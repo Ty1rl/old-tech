@@ -1,0 +1,10 @@
+UI typography
+Barlow Condensed Black: https://fonts.google.com/specimen/Barlow+Condensed
+Inter: https://rsms.me/inter/
+Original TTF files from the Google Fonts repository (unmodified).
+Inter Regular (400) and SemiBold (600) use native Godot FontVariation resources.
+Barlow-OFL.txt and Inter-OFL.txt accompany their fonts.
+BarlowCondensed-Black.ttf: https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Black.ttf
+Barlow-OFL.txt: https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/OFL.txt
+InterVariable.ttf: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf
+Inter-OFL.txt: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/OFL.txt

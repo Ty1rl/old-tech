@@ -124,6 +124,10 @@ projectile heads. Movement dodges them; cover blocks them; time slows them.
 - `repair.tscn`, `repair.gd`, `repair_gestures.gd`: repair layout and gestures.
 - `scenes/ui/*.tscn`, `museum_theme.tres`: editable menus; no rebuilding their child
   trees in `_ready`. Status arcs and attack paths remain procedural geometry.
+- `assets/ui/menu_background.png`: supplied menu artwork, with live title/buttons.
+  `assets/fonts/` contains Barlow Condensed Black and Inter Regular/SemiBold plus
+  their licenses. The shared museum theme and GameState startup apply typography
+  to native controls and custom-drawn HUD text.
 
 The existing scene manager and popup flow remain in use. The old `prototype`
 directory name is retained to avoid a broad path migration during the jam.

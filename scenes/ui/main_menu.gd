@@ -16,6 +16,8 @@ func _ready() -> void:
 		if node is Button:
 			buttons.append(node)
 			node.draw.connect(_draw_selection.bind(node))
+			for event in [node.focus_entered, node.focus_exited, node.mouse_entered, node.mouse_exited]:
+				event.connect(node.queue_redraw)
 	resized.connect(_fit)
 	get_window().size_changed.connect(_fit)
 	_fit()
@@ -27,22 +29,38 @@ func _exit_tree() -> void:
 func _fit() -> void:
 	if not is_instance_valid(column): return
 	var factor := UI.scale_for(self)
-	if size == _layout_size and is_equal_approx(factor,_layout_factor): return
-	_layout_size = size; _layout_factor = factor
-	for side in ["left","right"]: margin.add_theme_constant_override("margin_"+side,roundi(42*factor))
-	for side in ["top","bottom"]: margin.add_theme_constant_override("margin_"+side,roundi(26*factor))
-	column.add_theme_constant_override("separation",roundi(10*factor))
-	for text in column.find_children("*","Label",true,false):
-		if text.has_meta("base_font_size"):
-			text.add_theme_font_size_override("font_size",roundi(text.get_meta("base_font_size")*factor))
-	# The long title can wrap inside a narrow window; the controls can scroll.
+	if size == _layout_size and is_equal_approx(factor, _layout_factor): return
+	_layout_size = size
+	_layout_factor = factor
+	var compact := size.y < 480 * factor
+	var left := roundi(clampf(size.x * .05, 24 * factor, 76 * factor))
+	var column_width := minf(size.x - left * 2, maxf(300 * factor, size.x * .47))
+	margin.add_theme_constant_override("margin_left", left)
+	margin.add_theme_constant_override("margin_right", maxi(left, roundi(size.x - left - column_width)))
+	for side in ["top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, roundi((16 if compact else 32) * factor))
+	column.add_theme_constant_override("separation", roundi((4 if compact else 10) * factor))
+	for text: Label in column.find_children("*", "Label", true, false):
+		var font_size := (12 if compact else 14) if text == %Eyebrow or text == footer else (14 if compact else 19)
+		text.add_theme_font_size_override("font_size", roundi(font_size * factor))
+	var title_font := heading.get_theme_font("font")
+	var line_width := title_font.get_string_size("SOME ASSEMBLY", HORIZONTAL_ALIGNMENT_LEFT, -1, 100).x
+	var title_size := minf(size.y * (.12 if compact else .125), column_width * 100 / maxf(1, line_width))
+	heading.add_theme_font_size_override("font_size", roundi(clampf(title_size, 30 * factor, 108 * factor)))
+	heading.add_theme_constant_override("line_spacing", roundi(-title_size * .22))
 	for button in buttons:
-		button.add_theme_font_size_override("font_size",roundi(button.get_meta("base_button_font")*factor))
+		var text_size := (13 if compact else 14) if button == developer_button else (18 if compact else 27)
+		button.add_theme_font_size_override("font_size", roundi(text_size * factor))
+		button.queue_redraw()
 
 func _draw_selection(button: Button) -> void:
-	if button.has_focus():
-		var y := button.size.y * .5
-		button.draw_colored_polygon(PackedVector2Array([Vector2(6,y-5),Vector2(6,y+5),Vector2(13,y)]), UI.ACCENT)
+	if not button.has_focus() and not button.is_hovered(): return
+	var y := button.size.y * .5
+	button.draw_colored_polygon(PackedVector2Array([Vector2(5, y - 5), Vector2(5, y + 5), Vector2(13, y)]), UI.ACCENT)
+	var font := button.get_theme_font("font")
+	var text_width := font.get_string_size(button.text, HORIZONTAL_ALIGNMENT_LEFT, -1, button.get_theme_font_size("font_size")).x
+	var inset := button.get_theme_stylebox("normal").get_content_margin(SIDE_LEFT)
+	button.draw_line(Vector2(inset, button.size.y - 3), Vector2(minf(button.size.x - 8, inset + text_width), button.size.y - 3), UI.ACCENT, 2, true)
 
 func _on_developer() -> void: SceneManager.push_popup(&"Developer")
 

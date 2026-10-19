@@ -1,9 +1,9 @@
 extends RefCounted
 
 const INK := Color("191713")
-const PAPER := Color("ece4d2")
-const MUTED := Color("b4ab99")
-const ACCENT := Color("cba66c")
+const PAPER := Color("f1eadb")
+const MUTED := Color("aaa69d")
+const ACCENT := Color("e9b954")
 
 static func scale_for(node: Node) -> float:
 	var pixels := node.get_window().size.x

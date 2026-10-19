@@ -35,6 +35,12 @@ var _applied_scene_id := 0
 
 
 func _ready() -> void:
+	# Apply after import; editor startup loads project settings before new fonts.
+	# Native controls and custom-drawn HUD/Label3D text share one typography.
+	if not Engine.is_editor_hint():
+		var ui_theme := load("res://scenes/ui/museum_theme.tres") as Theme
+		get_tree().root.theme = ui_theme
+		ThemeDB.fallback_font = ui_theme.default_font
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	reload_preferences()
 	SceneManager.scene_changed.connect(func(_key): apply_preferences())

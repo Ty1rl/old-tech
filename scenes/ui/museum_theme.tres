@@ -1,4 +1,8 @@
-[gd_resource type="Theme" load_steps=6 format=3]
+[gd_resource type="Theme" load_steps=9 format=3]
+
+[ext_resource type="FontVariation" path="res://assets/fonts/inter_regular.tres" id="1_regular"]
+[ext_resource type="FontVariation" path="res://assets/fonts/inter_semibold.tres" id="2_semibold"]
+[ext_resource type="FontFile" path="res://assets/fonts/BarlowCondensed-Black.ttf" id="3_title"]
 
 [sub_resource type="StyleBoxFlat" id="Normal"]
 bg_color = Color(0.16863, 0.15686, 0.12941, 1)
@@ -71,11 +75,19 @@ content_margin_top = 7.0
 content_margin_bottom = 7.0
 
 [resource]
+default_font = ExtResource("1_regular")
 default_font_size = 19
-Label/colors/font_color = Color(0.925, 0.894, 0.824, 1)
-Button/colors/font_color = Color(0.925, 0.894, 0.824, 1)
-Button/colors/font_focus_color = Color(0.796, 0.651, 0.424, 1)
-Button/colors/font_hover_color = Color(0.796, 0.651, 0.424, 1)
+Button/fonts/font = ExtResource("2_semibold")
+RichTextLabel/fonts/normal_font = ExtResource("1_regular")
+RichTextLabel/fonts/bold_font = ExtResource("2_semibold")
+MuseumTitle/base_type = &"Label"
+MuseumTitle/fonts/font = ExtResource("3_title")
+MuseumHeading/base_type = &"Label"
+MuseumHeading/fonts/font = ExtResource("2_semibold")
+Label/colors/font_color = Color(0.945, 0.918, 0.859, 1)
+Button/colors/font_color = Color(0.945, 0.918, 0.859, 1)
+Button/colors/font_focus_color = Color(0.914, 0.725, 0.329, 1)
+Button/colors/font_hover_color = Color(0.914, 0.725, 0.329, 1)
 Button/styles/normal = SubResource("Normal")
 Button/styles/hover = SubResource("Hover")
 Button/styles/pressed = SubResource("Hover")
@@ -86,3 +98,5 @@ MuseumMenuButton/font_sizes/font_size = 24
 MuseumMenuButton/styles/normal = SubResource("MenuNormal")
 MuseumMenuButton/styles/hover = SubResource("MenuNormal")
 MuseumMenuButton/styles/pressed = SubResource("MenuNormal")
+
+MuseumMenuButton/styles/focus = SubResource("MenuNormal")

@@ -1,7 +1,24 @@
-[gd_scene load_steps=4 format=3 uid="uid://cb25v8pyc2pe1"]
+[gd_scene load_steps=7 format=3 uid="uid://cb25v8pyc2pe1"]
 [ext_resource type="Script" path="res://scenes/ui/main_menu.gd" id="1"]
 [ext_resource type="Theme" path="res://scenes/ui/museum_theme.tres" id="2"]
-[ext_resource type="Script" path="res://scenes/ui/menu_backdrop.gd" id="3"]
+[ext_resource type="Texture2D" path="res://assets/ui/menu_background.png" id="3"]
+
+[sub_resource type="Gradient" id="Gradient_shade"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(0, 0, 0, 0.16, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="Texture_shade"]
+gradient = SubResource("Gradient_shade")
+fill_from = Vector2(0, 0)
+fill_to = Vector2(0.7, 0)
+
+[sub_resource type="StyleBoxFlat" id="Frame"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.945, 0.918, 0.859, 0.16)
 [node name="MainMenu" type="Control"]
 layout_mode = 1
 anchors_preset = 15
@@ -11,9 +28,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 theme = ExtResource("2")
-[node name="MuseumBackdrop" type="Node3D" parent="."]
-script = ExtResource("3")
-[node name="Shade" type="ColorRect" parent="."]
+[node name="MuseumBackdrop" type="TextureRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -21,7 +36,33 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-color = Color(0.02, 0.018, 0.014, 0.62)
+texture = ExtResource("3")
+expand_mode = 1
+stretch_mode = 6
+[node name="Shade" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = SubResource("Texture_shade")
+expand_mode = 1
+
+[node name="Frame" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Frame")
 [node name="Margin" type="MarginContainer" parent="."]
 unique_name_in_owner = true
 layout_mode = 1
@@ -46,12 +87,12 @@ theme_override_constants/separation = 10
 [node name="Eyebrow" type="Label" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "AFTER HOURS / THE MUSEUM"
+text = "AFTER HOURS"
 autowrap_mode = 3
 mouse_filter = 2
 theme_override_font_sizes/font_size = 14
 metadata/base_font_size = 14
-modulate = Color(0.796, 0.651, 0.424, 1)
+modulate = Color(0.76, 0.75, 0.71, 1)
 
 [node name="TopSpace" type="Control" parent="Margin/Scroll/Column"]
 layout_mode = 2
@@ -61,7 +102,8 @@ size_flags_vertical = 3
 unique_name_in_owner = true
 layout_mode = 2
 text = "SOME ASSEMBLY\nREQUIRED"
-autowrap_mode = 3
+autowrap_mode = 0
+theme_type_variation = &"MuseumTitle"
 mouse_filter = 2
 theme_override_font_sizes/font_size = 48
 metadata/base_font_size = 48
@@ -70,6 +112,7 @@ metadata/base_font_size = 48
 unique_name_in_owner = true
 layout_mode = 2
 text = "A museum of unfinished things."
+modulate = Color(0.7, 0.69, 0.65, 1)
 autowrap_mode = 3
 mouse_filter = 2
 theme_override_font_sizes/font_size = 20
@@ -118,7 +161,8 @@ size_flags_vertical = 3
 [node name="Footer" type="Label" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "WASD Move · Mouse Aim · E Toggle repair"
+text = "WASD MOVE     MOUSE AIM"
+modulate = Color(0.7, 0.69, 0.65, 1)
 autowrap_mode = 3
 mouse_filter = 2
 theme_override_font_sizes/font_size = 14

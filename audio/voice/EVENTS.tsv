@@ -1,0 +1,38 @@
+event_id	file	trigger	original_upload
+tutorial.shot	tutorial/shot.mp3	Lesson shot: introduction/demonstration	tutorial/Click to shoot.mp3
+tutorial.charge	tutorial/charge.mp3	Lesson charge: introduction/demonstration	tutorial/Hold, then release.mp3
+tutorial.heat	tutorial/heat.mp3	Lesson heat: introduction/demonstration	tutorial/Aim and hold.mp3
+tutorial.repair	tutorial/repair.mp3	Lesson repair: introduction/demonstration	tutorial/Press E to repair.mp3
+tutorial.slow	tutorial/slow.mp3	Lesson slow: introduction/demonstration	tutorial/Hold Space.mp3
+tutorial.cut	tutorial/cut.mp3	Lesson cut: introduction/demonstration	tutorial/Hold, draw, release.mp3
+tutorial.opening	tutorial/opening.mp3	Lesson opening: introduction/demonstration	tutorial/Cut or heat, then shoot.mp3
+tutorial.rewind	tutorial/rewind.mp3	Lesson rewind: introduction/demonstration	tutorial/Emergency rewind.mp3
+tutorial.loop	tutorial/loop.mp3	Lesson loop: introduction/demonstration	tutorial/Cut every support.mp3
+tutorial.pair	tutorial/pair.mp3	Lesson pair: introduction/demonstration	tutorial/Click A, then B.mp3
+tutorial.zigzag	tutorial/zigzag.mp3	Lesson zigzag: introduction/demonstration	tutorial/Follow the blue spans.mp3
+tutorial.time_meter	tutorial/time_meter.mp3	Explain the shared survival/slow/repair meter	tutorial/time meter.mp3
+tutorial.rewind_charges	tutorial/rewind_charges.mp3	Explain emergency recovery charge budget	tutorial/emergency rewinds.mp3
+tutorial.repair.spin	tutorial/repair_spin.mp3	Immediately before the active spin repair gesture	tutorial/repair spin.mp3
+tutorial.repair.connect	tutorial/repair_connect.mp3	Immediately before the active matching-contact repair gesture	tutorial/repair connect.mp3
+tutorial.repair.trace	tutorial/repair_trace.mp3	Immediately before the active trace repair gesture	tutorial/repair trace.mp3
+tutorial.practice_ready	tutorial/your_turn.mp3	Handoff from demonstration to player practice	tutorial/your turn.mp3
+protagonist.repair_started	protagonist/repair_started_give_me_a_second.mp3	Occasional repair opening	protag/give me a second.mp3
+protagonist.repair_started	protagonist/repair_started_i_can_fix_this.mp3	Occasional repair opening	protag/i can fix this.mp3
+protagonist.repair_completed	protagonist/repair_completed_thatll_hold.mp3	An entire weapon finishes repair	protag/thatll hold.mp3
+protagonist.repair_completed	protagonist/repair_completed_back_in_working_order.mp3	An entire weapon finishes repair	protag/back in working order.mp3
+protagonist.under_pressure	protagonist/under_pressure_too_close.mp3	Close threat or near miss; occasional reaction	protag/too close.mp3
+protagonist.under_pressure	protagonist/under_pressure_need_some_room.mp3	Crowd pressure; occasional reaction	protag/need some room.mp3
+protagonist.enemy_exposed	protagonist/enemy_exposed_there_it_is.mp3	Protection removed and yellow core exposed	protag/there it is.mp3
+protagonist.enemy_exposed	protagonist/enemy_exposed_now.mp3	Protection removed and yellow core exposed	protag/now.mp3
+protagonist.multi_kill	protagonist/multi_kill_that_worked.mp3	Several enemies defeated together	protag/that worked.mp3
+protagonist.multi_kill	protagonist/multi_kill_stay_down.mp3	Several enemies defeated together	protag/stay down.mp3
+protagonist.rewind_recovered	protagonist/rewind_recovered_not_that_way.mp3	Emergency recovery confirmed; once on return	protag/not that way.mp3
+protagonist.rewind_recovered	protagonist/rewind_recovered_one_more_chance.mp3	Emergency recovery confirmed; once on return	protag/one more chance.mp3
+protagonist.room_cleared	protagonist/room_cleared_quiet_finally.mp3	Room combat completed	protag/quiet finally.mp3
+protagonist.room_cleared	protagonist/room_cleared_lets_keep_moving.mp3	Room combat completed	protag/lets keep moving.mp3
+protagonist.boss_defeated	protagonist/boss_defeated_some_assembly_required_again.mp3	Boss defeated	protag/some assembly required again.mp3
+protagonist.boss_defeated	protagonist/boss_defeated_leave_that_one_in_pieces.mp3	Boss defeated	protag/leave that one in pieces.mp3
+boss.loop_boss.entrance	bosses/loop_curator_entrance.mp3	Loop Curator entrance in Connected Collections	bosses/loop-curator-voice.mp3
+boss.sequence_boss.entrance	bosses/sequence_warden_entrance.mp3	Sequence Warden entrance in Restoration Rooms	bosses/everything in its proper order.mp3
+boss.final_boss.entrance	bosses/burial_device_entrance.mp3	Burial Device entrance in Burial Exhibition	bosses/you restored the vessel now let it live.mp3
+narration.intro	narration/intro.mp3	Skippable opening narration for a new run	intro.mp3

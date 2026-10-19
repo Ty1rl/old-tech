@@ -22,8 +22,8 @@ func _ready() -> void:
 		subtitle.text = "The burial device is dismantled. You made it out."
 		retry.text = "Play again"
 	else:
-		title.text = "Another chance"
-		subtitle.text = "Retry this room with a fresh time meter and rewind budget."
+		title.text = "Game Over"
+		subtitle.text = "No rewind charges left."
 		retry.text = "Retry room"
 	UI.focus_on_open(self, retry)
 func arm_held_input_guard(accept_held: bool, mouse_held: bool) -> void:

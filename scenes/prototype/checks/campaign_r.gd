@@ -946,6 +946,7 @@ func _run() -> void:
 	)
 
 	# Stepping _physics_process while Game Over is open must not move enemies or open duplicate popups
+	expect(result_popup.title.text == "Game Over", "Final depletion clearly says Game Over")
 	_tick(0.5)
 	var enemy_pos_after_tick: Vector3 = arena.director.enemies[0].position if not arena.director.enemies.is_empty() else Vector3.ZERO
 	expect(

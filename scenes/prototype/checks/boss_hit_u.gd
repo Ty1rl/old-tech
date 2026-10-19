@@ -1,5 +1,5 @@
 extends SceneTree
-const AdaptedAim = preload("res://scenes/prototype/checks/boss_aim_adapter_u.gd")
+const Aim = preload("res://scenes/prototype/aim_assist.gd")
 var checks := 0
 var failures: Array[String] = []
 var arena: Node3D
@@ -56,19 +56,35 @@ func run() -> void:
 				shoot(arena.floor_aim(pixel))
 				if boss.pair_progress == 1: edge_hits += 1
 				else: unadapted_edge_misses.append({"player_x":player_x,"angle":angle,"offset":str(offset)})
-				# Check the exact proposed one-call camera adapter without editing
-				# another owner's AimAssist. Aim remains on the clicked surface.
+				# Exercise the production camera adapter at actual visible edges.
 				reset(angle)
-				var surface: Variant = AdaptedAim.target(pixel,arena.player.camera,[boss],2,arena.player.position)
+				var surface: Variant = Aim.target(pixel,arena.player.camera,[boss],2,arena.player.position)
 				var adapted: Vector3 = surface if surface != null else arena.floor_aim(pixel)
 				shoot(adapted)
 				expect(boss.pair_progress == 1, "Visible A center/edge with exact surface adapter from player %.0f angle %.2f offset%s" % [player_x,angle,offset])
 				if boss.pair_progress == 1: integrated_edge_hits += 1
+	expect(edge_hits == 75, "All visible corner shots pass through the production arena aiming path")
 	arena.player.position = Vector3(0,0,6)
 	reset()
+	var neighbor: CombatPatternEnemy = arena.director.spawn(&"sequence_boss", boss.position + Vector3(0,0,.2))
+	neighbor.facing = boss.facing
+	neighbor._update_visual_facing()
+	var overlap_pixel: Vector2 = arena.player.camera.unproject_position(boss.valve_world_position(0))
+	var camera: Camera3D = arena.player.camera
+	var first_surface: Variant = boss.visible_flash_aim(camera.project_ray_origin(overlap_pixel), camera.project_ray_normal(overlap_pixel))
+	var second_surface: Variant = neighbor.visible_flash_aim(camera.project_ray_origin(overlap_pixel), camera.project_ray_normal(overlap_pixel))
+	expect(first_surface != null and second_surface != null, "Overlap fixture points at both visible sockets")
+	if first_surface != null and second_surface != null:
+		var closest: Vector3 = first_surface if camera.global_position.distance_squared_to(first_surface) < camera.global_position.distance_squared_to(second_surface) else second_surface
+		var expected := Vector3(closest.x, 0, closest.z)
+		for roster: Array in [[boss,neighbor],[neighbor,boss]]:
+			var selected: Variant = Aim.target(overlap_pixel,camera,roster,2,arena.player.position)
+			expect(selected != null and selected.is_equal_approx(expected), "Overlapping sockets choose the front surface regardless of roster order")
+	neighbor.health = 0
+	arena.director._prune_dead_enemies()
 	var away: Vector2 = arena.player.camera.unproject_position(boss.valve_world_position(0)) + Vector2(150,0)
 	expect(boss.visible_flash_aim(arena.player.camera.project_ray_origin(away),arena.player.camera.project_ray_normal(away)) == null, "Surface adapter rejects pixels away from shown socket")
-	expect(AdaptedAim.target(away,arena.player.camera,[boss],2,arena.player.position) == null, "Proposed integration does not increase arbitrary snap range")
+	expect(Aim.target(away,arena.player.camera,[boss],2,arena.player.position) == null, "Integration does not increase arbitrary snap range")
 	for angle in [0.0, PI/4, PI/2, PI]:
 		reset(angle)
 		ray(boss.valve_world_position(1))
@@ -166,5 +182,5 @@ func run() -> void:
 	root.get_node("AudioManager").stop_dialogue();root.get_node("AudioManager").set_music_context(&"intro")
 	arena.feedback.reset_state();arena.queue_free()
 	await process_frame;await create_timer(.3).timeout
-	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures,"projected_edge_hits_without_adapter":edge_hits,"projected_edge_hits_with_adapter":integrated_edge_hits,"projected_edge_samples":75,"external_aim_adapter_needed":unadapted_edge_misses}))
+	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures,"projected_pipeline_hits":edge_hits,"explicit_adapter_hits":integrated_edge_hits,"projected_edge_samples":75,"pipeline_misses":unadapted_edge_misses}))
 	quit(0 if failures.is_empty() else 1)

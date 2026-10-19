@@ -29,7 +29,7 @@ enable **Embed options > Frame options > SharedArrayBuffer support** before
 uploading the ZIP. Local hosting needs cross-origin isolation headers too.
 The existing **Web** preset remains available without that hosting requirement.
 
-Browser speech is prepared on the loading screen. Web Threaded streams effects
-and music through Godot's mixer and limiter, with a 50 ms requested audio buffer.
-The single-threaded Web preset keeps browser-native effects and a larger music
+Web Threaded streams speech, effects and music through Godot's mixer and limiter,
+with a 50 ms requested audio buffer. The single-threaded Web preset prepares
+browser-native speech and effects on the loading screen and keeps a larger music
 buffer. Desktop playback is unchanged.

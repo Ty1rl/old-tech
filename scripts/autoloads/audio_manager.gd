@@ -51,15 +51,15 @@ func _ready() -> void:
 	get_tree().root.close_requested.connect(request_quit)
 
 func configure_playback_types(for_web: bool = OS.has_feature("web")) -> void:
-	web_sample_voice = for_web
+	web_sample_voice = for_web and not OS.has_feature("web_threaded")
 	if is_instance_valid(voice):
-		voice.playback_type = AudioServer.PLAYBACK_TYPE_SAMPLE if for_web else AudioServer.PLAYBACK_TYPE_STREAM
+		voice.playback_type = AudioServer.PLAYBACK_TYPE_SAMPLE if web_sample_voice else AudioServer.PLAYBACK_TYPE_STREAM
 	if is_instance_valid(music):
 		music.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 
 
 func prepare_web_samples() -> Dictionary:
-	if not OS.has_feature("web"):
+	if not OS.has_feature("web") or OS.has_feature("web_threaded"):
 		return {}
 	# Web Sample playback decodes a whole clip on its first play. Do that on
 	# the loading screen, one clip per frame, instead of during a shot or hit.
@@ -68,10 +68,9 @@ func prepare_web_samples() -> Dictionary:
 	for variants: Array in library.clips.values():
 		for stream: AudioStream in variants:
 			streams.append(stream)
-	if not OS.has_feature("web_threaded"):
-		var combat := load("res://audio/combat/palette.tres") as CombatAudioLibrary
-		for cue: CombatAudioCue in combat.cues:
-			streams.append(cue.stream)
+	var combat := load("res://audio/combat/palette.tres") as CombatAudioLibrary
+	for cue: CombatAudioCue in combat.cues:
+		streams.append(cue.stream)
 	var prepared := 0
 	var decoded_seconds := 0.0
 	var longest_decode_usec := 0

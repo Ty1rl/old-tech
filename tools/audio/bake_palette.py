@@ -92,9 +92,9 @@ def build():
     for name in ['ring_launch','ring_return','flash_fire','flash_charged','flash_ready','pierce_hit','cone_pulse','hit','cable_cut','vent','core_break','repair_step','repair_full','room_open','player_hurt','recovery_confirm','ui_click']:
         responsive=name in ['repair_step','repair_full','recovery_confirm','ui_click']
         priority=5 if name in ['player_hurt','recovery_confirm','repair_full'] else (4 if name in ['core_break','room_open','cable_cut','flash_charged'] else 2)
-        gain={'ring_launch':-15,'ring_return':-18,'cable_cut':-14,'hit':-19,'flash_fire':-16,'flash_charged':-12,'flash_ready':-16,'pierce_hit':-15,'cone_pulse':-18,'vent':-17}.get(name,-10 if priority>=4 else -14)
+        gain={'ring_launch':-15,'ring_return':-18,'cable_cut':-14,'hit':-19,'flash_fire':-19,'flash_charged':-15,'flash_ready':-16,'pierce_hit':-15,'cone_pulse':-18,'vent':-17}.get(name,-10 if priority>=4 else -14)
         cue(name,gain=gain,priority=priority,responsive=responsive,cooldown=.08 if responsive else .10,effect=visual.get(name,''))
-    cue('flash_pierce','flash_charged',gain=-12,priority=4,effect='flash_fire')
+    cue('flash_pierce','flash_charged',gain=-15,priority=4,effect='flash_fire')
     cue('hostile_warning','relay_warning',gain=-15,priority=4,cooldown=.65,effect='hostile_warning')
     cue('hostile_fire','relay_attack',gain=-18,priority=3,effect='hostile_fire')
     for name in ['ring_loop','charge_loop','cone_loop','clock_loop','scrub_older','scrub_newer']:
@@ -102,7 +102,7 @@ def build():
     kinds={'target':'relay','swarmer':'pack','brute':'shield','skirmisher':'relay','warden':'shield','ranged':'relay','blue':'cable','yellow':'glass','orange':'steam','side_guard':'shield','front_guard':'shield','loop':'cable','zigzag':'cable','pair':'glass','loop_boss':'boss','sequence_boss':'boss','final_boss':'boss'}
     for i,(kind,family) in enumerate(kinds.items()):
         for event in ['warning','attack','hurt','death']:
-            cue(f'enemy_{kind}_{event}',f'{family}_{event}',gain={'warning':-15,'attack':-18,'hurt':-20,'death':-18}[event],priority=4 if event=='warning' else 2,cooldown={'warning':.70,'attack':.24,'hurt':.32,'death':.35}[event],pitch=round(.82+i*.025,3))
+            cue(f'enemy_{kind}_{event}',f'{family}_{event}',gain={'warning':-18,'attack':-21,'hurt':-23,'death':-21}[event],priority=4 if event=='warning' else 2,cooldown={'warning':.70,'attack':.24,'hurt':.32,'death':.35}[event],pitch=round(.82+i*.025,3))
     cue('emergency_start',priority=5,responsive=True,gain=-12,cooldown=.5)
     cue('time_low_loop',responsive=True,gain=-28)
     for gesture in ['spin','connect','trace']:

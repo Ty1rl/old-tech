@@ -246,10 +246,11 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 	_update_warden_visuals()
 	return result
 
-func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> void:
+func step_enemy(world_delta: float, player: Node3D, neighbors: Array = [], cohesion: Vector3 = Vector3.ZERO) -> void:
 	if not handles(kind):
-		super.step_enemy(world_delta, player, neighbors)
+		super.step_enemy(world_delta, player, neighbors, cohesion)
 		return
+	if world_delta <= 0 or (is_instance_valid(player) and not player.can_act): navigation.suspend_avoidance()
 	if health <= 0 or world_delta <= 0 or (is_instance_valid(player) and not player.can_act): return
 	if not pattern_open and window_timer > 0:
 		window_timer = maxf(0, window_timer - world_delta)
@@ -259,7 +260,7 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> vo
 	var before := position
 	var locked_facing := facing
 	var locked := attack_phase != &"approach"
-	super.step_enemy(world_delta, player, neighbors)
+	super.step_enemy(world_delta, player, neighbors, cohesion)
 	if is_instance_valid(player) and not player.can_act: return
 	if locked: facing = locked_facing
 	var speed := position.distance_to(before) / world_delta

@@ -183,8 +183,9 @@ func advance(world_delta: float, nodes: Array[Node3D], player: Node3D) -> Dictio
 	return holds
 
 
-func cohere(dt: float, nodes: Array[Node3D], cover: RefCounted, holds: Dictionary = {}) -> void:
-	if dt <= 0: return
+func cohesion(dt: float, nodes: Array[Node3D], holds: Dictionary = {}) -> Dictionary:
+	var biases := {}
+	if dt <= 0: return biases
 	var by_id := {}
 	for node in nodes:
 		if is_instance_valid(node) and node.health > 0: by_id[int(node.combat_id())] = node
@@ -207,10 +208,9 @@ func cohere(dt: float, nodes: Array[Node3D], cover: RefCounted, holds: Dictionar
 			var toward: Vector3 = center + cohort.offsets[i] - node.position
 			var forward: Vector3 = node.facing
 			toward -= forward * toward.dot(forward)
-			var active_dt := maxf(0, dt - float(holds.get(int(node.combat_id()), 0.0)))
-			var correction := toward.limit_length(0.35 * minf(active_dt, float(cohort.window)) * clampf(float(cohort.window) / OPPORTUNITY_SECONDS, 0, 1))
-			if cover == null or not cover.clip_segment(node.position, node.position + correction, float(node.movement_radius())).blocked:
-				node.position += correction
+			if dt - float(holds.get(int(node.combat_id()), 0.0)) <= 0: continue
+			biases[int(node.combat_id())] = toward.limit_length(.35 * clampf(float(cohort.window) / OPPORTUNITY_SECONDS, 0, 1))
+	return biases
 
 
 func approach_scale(id: int) -> float:

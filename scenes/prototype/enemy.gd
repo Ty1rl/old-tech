@@ -8,6 +8,9 @@ const Tuning = preload("res://scenes/prototype/tuning.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 const WardenVisual = preload("res://scenes/prototype/warden_visual.gd")
 const PartVisual = preload("res://scenes/prototype/part_visual.gd")
+const NavigationScene = preload("res://scenes/navigation/enemy_navigation.tscn")
+var navigation: EnemyNavigation
+
 const CreatureVisual = preload("res://scenes/prototype/creature_visual.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
 const MAX_KNOCKBACK_SPEED := 32.0
@@ -78,11 +81,22 @@ var hp_bar_material: StandardMaterial3D
 var feedback_label: Label3D
 
 
+func _ready() -> void:
+	_ensure_navigation()
+
+
+func _ensure_navigation() -> void:
+	if navigation == null:
+		navigation = NavigationScene.instantiate()
+		add_child(navigation)
+
+
 func combat_id() -> int:
 	return rewind_id
 
 
 func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> void:
+	_ensure_navigation()
 	if cover == null:
 		cover = CoverScript.new()
 	if orbit_seed > 0:
@@ -120,6 +134,7 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 		facing = to_origin.normalized()
 	else:
 		facing = Vector3(0.0, 0.0, 1.0)
+	navigation.reset_intent(position)
 	_build_visuals()
 	_update_visual_facing()
 	_update_health_visuals()
@@ -178,6 +193,7 @@ func capture_state() -> Dictionary:
 		"rewind_id": int(rewind_id),
 		"kind": String(kind),
 		"position": position,
+		"navigation_intent": navigation.intent if navigation != null else position,
 		"facing": facing,
 		"health": float(health),
 		"contact_cooldown": float(contact_cooldown),
@@ -208,6 +224,7 @@ func capture_state() -> Dictionary:
 
 
 func restore_state(data: Dictionary) -> void:
+	_ensure_navigation()
 	if is_instance_valid(part_visual): part_visual.foot_plant.reset()
 	if cover == null:
 		cover = CoverScript.new()
@@ -227,6 +244,7 @@ func restore_state(data: Dictionary) -> void:
 	rewind_id = maxi(1, int(data.get("rewind_id", data.get("id", rewind_id))))
 	var raw_pos: Vector3 = data.get("position", position)
 	position = _resolve_cover_overlap(_clamp_to_arena(Vector3(raw_pos.x, 0.0, raw_pos.z)))
+	navigation.reset_intent(data.get("navigation_intent", position))
 	facing = data.get("facing", facing)
 	health = clampf(float(data.get("health", max_health)), 0.0, max_health)
 	contact_cooldown = maxf(0.0, float(data.get("contact_cooldown", data.get("contact_timer", 0.0))))
@@ -697,19 +715,21 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 	return last_hit_result
 
 
-func step_enemy(world_delta: float, player: Node3D, neighbors: Array = []) -> void:
+func step_enemy(world_delta: float, player: Node3D, neighbors: Array = [], cohesion: Vector3 = Vector3.ZERO) -> void:
+	if world_delta <= 0 or (is_instance_valid(player) and not player.can_act): navigation.suspend_avoidance()
 	if is_instance_valid(player) and not player.can_act: return
 	var before := position
-	_step_enemy(world_delta, player, neighbors)
+	_step_enemy(world_delta, player, neighbors, cohesion)
 	if is_instance_valid(player) and not player.can_act: return
 	if is_instance_valid(part_visual) and world_delta > 0 and health > 0:
 		var speed := position.distance_to(before) / world_delta
 		part_visual.step_visual(world_delta, speed, stagger_timer > 0, flash_timer > 0, attack_phase)
 
 
-func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
+func _step_enemy(world_delta: float, player: Node3D, neighbors: Array, cohesion: Vector3) -> void:
 	if health <= 0.0:
 		return
+	navigation.idle()
 	hurt_cue_timer = maxf(0, hurt_cue_timer - maxf(0, world_delta))
 	if mechanism() != &"" and world_delta > 0.0:
 		shield_heat = maxf(0.0, shield_heat - world_delta * float(Tuning.MATCHUPS.heat_decay))
@@ -764,17 +784,18 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 	var dist := to_player.length()
 	var dir_to_player := to_player / dist if dist > 0.0001 else facing
 
-	var move_dir := Vector3.ZERO
+	var intent := self_xz
+	var wants_move := false
 	match kind:
 		&"swarmer":
 			facing = dir_to_player
-			var steered := _steer_around_cover(self_xz, dir_to_player, player_xz)
-			var sep := _compute_separation(neighbors, 1.15)
-			move_dir = (steered + sep * 0.55).normalized() if (steered + sep * 0.55).length_squared() > 0.0001 else steered
+			intent = player_xz
+			wants_move = true
 		&"brute", &"warden":
 			# Brute turns steadily toward the player so its sides/rear can be flanked
 			facing = _rotate_xz_toward(facing, dir_to_player, (1.15 if kind == &"warden" else 2.4) * active_ai_delta)
-			move_dir = _steer_around_cover(self_xz, dir_to_player, player_xz)
+			intent = player_xz
+			wants_move = true
 		&"skirmisher":
 			facing = dir_to_player
 			skirmish_timer += active_ai_delta
@@ -789,42 +810,60 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array) -> void:
 					skirmish_strafe_sign = -skirmish_strafe_sign
 
 			if skirmish_phase == &"commit":
-				move_dir = _steer_around_cover(self_xz, dir_to_player, player_xz)
+				intent = player_xz
+				wants_move = true
 			else:
 				# Keep moderate distance within cone range (~3.6 units) while sidestepping; never evade faster than player
 				var tangent := Vector3(-dir_to_player.z * skirmish_strafe_sign, 0.0, dir_to_player.x * skirmish_strafe_sign)
 				var radial_weight := clampf((dist - SKIRMISH_PREFERRED_DIST) * 0.75, -0.35, 1.0)
 				var combined := dir_to_player * radial_weight + tangent * 0.75
 				var raw_dir := combined.normalized() if combined.length_squared() > 0.0001 else dir_to_player
-				move_dir = _steer_around_cover(self_xz, raw_dir, self_xz + raw_dir * 3.0)
+				intent = self_xz + raw_dir * 3.0
+				wants_move = true
 		&"ranged":
 			if attack_phase == &"approach":
 				_track_approach_aim(dir_to_player, active_ai_delta)
 				if dist > 8.0:
-					move_dir = _steer_around_cover(self_xz, dir_to_player, player_xz)
+					intent = player_xz
+					wants_move = true
 				elif dist < 4.0:
-					move_dir = -dir_to_player
+					intent = self_xz - dir_to_player * 2
+					wants_move = true
 
 	if mechanism() != &"":
 		if attack_phase == &"approach":
 			_track_approach_aim(dir_to_player, active_ai_delta)
-		var destination := pack_target(player_xz, neighbors)
-		var pack_direction := destination - self_xz
-		var blend := float(Tuning.PACK.strength) if mechanism() in [&"cut", &"open"] else (.45 if mechanism() == &"shot" else 0.0)
-		var approach := dir_to_player.lerp(pack_direction.normalized(), blend)
-		var separation := _compute_separation(neighbors, radius * 2.0 + 0.15)
-		approach += separation * float(Tuning.PACK.separation)
-		move_dir = _steer_around_cover(self_xz, approach.normalized(), destination)
-		if attack_phase != &"approach":
-			move_dir = Vector3.ZERO
+		intent = player_xz
+		# Cohesion shapes open-floor intent only. An exhibit detour always routes
+		# toward the player, so a pack slot inside a cabinet cannot become a refuge.
+		if cover == null or not cover.clip_segment(self_xz, player_xz, movement_radius()).blocked:
+			var destination := pack_target(player_xz, neighbors)
+			var pack_direction := destination - self_xz
+			var blend := float(Tuning.PACK.strength) if mechanism() in [&"cut", &"open"] else (.45 if mechanism() == &"shot" else 0.0)
+			var approach := dir_to_player.lerp(pack_direction.normalized(), blend)
+			intent = self_xz + approach.normalized() * dist
+		wants_move = attack_phase == &"approach"
 
 	var stop_dist := radius + PLAYER_CONTACT_RADIUS - 0.04
-	if dist > stop_dist and move_dir.length_squared() > 0.0001:
-		# Stable six-percent stride variance opens gentle gaps without timers or
-		# changing configured speed/attack balance. No corrections touch raw strokes.
-		var stride := 1.0 + float(posmod(combat_id() * 17, 7) - 3) * .02 if kind in [&"blue", &"yellow"] else 1.0
-		var step_len := move_speed * stride * active_ai_delta
-		position = _move_step_cover_safe(self_xz, move_dir * step_len, false)
+	if dist > stop_dist and wants_move:
+		var route := navigation.next_direction(active_ai_delta, intent, movement_radius())
+		if route.length_squared() > .001:
+			# Local separation/cohesion can bend a valid route slightly; neither
+			# computes an alternate path or owns a second actor displacement.
+			var separation := _compute_separation(neighbors, radius * 2 + .65)
+			var bias := separation * float(Tuning.PACK.separation) + cohesion / maxf(.1, move_speed)
+			bias -= route * bias.dot(route)
+			var heading := (route + bias.limit_length(.65)).normalized()
+			var stride := 1.0 + float(posmod(combat_id() * 17, 7) - 3) * .02 if kind in [&"blue", &"yellow"] else 1.0
+			var speed := move_speed * stride
+			var candidate := self_xz + heading * speed * active_ai_delta
+			if not navigation.floor_contains(candidate) or (cover != null and cover.clip_segment(self_xz, candidate, movement_radius()).blocked):
+				heading = route
+			var delta := navigation.avoid_velocity(heading * speed, active_ai_delta, movement_radius(), neighbors.size() > 1) * active_ai_delta
+			if navigation.maps.contains_floor(self_xz + delta):
+				var covered := _move_step_cover_safe(self_xz, delta, false) - self_xz
+				covered *= _crowd_clear_fraction(self_xz, covered, neighbors)
+				position = self_xz + covered
 
 	# Recompute XZ distance for contact damage (suppressed while staggered)
 	var post_xz := Vector3(position.x, 0.0, position.z)
@@ -1098,50 +1137,23 @@ func _move_step_cover_safe(start_pos: Vector3, delta_vec: Vector3, is_knockback:
 	return _resolve_cover_overlap(_clamp_to_arena(safe_pos))
 
 
-func _steer_around_cover(self_xz: Vector3, desired_dir: Vector3, goal_xz: Vector3) -> Vector3:
-	if cover == null or desired_dir.length_squared() <= 0.0001:
-		return desired_dir
-	var dist_to_goal := self_xz.distance_to(goal_xz)
-	var lookahead := minf(maxf(dist_to_goal, 0.5), 2.6)
-	var probe: Dictionary = cover.clip_segment(self_xz, self_xz + desired_dir * lookahead, movement_radius() + 0.04)
-	if not probe.get("blocked", false):
-		return desired_dir
-
-	# Evaluate expanded corners of the two cover rectangles to pick a clean detour around the box
-	var best_dir := Vector3.ZERO
-	var best_cost := INF
-	for rect: Rect2 in cover.rectangles:
-		var wp_rect := rect.grow(movement_radius() + 0.32)
-		var corners: Array[Vector3] = [
-			Vector3(wp_rect.position.x, 0.0, wp_rect.position.y),
-			Vector3(wp_rect.end.x, 0.0, wp_rect.position.y),
-			Vector3(wp_rect.end.x, 0.0, wp_rect.end.y),
-			Vector3(wp_rect.position.x, 0.0, wp_rect.end.y),
-		]
-		for c in corners:
-			var d_self := self_xz.distance_to(c)
-			if d_self < 0.18:
-				continue
-			var to_c: Dictionary = cover.clip_segment(self_xz, c, movement_radius() + 0.01)
-			if to_c.get("blocked", false):
-				continue
-			var to_goal: Dictionary = cover.clip_segment(c, goal_xz, movement_radius() + 0.01)
-			var penalty := 4.0 if to_goal.get("blocked", false) else 0.0
-			var cost := d_self + c.distance_to(goal_xz) + penalty
-			if cost < best_cost:
-				best_cost = cost
-				best_dir = (c - self_xz) / d_self
-
-	if best_dir.length_squared() > 0.0001:
-		return best_dir
-
-	# Fallback tangent slide along hit normal
-	var n: Vector3 = probe.get("normal", Vector3.ZERO)
-	var t1 := Vector3(-n.z, 0.0, n.x)
-	var t2 := -t1
-	var p1 := (self_xz + t1).distance_squared_to(goal_xz)
-	var p2 := (self_xz + t2).distance_squared_to(goal_xz)
-	return t1 if p1 <= p2 else t2
+func _crowd_clear_fraction(start: Vector3, delta: Vector3, neighbors: Array) -> float:
+	var fraction := 1.0
+	var a := delta.length_squared()
+	if a <= .0000001: return fraction
+	for other in neighbors:
+		if other == self or not is_instance_valid(other) or other.health <= 0: continue
+		var offset: Vector3 = start - Vector3(other.position.x, 0, other.position.z)
+		var gap: float = (radius + float(other.radius)) * .98
+		var c := offset.length_squared() - gap * gap
+		if offset.dot(delta) >= -.00001: continue # Already overlapping bodies may separate.
+		if c <= 0: return 0.0
+		var b := 2 * offset.dot(delta)
+		var discriminant := b * b - 4 * a * c
+		if discriminant < 0: continue
+		var entry := (-b - sqrt(discriminant)) / (2 * a)
+		if entry >= 0 and entry <= 1: fraction = minf(fraction, maxf(0, entry - .002))
+	return fraction
 
 
 func _compute_separation(neighbors: Array, desired_gap: float) -> Vector3:
@@ -1152,8 +1164,14 @@ func _compute_separation(neighbors: Array, desired_gap: float) -> Vector3:
 			continue
 		var diff := self_xz - Vector3(other.position.x, 0.0, other.position.z)
 		var d := diff.length()
-		if d > 0.0001 and d < desired_gap:
-			push += (diff / d) * ((desired_gap - d) / desired_gap)
+		if d > .0001 and d < desired_gap:
+			push += (diff / d) * pow((desired_gap - d) / desired_gap, 2)
+		elif d <= .0001:
+			# Stable tie break for coincident arrivals, not random side flipping.
+			var low := mini(combat_id(), int(other.combat_id()))
+			var high := maxi(combat_id(), int(other.combat_id()))
+			var angle := float(posmod(low * 31 + high * 17, 97)) * TAU / 97
+			push += Vector3(cos(angle), 0, sin(angle)) * (1 if combat_id() == low else -1)
 	return push
 
 

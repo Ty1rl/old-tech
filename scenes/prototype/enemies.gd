@@ -8,6 +8,10 @@ const Tuning = preload("res://scenes/prototype/tuning.gd")
 const PatternEnemy = preload("res://scenes/prototype/pattern_enemy.gd")
 const EnemyNode = preload("res://scenes/prototype/enemy.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
+const NavigationScene = preload("res://scenes/navigation/exhibit_navigation.tscn")
+var navigation: ExhibitNavigation
+var _movement_time: TimeController
+
 const Flow = preload("res://scenes/prototype/flow.gd")
 const MAX_LIVE_ENEMIES := 32
 const MAX_PROJECTILES := 24
@@ -86,6 +90,32 @@ const WAVE_TEMPLATES: Array[Array] = [
 ]
 
 
+func _ready() -> void:
+	if cover == null: cover = CoverScript.new()
+	navigation = NavigationScene.instantiate()
+	navigation.cover = cover
+	add_child(navigation)
+
+
+func _bind_movement_time(player: Node3D) -> void:
+	if not is_instance_valid(player): return
+	var controller: TimeController = player.time_controller
+	if controller == _movement_time: return
+	if is_instance_valid(_movement_time):
+		_movement_time.emergency_started.disconnect(_on_movement_emergency)
+		_movement_time.attempt_exhausted.disconnect(_suspend_navigation)
+	_movement_time = controller
+	if controller != null:
+		controller.emergency_started.connect(_on_movement_emergency)
+		controller.attempt_exhausted.connect(_suspend_navigation)
+
+func _on_movement_emergency(_charges: int) -> void: _suspend_navigation()
+
+func _suspend_navigation() -> void:
+	for enemy: CombatEnemy in enemies:
+		if is_instance_valid(enemy): enemy.navigation.suspend_avoidance()
+
+
 func _total_scheduled_waves() -> int:
 	var duration := float(Tuning.ENCOUNTER.duration)
 	var interval := maxf(0.1, float(Tuning.ENCOUNTER.interval))
@@ -94,7 +124,13 @@ func _total_scheduled_waves() -> int:
 
 func step(world_delta: float, player: Node3D) -> void:
 	var revision := _world_revision
+	_bind_movement_time(player)
+	if world_delta <= 0 or (is_instance_valid(player) and not player.can_act): _suspend_navigation()
 	if _suspend_for_player(player): return
+	if world_delta > 0:
+		var previous_navigation := navigation.generation
+		navigation.sync_region()
+		if navigation.generation != previous_navigation: _suspend_navigation()
 	_prune_dead_enemies()
 	_discard_orphaned_projectiles()
 	_step_projectiles(maxf(0, world_delta), player)
@@ -115,6 +151,7 @@ func step(world_delta: float, player: Node3D) -> void:
 		spawn_formation(burst.formation, burst.kinds, player, burst.seed)
 		snapshot = enemies.duplicate()
 	var holds: Dictionary = flow.advance(world_delta, snapshot, player)
+	var cohesion: Dictionary = flow.cohesion(world_delta, snapshot, holds)
 	for enemy in snapshot:
 		if is_instance_valid(enemy) and enemy.health > 0.0 and (not is_instance_valid(player) or player.can_act):
 			var hold := float(holds.get(int(enemy.combat_id()), 0.0))
@@ -127,10 +164,9 @@ func step(world_delta: float, player: Node3D) -> void:
 			if world_delta - hold > 0:
 				var speed := float(enemy.move_speed)
 				enemy.move_speed = speed * flow.approach_scale(int(enemy.combat_id()))
-				enemy.step_enemy(world_delta - hold, player, snapshot)
+				enemy.step_enemy(world_delta - hold, player, snapshot, cohesion.get(int(enemy.combat_id()), Vector3.ZERO))
 				enemy.move_speed = speed
 			if revision != _world_revision or _suspend_for_player(player): return
-	flow.cohere(world_delta, snapshot, cover, holds)
 	_draw_arrivals()
 	_prune_dead_enemies()
 
@@ -184,7 +220,7 @@ func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
 		0.0,
 		clampf(spawn_position.z, -limit, limit)
 	)
-	_bind_enemy_cues(enemy)
+	_bind_enemy(enemy)
 	add_child(enemy)
 	enemy.configure(kind, clamped_pos, _spawn_counter)
 	enemies.append(enemy)
@@ -387,7 +423,7 @@ func restore_state(data: Dictionary) -> void:
 			var entry_pos: Vector3 = entry.get("position", Vector3.ZERO)
 			enemy.configure(entry_kind, entry_pos, eid)
 
-		_bind_enemy_cues(enemy)
+		_bind_enemy(enemy)
 		enemy.restore_state(entry)
 		restored_enemies.append(enemy)
 
@@ -449,7 +485,9 @@ func launch_projectile(origin: Vector3, direction: Vector3, damage: float, speed
 
 # Jam-1 connects this signal to CombatFeedback.enemy_cue. No audio implementation,
 # replayed barks or private feedback lookup is needed for these semantic events.
-func _bind_enemy_cues(enemy: CombatEnemy) -> void:
+func _bind_enemy(enemy: CombatEnemy) -> void:
+	enemy._ensure_navigation()
+	enemy.navigation.maps = navigation
 	if not enemy.enemy_event.is_connected(_on_enemy_event):
 		enemy.enemy_event.connect(_on_enemy_event)
 

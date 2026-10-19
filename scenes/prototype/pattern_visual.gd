@@ -38,6 +38,8 @@ var body_color: Color = STONE
 var trim_color: Color = STONE.darkened(0.25)
 var accent_color: Color = Color("6d7894")
 var chassis_extents: Vector3 = Vector3(1.45, 2.27, 1.12)
+# Per-instance presentation state only; shared meshes/materials stay immutable.
+var _last_sync_state: Array = []
 
 static func palette_for(identity: StringName, is_boss: bool) -> Dictionary:
 	if not is_boss:
@@ -158,6 +160,7 @@ func rod(parent: Node3D, a: Vector3, b: Vector3, thickness: float, color: Color)
 	return node
 
 func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage := 0) -> void:
+	_last_sync_state.clear()
 	lit_valve = mat(YELLOW,true)
 	dim_valve = mat(Color("343b41"),true)
 	pattern = mode
@@ -345,6 +348,11 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 		box(warning, Vector3(0, .035, -1.4), Vector3(2.2, .04, .8), Color("e55d55"))
 
 func sync(mask: int, opened: bool, bare: bool, progress: int, timer: float, phase: int, attack: StringName, alive: bool) -> void:
+	# Timer does not drive this discrete presentation. Pose/turning continue at
+	# their existing cadence; only identical child-property writes are skipped.
+	var state := [pattern, boss, mask, opened, bare, progress, phase, attack, alive, instruction_visible]
+	if state == _last_sync_state: return
+	_last_sync_state = state
 	for i in range(links.size()):
 		links[i].visible = not bool(mask & (1 << i)) and alive
 		link_labels[i].visible = false

@@ -111,18 +111,20 @@ def main():
             browser = p.chromium.launch(
                 executable_path=str(BROWSER) if BROWSER.exists() else None,
                 headless=True,
-                args=['--autoplay-policy=no-user-gesture-required'],
+                args=['--disable-dev-shm-usage', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
             )
-            context = browser.new_context(viewport={'width': 1366, 'height': 820})
+            context = browser.new_context(viewport={'width': 1280, 'height': 800})
             context.add_init_script(PROBE)
             page = context.new_page()
             page.on('console', lambda m: console.append({'type': m.type, 'text': m.text}))
             page.on('pageerror', lambda e: errors.append(str(e)))
             page.goto(url, wait_until='domcontentloaded', timeout=45000)
-            proc = Path('/proc')
-            pids = [int(d.name) for d in proc.iterdir() if d.name.isdigit() and 'chrome-headless-shell' in (d / 'cmdline').read_bytes().decode(errors='ignore')]
-            root_pid = min(pids) if pids else None
+            control = browser.new_browser_cdp_session()
+            processes = control.send('SystemInfo.getProcessInfo')['processInfo']
+            root_pid = next((item['id'] for item in processes if item['type'] == 'browser'), None)
+            began = time.monotonic()
             for sec in range(args.seconds):
+                time.sleep(max(0, began + sec - time.monotonic()))
                 frame = pick_game_frame(page)
                 due = [a for a in actions if a.get('at') == sec]
                 if due:
@@ -133,7 +135,6 @@ def main():
                 if sample['browser_rss_bytes'] > args.max_rss_mb * 1024 * 1024:
                     failures.append(f'browser RSS exceeded {args.max_rss_mb} MiB at {sec}s: {sample["browser_rss_bytes"]}')
                     break
-                time.sleep(1)
             page.screenshot(path=str(args.out / 'final.png'))
             browser.close()
     finally:

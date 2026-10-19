@@ -6,6 +6,7 @@ signal repaired(tool: StringName, restored: float)
 const DEFAULT_SETTINGS: WeaponConditionSettings = preload("res://scenes/weapons/settings/weapon_condition.tres")
 const TOOLS: Array[StringName] = [&"ring", &"beam", &"cone"]
 var settings: WeaponConditionSettings
+var wear_scale := 1.0
 var repair_steps: int:
 	get: return clampi(settings.repair_steps, 1, 8)
 const EPS := 0.000001
@@ -70,19 +71,25 @@ func is_full(tool: StringName) -> bool:
 
 
 func can_use(tool: StringName, amount: float = EPS) -> bool:
-	return tool in TOOLS and repairing != tool and amount > 0.0 and remaining(tool) > 0.0 and remaining(tool) + EPS >= amount
+	return tool in TOOLS and repairing != tool and amount > 0.0 and remaining(tool) > 0.0 and remaining(tool) + EPS >= amount * _wear_multiplier(tool)
 
 
-# Returns actual capacity spent. Discrete shots must first call can_use(tool, 1).
-# Continuous tools use the returned fraction for damage/time on their final tick.
+# Returns usable shots/seconds, before difficulty wear. Continuous tools use
+# this fraction for damage on their final tick; faster wear must not boost damage.
+# Discrete shots must first call can_use(tool, 1).
 # Tools listed in training_protection accept positive spend without reducing remaining.
 func spend(tool: StringName, amount: float) -> float:
 	if tool not in TOOLS or repairing == tool or amount <= 0.0:
 		return 0.0
-	var spent := minf(remaining(tool), amount)
+	var scale := _wear_multiplier(tool)
+	var used := minf(remaining(tool) / scale, amount)
 	if not (tool in training_protection):
-		_remaining[String(tool)] = maxf(0.0, remaining(tool) - spent)
-	return spent
+		_remaining[String(tool)] = maxf(0.0, remaining(tool) - used * scale)
+	return used
+
+
+func _wear_multiplier(tool: StringName) -> float:
+	return 1.0 if tool in training_protection else maxf(.01, wear_scale)
 
 
 func begin_repair(tool: StringName) -> int:

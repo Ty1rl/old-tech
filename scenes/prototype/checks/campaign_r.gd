@@ -846,6 +846,7 @@ func _run() -> void:
 		var expected_windup := 0.25 if diff_mode == &"easy" else 0.20
 		arena.set_difficulty(diff_mode)
 		arena.enter_room(1)
+		expect(is_equal_approx(arena.equipment.wear_scale, 1.2 if diff_mode == &"easy" else 1.5), "%s weapon wear remains configured after room entry" % diff_mode)
 		arena.director.clear()
 		arena.mode = &"pressure"
 		arena._pending = 1

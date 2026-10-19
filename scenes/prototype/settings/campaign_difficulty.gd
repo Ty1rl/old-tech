@@ -24,6 +24,9 @@ const HARD_PATH := "res://scenes/prototype/settings/difficulty_hard.tres"
 @export var melee_reach_padding := 0.35
 @export var aim_turn_scale := 1.0
 
+@export_group("Equipment")
+@export_range(.1, 4.0, .05) var weapon_wear_scale := 1.0
+
 
 func melee_windup(base_seconds: float) -> float:
 	if melee_windup_seconds > 0.0:

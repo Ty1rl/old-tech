@@ -21,3 +21,4 @@ attack_windup_scale = 1.0
 melee_windup_seconds = 0.25
 melee_reach_padding = 0.35
 aim_turn_scale = 1.6
+weapon_wear_scale = 1.2

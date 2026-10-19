@@ -220,6 +220,8 @@ func set_difficulty(value: Variant) -> void:
 	difficulty_id = difficulty_spec.id
 	if is_instance_valid(director):
 		director.combat_difficulty = difficulty_spec
+	if equipment != null:
+		equipment.wear_scale = difficulty_spec.weapon_wear_scale
 
 
 func _room_definitions() -> Array[Dictionary]:
@@ -528,6 +530,7 @@ func enter_room(index: int) -> void:
 	super.reset_arena()
 	if is_instance_valid(director):
 		director.combat_difficulty = difficulty_spec
+	equipment.wear_scale = difficulty_spec.weapon_wear_scale
 	director.clear()
 	room = definitions[room_index].duplicate(true)
 	waves = room.waves.duplicate(true)

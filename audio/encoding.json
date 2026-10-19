@@ -337,6 +337,20 @@
       "encoded_sha256": "6a6a841ffa7b595b05d847df0e23051ca149bab66b728aae50d9fa67cad56c75",
       "encoded_bytes": 47276
     },
+    "audio/voice/tutorial/movement.mp3": {
+      "source_sha256": "0ff0a04a3fbda2c5df5bced13cd49ca52ee56ed2731bcb97b9aa18fcd58e47bc",
+      "source_bytes": 81720,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "9c5c1bd9c73aedf307c298c6578d197eddc93ecf88fd40d29e775ee7c1d765fb",
+      "encoded_bytes": 33164
+    },
     "audio/voice/tutorial/opening.mp3": {
       "source_sha256": "1d7e1c75353feb08100e1bbd9137851b59dd6166946d9630fe93b2160979cd37",
       "source_bytes": 102200,
@@ -436,8 +450,8 @@
       "encoded_bytes": 21356
     },
     "audio/voice/tutorial/rewind.mp3": {
-      "source_sha256": "0fdd9ae1dd14d7d7d52f9d9fba5ede347fcea3f709e30f63303175319cadd8c5",
-      "source_bytes": 93005,
+      "source_sha256": "6368f9648c473f95f11a6077bd8ffbc327fe2a3c8b2c5df8bb47a8b0bd15e842",
+      "source_bytes": 168656,
       "settings": [
         "-ac",
         "1",
@@ -446,8 +460,8 @@
         "-b:a",
         "64k"
       ],
-      "encoded_sha256": "c6065510dc5e5f3b89acb55c43603922e3ccda65c40727fc60df75db19060c5f",
-      "encoded_bytes": 38924
+      "encoded_sha256": "1973946ba3ae5db83bef244ec35d28d89bc7e11bef58049a41c4d6c2d5b66437",
+      "encoded_bytes": 76652
     },
     "audio/voice/tutorial/rewind_charges.mp3": {
       "source_sha256": "7ce0ff9c29ee467e00879aa5c8bf53cac98a8df400b0e5d55e6a9e275e6f9e6e",
@@ -504,6 +518,20 @@
       ],
       "encoded_sha256": "4d35144557a3baa98a30d05069c8bc6fc42f8b1ac011f1bbe874f6eaabc10c9e",
       "encoded_bytes": 59372
+    },
+    "audio/voice/tutorial/tool_switch.mp3": {
+      "source_sha256": "18d22ce1e2271cd88d649e6302188010c4413e28c8dddeb4613b908622149031",
+      "source_bytes": 90497,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "c4fe50473fc7685e6bea0da8d6bf4681030ea90e459dafa9fcb66a82f841401e",
+      "encoded_bytes": 37484
     },
     "audio/voice/tutorial/your_turn.mp3": {
       "source_sha256": "a5cb37e6cdfa7d1822881292d156e30d61e635e35f290625405f9b4be8deb1ae",

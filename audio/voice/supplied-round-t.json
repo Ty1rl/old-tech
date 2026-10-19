@@ -1,0 +1,84 @@
+{
+  "provenance": "Round T uploads supplied by Matt. Each game clip encoded once directly from original: mono32000Hz64kbps MP3; no trimming, normalization or voice effects. Other audio unchanged. Raw sources retained at shared root and copied to shared audio/archive/round-t with manifest.",
+  "tracks": [
+    {
+      "event": "tutorial.movement",
+      "source_upload": "mouse aims wasd moves.mp3",
+      "game_asset": "audio/voice/tutorial/movement.mp3",
+      "source_sha256": "0ff0a04a3fbda2c5df5bced13cd49ca52ee56ed2731bcb97b9aa18fcd58e47bc",
+      "source_bytes": 81720,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "9c5c1bd9c73aedf307c298c6578d197eddc93ecf88fd40d29e775ee7c1d765fb",
+      "encoded_bytes": 33164,
+      "archive": "audio/archive/round-t/mouse aims wasd moves.mp3",
+      "transcript": "Mouse aims. WASD moves."
+    },
+    {
+      "event": "tutorial.tool_switch",
+      "source_upload": "tab_one_two_three.mp3",
+      "game_asset": "audio/voice/tutorial/tool_switch.mp3",
+      "source_sha256": "18d22ce1e2271cd88d649e6302188010c4413e28c8dddeb4613b908622149031",
+      "source_bytes": 90497,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "c4fe50473fc7685e6bea0da8d6bf4681030ea90e459dafa9fcb66a82f841401e",
+      "encoded_bytes": 37484,
+      "archive": "audio/archive/round-t/tab_one_two_three.mp3",
+      "transcript": "Press Tab, one, two, or three; to select tools."
+    },
+    {
+      "event": "tutorial.rewind",
+      "source_upload": "new_reserve_runs_out.mp3",
+      "game_asset": "audio/voice/tutorial/rewind.mp3",
+      "source_sha256": "6368f9648c473f95f11a6077bd8ffbc327fe2a3c8b2c5df8bb47a8b0bd15e842",
+      "source_bytes": 168656,
+      "previous_generation": {
+        "source_sha256": "0fdd9ae1dd14d7d7d52f9d9fba5ede347fcea3f709e30f63303175319cadd8c5",
+        "source_bytes": 93005,
+        "settings": [
+          "-ac",
+          "1",
+          "-ar",
+          "32000",
+          "-b:a",
+          "64k"
+        ],
+        "encoded_sha256": "c6065510dc5e5f3b89acb55c43603922e3ccda65c40727fc60df75db19060c5f",
+        "encoded_bytes": 38924
+      },
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "1973946ba3ae5db83bef244ec35d28d89bc7e11bef58049a41c4d6c2d5b66437",
+      "encoded_bytes": 76652,
+      "archive": "audio/archive/round-t/new_reserve_runs_out.mp3",
+      "transcript": "When your reserve runs out, a rewind charge gives you another chance. Scroll down to choose an earlier moment. Press Enter to confirm.",
+      "previous_event": {
+        "event_id": "tutorial.rewind",
+        "file": "tutorial/rewind.mp3",
+        "trigger": "Lesson rewind: introduction/demonstration",
+        "original_upload": "tutorial/Emergency rewind.mp3",
+        "transcript": "",
+        "transcript_source": "Not transcribed; upload title only"
+      }
+    }
+  ]
+}

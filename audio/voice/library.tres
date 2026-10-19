@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="DialogueLibrary" load_steps=40 format=3]
+[gd_resource type="Resource" script_class="DialogueLibrary" load_steps=42 format=3]
 
 [ext_resource type="Script" path="res://scripts/audio/dialogue_library.gd" id="script"]
 [ext_resource type="AudioStream" path="res://audio/voice/tutorial/shot.mp3" id="v0"]
@@ -40,9 +40,14 @@
 [ext_resource type="AudioStream" path="res://audio/voice/narration/intro.mp3" id="v36"]
 [ext_resource type="AudioStream" path="res://audio/voice/tutorial/pickup.mp3" id="pickup"]
 
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/movement.mp3" id="movement"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/tool_switch.mp3" id="tool_switch"]
+
 [resource]
 script = ExtResource("script")
 clips = {
+&"tutorial.movement": [ExtResource("movement")],
+&"tutorial.tool_switch": [ExtResource("tool_switch")],
 &"tutorial.shot": [ExtResource("v0")],
 &"tutorial.charge": [ExtResource("v1")],
 &"tutorial.heat": [ExtResource("v2")],
@@ -75,6 +80,9 @@ clips = {
 &"narration.intro": [ExtResource("v36")],
 }
 transcripts = Dictionary[StringName, String]({
+&"tutorial.movement": "Mouse aims. WASD moves.",
+&"tutorial.tool_switch": "Press Tab, one, two, or three; to select tools.",
+&"tutorial.rewind": "When your reserve runs out, a rewind charge gives you another chance. Scroll down to choose an earlier moment. Press Enter to confirm.",
 &"narration.intro": "An ancient device has turned exhibits into monsters. Survive with cobbled-together old tech and time borrowed from your future self.",
 &"tutorial.time_meter": "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge.",
 &"tutorial.pickup": "Walk towards the new item."

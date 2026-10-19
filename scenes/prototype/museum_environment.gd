@@ -4,6 +4,7 @@ extends Node3D
 # Visual-only museum wrapper built from the teammate's assets in res://assets/modelWallsFloors/.
 # Existing arena floor and cover physics remain authoritative; no StaticBody3D or CollisionShape3D nodes are added.
 const Cover = preload("res://scenes/prototype/cover.gd")
+const FLOOR_SHADER := preload("res://scenes/rooms/museum_floor.gdshader")
 
 const FLOOR_SCENE := preload("res://assets/modelWallsFloors/floor.glb")
 const LEFT_WALL_DOUBLE_SCENE := preload("res://assets/modelWallsFloors/leftWallDouble.glb")
@@ -313,23 +314,9 @@ func _prepare_mesh(src_mesh: Mesh, flip_inside_out: bool, tint: Color, roughness
 				mat.albedo_color = tint
 				mat.roughness = roughness_val
 				if flatten_up_normals:
-					# Quiet stone grain; the teammate's original tile texture remains
-					# available in the imported scene, outside this combat wrapper.
-					var shader := Shader.new()
-					shader.code = """shader_type spatial;
-render_mode cull_disabled;
-uniform sampler2D floor_texture : source_color;
-uniform vec3 base_color = vec3(0.20, 0.22, 0.23);
-void fragment() {
-	float grain = fract(sin(dot(UV * 4096.0, vec2(12.9898, 78.233))) * 43758.5453);
-	ALBEDO = base_color + (grain - 0.5) * 0.012;
-	ROUGHNESS = 0.94;
-}
-"""
-					var floor_material := ShaderMaterial.new()
-					floor_material.shader = shader
-					floor_material.set_shader_parameter("floor_texture", mat.albedo_texture)
-					floor_material.set_shader_parameter("base_color", Vector3(0.20, 0.22, 0.23))
+					# Quiet continuous stone; keep the partner's original imported
+					# material intact outside this combat wrapper.
+					var floor_material := stone_material(Color(0.20, 0.22, 0.23))
 					_floor_shader_material = floor_material
 					out_mesh.surface_set_material(s, floor_material)
 				else:
@@ -338,6 +325,13 @@ void fragment() {
 			else:
 				out_mesh.surface_set_material(s, src_mat)
 	return out_mesh
+
+
+func stone_material(color: Color) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = FLOOR_SHADER
+	material.set_shader_parameter("base_color", Vector3(color.r, color.g, color.b))
+	return material
 
 
 func _spawn_mesh_piece(key: String, parent: Node3D, node_name: String, pos: Vector3, scale_vec: Vector3, rot_y_deg: float = 0.0) -> MeshInstance3D:

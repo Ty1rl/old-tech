@@ -22,6 +22,7 @@ const TOOL_PICKUP_SCENE := preload("res://scenes/rooms/tool_pickup_pedestal.tscn
 const WALL_BANNER_SCENE := preload("res://scenes/rooms/wall_banner.tscn")
 const EXIT_FLOOR_ARROW_SCENE := preload("res://scenes/rooms/exit_floor_arrow.tscn")
 const SURROUND_SCENE := preload("res://scenes/rooms/museum_surround.tscn")
+const GALLERY_EDGES_SCENE := preload("res://scenes/rooms/museum_gallery_edges.tscn")
 
 signal exit_state_changed(open: bool)
 signal room_completed(room_id: StringName)
@@ -359,6 +360,8 @@ func get_collider_world_rectangles(target_parent: Node3D) -> Array[Rect2]:
 func _ensure_room_roots() -> void:
 	if not has_node("MuseumSurround"):
 		add_child(SURROUND_SCENE.instantiate())
+	if not has_node("GalleryEdges"):
+		add_child(GALLERY_EDGES_SCENE.instantiate())
 	if floor_accents_root == null or not is_instance_valid(floor_accents_root):
 		floor_accents_root = Node3D.new()
 		floor_accents_root.name = "FloorAccents"
@@ -406,13 +409,13 @@ func _apply_floor_and_lighting(def: Dictionary, target_arena: Node3D) -> void:
 
 	var accents_inst := FLOOR_ACCENTS_SCENE.instantiate() as Node3D
 	floor_accents_root.add_child(accents_inst)
+	var border_material := stone_material(border_col)
+	var accent_material := stone_material(accent_col)
 
 	for border_name in ["BorderNorth", "BorderSouth", "BorderWest", "BorderEast"]:
 		var b_mesh := accents_inst.get_node_or_null(border_name) as MeshInstance3D
 		if b_mesh != null:
-			var b_mat := b_mesh.get_surface_override_material(0) as StandardMaterial3D
-			if b_mat != null:
-				b_mat.albedo_color = border_col
+			b_mesh.set_surface_override_material(0, border_material)
 
 	for style_key in [&"aisle", &"cross_hall", &"work_bays", &"boss_court"]:
 		var group := accents_inst.get_node_or_null("Style_" + String(style_key)) as Node3D
@@ -420,9 +423,7 @@ func _apply_floor_and_lighting(def: Dictionary, target_arena: Node3D) -> void:
 			group.visible = (style_key == style)
 			for child in group.get_children():
 				if child is MeshInstance3D:
-					var mat := child.get_surface_override_material(0) as StandardMaterial3D
-					if mat != null:
-						mat.albedo_color = border_col if child.name == "OuterCourtRing" else accent_col
+					child.set_surface_override_material(0, border_material if child.name == "OuterCourtRing" else accent_material)
 
 	var lighting: Dictionary = def.get("lighting", {})
 	var wall_tint: Color = lighting.get("wall_tint", Color(1.18, 1.12, 1.05))

@@ -29,9 +29,10 @@ const CONE := Color("ed9966")
 const CLOCK := Color("ba9ce9")
 const HURT := Color("ff6458")
 
-static var _ring_dirs: PackedVector3Array = PackedVector3Array()
-static var _burst_dirs: PackedVector3Array = PackedVector3Array()
-static var _burst_sides: PackedVector3Array = PackedVector3Array()
+## Geometry is computed once per feedback owner and released with its scene.
+var _ring_dirs: PackedVector3Array = PackedVector3Array()
+var _burst_dirs: PackedVector3Array = PackedVector3Array()
+var _burst_sides: PackedVector3Array = PackedVector3Array()
 
 @export var cue_library: CombatAudioLibrary = DEFAULT_LIBRARY
 var muted := false
@@ -55,7 +56,7 @@ var _audio_manager: Node
 var _mesh := ImmediateMesh.new()
 var _visual: MeshInstance3D
 
-static func _ensure_geometry_tables() -> void:
+func _ensure_geometry_tables() -> void:
 	if not _ring_dirs.is_empty():
 		return
 	_ring_dirs.resize(21)
@@ -204,13 +205,13 @@ func enemy_cue(enemy_kind: StringName, event: StringName, point: Vector3, streng
 
 func set_music_playing(playing: bool) -> void:
 	# Legacy arena hook. Explicit campaign boss/victory contexts take precedence.
-	var mgr := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
-	if mgr == null:
+	var manager := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
+	if manager == null:
 		return
-	if playing and mgr.music_context in [&"intro", &"menu", &"encounter"]:
-		mgr.set_music_context(&"encounter")
-	elif not playing and mgr.music_context in [&"encounter", &"boss"]:
-		mgr.set_music_context(&"intro")
+	if playing and manager.music_context in [&"intro", &"menu", &"encounter"]:
+		manager.set_music_context(&"encounter")
+	elif not playing and manager.music_context in [&"encounter", &"boss"]:
+		manager.set_music_context(&"intro")
 
 func step(real_delta: float, world_delta: float, world_scale: float, inspecting: bool, scrub_speed: float, weapons: Node3D, _equipment: RefCounted) -> void:
 	var dt := maxf(0.0, real_delta)
@@ -240,11 +241,11 @@ func _step_pitches_and_cooldowns(dt: float, frozen: bool, scale_target: float, s
 	if not _cooldowns.is_empty():
 		var expired: Array[StringName] = []
 		for kind: StringName in _cooldowns:
-			var next_cd := float(_cooldowns[kind]) - dt
-			if next_cd <= 0.0:
+			var remaining_cooldown := float(_cooldowns[kind]) - dt
+			if remaining_cooldown <= 0.0:
 				expired.append(kind)
 			else:
-				_cooldowns[kind] = next_cd
+				_cooldowns[kind] = remaining_cooldown
 		for kind in expired:
 			_cooldowns.erase(kind)
 
@@ -283,30 +284,30 @@ func _step_loops(dt: float, frozen: bool, scale_target: float, scrub_speed: floa
 	_set_loop(&"scrub_older", scrub_gain if scrub_speed > 0.0 else 0.0, clock_pitch, dt)
 	_set_loop(&"scrub_newer", scrub_gain if scrub_speed < 0.0 else 0.0, clock_pitch, dt)
 	# Send the smoothed world policy once; music has no second pitch/bus clock.
-	var mgr := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
-	if mgr != null:
-		mgr.set_world_audio_state(world_pitch, frozen, bed_gain, muted)
+	var manager := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
+	if manager != null:
+		manager.set_world_audio_state(world_pitch, frozen, bed_gain, muted)
 
 
 func _step_voices(dt: float) -> void:
 	for voice in _voices:
-		var rem := float(voice.remaining)
-		if rem <= 0.0:
+		var remaining := float(voice.remaining)
+		if remaining <= 0.0:
 			continue
 		var player: AudioStreamPlayer3D = voice.player
 		var rate := 1.0 if voice.responsive else world_pitch
 		var next_pitch := float(voice.base_pitch) * rate
 		if absf(player.pitch_scale - next_pitch) > 0.001:
 			player.pitch_scale = next_pitch
-		rem = maxf(0.0, rem - dt * rate)
-		voice.remaining = rem
-		var target := minf(1.0, rem / 0.025)
+		remaining = maxf(0.0, remaining - dt * rate)
+		voice.remaining = remaining
+		var target := minf(1.0, remaining / 0.025)
 		var next_gain := move_toward(float(voice.gain), target, dt * 60.0)
 		voice.gain = next_gain
 		var next_db := _volume(next_gain * float(voice.strength), float(voice.volume_db))
 		if absf(player.volume_db - next_db) > 0.02:
 			player.volume_db = next_db
-		if rem <= 0.0:
+		if remaining <= 0.0:
 			voice.pending = false
 			player.volume_db = -80.0
 			if player.playing:
@@ -315,14 +316,14 @@ func _step_voices(dt: float) -> void:
 
 func _step_effects(world_delta: float, frozen: bool) -> void:
 	if not frozen and not _effects.is_empty():
-		var w_dt := maxf(0.0, world_delta)
+		var world_elapsed := maxf(0.0, world_delta)
 		for index in range(_effects.size() - 1, -1, -1):
-			var next_age := float(_effects[index].age) + w_dt
+			var next_age := float(_effects[index].age) + world_elapsed
 			_effects[index].age = next_age
 			if next_age >= float(_effects[index].life):
 				_effects.remove_at(index)
 				_effects_dirty = true
-			elif w_dt > 0.0:
+			elif world_elapsed > 0.0:
 				_effects_dirty = true
 	if _effects_dirty:
 		_rebuild_effects()
@@ -332,10 +333,10 @@ func _set_loop(kind: StringName, target: float, pitch: float, dt: float) -> void
 	var loop: Dictionary = _loops[kind]
 	loop.target = target
 	loop.pitch = pitch
-	var prev_gain := float(loop.gain)
-	if target <= 0.0005 and prev_gain == 0.0 and bool(loop.get("stopped", false)):
+	var previous_gain := float(loop.gain)
+	if target <= 0.0005 and previous_gain == 0.0 and bool(loop.get("stopped", false)):
 		return
-	var next_gain := lerpf(prev_gain, target, 1.0 - exp(-dt / 0.045))
+	var next_gain := lerpf(previous_gain, target, 1.0 - exp(-dt / 0.045))
 	if target <= 0.0005 and next_gain <= 0.0005:
 		next_gain = 0.0
 	loop.gain = next_gain
@@ -388,9 +389,9 @@ func toggle_mute() -> void:
 	var config := ConfigFile.new()
 	config.set_value("audio", "muted", muted)
 	config.save(SETTINGS_PATH)
-	var mgr := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
-	if mgr != null:
-		mgr.set_world_audio_state(world_pitch, _inspecting, 1.0, muted)
+	var manager := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
+	if manager != null:
+		manager.set_world_audio_state(world_pitch, _inspecting, 1.0, muted)
 	if muted:
 		for loop in _loops.values(): loop.player.volume_db = -80.0
 		for voice in _voices:

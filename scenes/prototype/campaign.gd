@@ -77,6 +77,8 @@ var _awaiting_rewind_charges_speech := false
 var _rewind_charges_elapsed := 0.0
 var _rewind_charges_speech_accepted := false
 var _suppress_enter_release := false
+var _enter_key_held := false
+var _lmb_held := false
 
 const MOVEMENT_CUE_LINE := "Mouse aims. WASD moves."
 const PICKUP_WALK_LINE := "Walk towards the new item."
@@ -514,12 +516,18 @@ func _seed_room_checkpoint() -> void:
 func enter_room(index: int) -> void:
 	_cancel_active_teaching_controllers()
 	AudioManager.stop_dialogue()
+	if difficulty_spec == null:
+		set_difficulty(difficulty_id)
+	elif is_instance_valid(director):
+		director.combat_difficulty = difficulty_spec
 	var definitions := _room_definitions()
 	if index >= definitions.size():
 		_finish_run(true)
 		return
 	room_index = clampi(index, 0, definitions.size() - 1)
 	super.reset_arena()
+	if is_instance_valid(director):
+		director.combat_difficulty = difficulty_spec
 	director.clear()
 	room = definitions[room_index].duplicate(true)
 	waves = room.waves.duplicate(true)
@@ -549,8 +557,12 @@ func enter_room(index: int) -> void:
 	_awaiting_rewind_charges_speech = false
 	_rewind_charges_elapsed = 0.0
 	_rewind_charges_speech_accepted = false
-	_suppress_enter_release = false
+	_suppress_enter_release = _enter_key_held or Input.is_key_pressed(KEY_ENTER) or Input.is_key_pressed(KEY_KP_ENTER)
+	_suppress_next_lmb_release = _lmb_held or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	weapons.set_loadout(acquired, _preferred_tool(2))
+	weapons.cancel_input()
+	weapons.mouse_held = false
+	weapons.require_fresh_press = _suppress_next_lmb_release
 	museum.apply_room(room, cover, self)
 	museum.sync_cover_colliders(self)
 	museum.set_boss_ceremony_phase(&"inactive")
@@ -745,12 +757,16 @@ func _input(event: InputEvent) -> void:
 		var kcode: int = event.physical_keycode if event.physical_keycode else event.keycode
 		if kcode in [KEY_W, KEY_UP]:
 			_w_key_held = event.pressed
+		if kcode in [KEY_ENTER, KEY_KP_ENTER]:
+			_enter_key_held = event.pressed
 		if kcode in [KEY_ENTER, KEY_KP_ENTER] and (_suppress_enter_release or _awaiting_rewind_charges_speech):
 			if not event.pressed:
 				_suppress_enter_release = false
 			if is_inside_tree() and get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			return
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_lmb_held = event.pressed
 	if _awaiting_rewind_charges_speech and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if rewind_lesson != null and is_instance_valid(rewind_lesson.skip_button) and rewind_lesson.skip_button.visible and not rewind_lesson.skip_button.disabled:
 			if rewind_lesson.skip_button.get_global_rect().has_point(event.position):
@@ -762,7 +778,7 @@ func _input(event: InputEvent) -> void:
 		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_F10:
 			super._input(event)
 		return
-	if _campaign_ready and (tutorial.blocking or mode in [&"title", &"ceremony", &"won"]):
+	if _campaign_ready and (tutorial.blocking or mode in [&"title", &"ceremony", &"won", &"game_over"]):
 		if tutorial.blocking and mode == &"practice" and lesson == &"repair" and event is InputEventKey and event.pressed and not event.echo:
 			var r_code: int = event.physical_keycode if event.physical_keycode else event.keycode
 			if r_code == KEY_E:
@@ -788,7 +804,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if mode == &"pickup" and event is InputEventMouse:
 			return
-		if tutorial.blocking or mode in [&"title", &"ceremony", &"won"]:
+		if tutorial.blocking or mode in [&"title", &"ceremony", &"won", &"game_over"]:
 			return
 		if event is InputEventKey and event.pressed and not event.echo:
 			var code: int = event.physical_keycode if event.physical_keycode else event.keycode
@@ -812,7 +828,7 @@ func _physics_process(delta: float) -> void:
 	var in_emergency: bool = GameState.is_in_emergency() and not GameState.is_paused()
 	if (not GameState.is_playing() and not in_emergency) or SceneManager.has_popup(&"Developer") or SceneManager.has_popup(&"Settings"):
 		return
-	if mode == &"won":
+	if mode in [&"won", &"game_over"]:
 		return
 	if rewind_lesson != null and rewind_lesson.active:
 		rewind_lesson.step(delta)
@@ -856,14 +872,14 @@ func _physics_process(delta: float) -> void:
 			_spawn_wave()
 		return
 	if time_controller != null and time_controller.exhausted:
-		retry_room()
+		_finish_run(false)
 		return
 	if mode == &"exit":
 		_update_exit_gate_state()
 	var emergency_before := is_emergency_active()
 	super._physics_process(delta)
 	if time_controller != null and time_controller.exhausted:
-		retry_room()
+		_finish_run(false)
 		return
 	if emergency_before or is_emergency_active():
 		_update_run_hud()
@@ -993,9 +1009,10 @@ func _on_emergency_started(choice_count: int) -> void:
 
 
 func _on_attempt_exhausted() -> void:
-	if not _campaign_ready or mode == &"won":
+	super._on_attempt_exhausted()
+	if not _campaign_ready or mode in [&"won", &"game_over"]:
 		return
-	retry_room()
+	_finish_run(false)
 
 
 func _finish_run(won: bool) -> void:
@@ -1005,11 +1022,24 @@ func _finish_run(won: bool) -> void:
 	_cancel_active_teaching_controllers()
 	if _result_shown:
 		return
+	var enter_held := _enter_key_held or Input.is_key_pressed(KEY_ENTER) or Input.is_key_pressed(KEY_KP_ENTER)
+	var mouse_held := _lmb_held or weapons.mouse_held or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	_result_shown = true
-	mode = &"won"
+	mode = &"won" if won else &"game_over"
+	if SceneManager.has_popup(&"Repair"):
+		_close_repair()
+	if tutorial != null:
+		tutorial.dismiss()
 	weapons.cancel_input()
+	weapons.mouse_held = false
 	player.reset_input()
+	if time_controller != null:
+		time_controller.slow_requested = false
+	_update_run_hud()
 	SceneManager.show_run_result(won)
+	var result_popup := SceneManager.get_popup(&"RunResult")
+	if result_popup != null and result_popup.has_method("arm_held_input_guard"):
+		result_popup.call("arm_held_input_guard", enter_held, mouse_held)
 
 
 func _wave_has_post_lesson_pressure() -> bool:
@@ -2065,7 +2095,7 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 					_spawn_wave()
 		if wave_index >= 0 and wave_index < waves.size() and bool(waves[wave_index].get("boss", false)):
 			_set_music_context(&"boss")
-		elif mode != &"won":
+		elif mode not in [&"won", &"game_over"]:
 			_set_music_context(&"regular_combat")
 	_sync_training_protection()
 	_apply_time_capabilities()

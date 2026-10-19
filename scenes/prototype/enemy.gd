@@ -882,7 +882,7 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array, cohesion:
 					_ranged_retreating = true
 
 	if mechanism() != &"":
-		if attack_phase == &"approach":
+		if attack_phase == &"approach" or attack_phase == &"recover":
 			_track_approach_aim(dir_to_player, active_ai_delta)
 		intent = player_xz
 		# Cohesion shapes open-floor intent only. An exhibit detour always routes
@@ -979,6 +979,12 @@ func aim_turn_rate(base_rate: float) -> float:
 
 func attack_windup(base_seconds: float) -> float:
 	return base_seconds * (combat_difficulty.attack_windup_scale if combat_difficulty != null else 1.0)
+
+
+func melee_windup(base_seconds: float) -> float:
+	if combat_difficulty != null and combat_difficulty.has_method("melee_windup"):
+		return combat_difficulty.melee_windup(base_seconds)
+	return attack_windup(base_seconds)
 
 
 func _lock_warning_aim() -> void:
@@ -1132,7 +1138,7 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 	if attack_phase == &"approach":
 		if distance <= reach:
 			attack_phase = &"windup"
-			attack_timer = attack_windup(float(Tuning.MATCHUPS.attack_windup))
+			attack_timer = melee_windup(float(Tuning.MATCHUPS.attack_windup))
 			if is_instance_valid(feedback_label):
 				feedback_label.text = ""
 				feedback_label.visible = false

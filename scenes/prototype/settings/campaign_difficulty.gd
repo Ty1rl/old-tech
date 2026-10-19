@@ -20,8 +20,15 @@ const HARD_PATH := "res://scenes/prototype/settings/difficulty_hard.tres"
 @export_group("Enemy combat")
 @export var enemy_damage_scale := 1.0
 @export var attack_windup_scale := 1.0
+@export var melee_windup_seconds := 0.25
 @export var melee_reach_padding := 0.35
 @export var aim_turn_scale := 1.0
+
+
+func melee_windup(base_seconds: float) -> float:
+	if melee_windup_seconds > 0.0:
+		return melee_windup_seconds
+	return base_seconds * attack_windup_scale
 
 
 static func load_for(difficulty: Variant = &"easy") -> CampaignDifficulty:

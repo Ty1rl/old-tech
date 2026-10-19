@@ -805,6 +805,197 @@ func _run() -> void:
 	game.set_setting("skip_tutorials", false)
 	game.set_setting("tutorial", true)
 
+	# 5. Round U: Verify Easy/Hard difficulty tuning, non-compounding rewind damage, stationary reserve depletion, and explicit Game Over on final depletion
+	var easy_spec := CampaignDifficulty.load_for(&"easy")
+	var hard_spec := CampaignDifficulty.load_for(&"hard")
+	expect(
+		is_equal_approx(easy_spec.enemy_damage_scale, 2.0)
+		and is_equal_approx(easy_spec.melee_windup_seconds, 0.25)
+		and is_equal_approx(easy_spec.melee_reach_padding, 0.35)
+		and is_equal_approx(easy_spec.aim_turn_scale, 1.6),
+		"Easy difficulty resource configures 2.0x damage (+100%), 0.25s melee windup, 0.35 reach padding, and 1.6x aim turn"
+	)
+	expect(
+		is_equal_approx(hard_spec.enemy_damage_scale, 3.5)
+		and is_equal_approx(hard_spec.melee_windup_seconds, 0.20)
+		and is_equal_approx(hard_spec.melee_reach_padding, 0.55)
+		and is_equal_approx(hard_spec.aim_turn_scale, 2.2),
+		"Hard difficulty resource configures 3.5x damage (+250%), 0.20s melee windup, 0.55 reach padding, and 2.2x aim turn"
+	)
+
+	var base_yellow_dmg := float(arena.Tuning.ENEMIES["yellow"]["damage"])
+	var base_ranged_dmg := float(arena.Tuning.ENEMIES["ranged"]["damage"])
+	for diff_mode: StringName in [&"easy", &"hard"]:
+		var expected_scale := 2.0 if diff_mode == &"easy" else 3.5
+		var expected_windup := 0.25 if diff_mode == &"easy" else 0.20
+		arena.set_difficulty(diff_mode)
+		arena.enter_room(1)
+		arena.director.clear()
+		arena.mode = &"pressure"
+		arena._pending = 1
+		arena.player.position = Vector3.ZERO
+		arena.time_controller.begin_attempt()
+
+		# Verify melee damage scaling, windup timing, non-compounding snapshot restore, and stationary reserve depletion > passive recharge
+		var melee_enemy: CombatEnemy = arena.director.spawn(&"yellow", Vector3(0.0, 0.0, 1.0))
+		melee_enemy.move_speed = 0.0
+		expect(
+			is_equal_approx(melee_enemy.contact_damage, base_yellow_dmg * expected_scale),
+			"%s melee enemy scales base contact_damage once (%.2f)" % [String(diff_mode), melee_enemy.contact_damage]
+		)
+		var snap_data: Dictionary = arena.capture_state()
+		arena.restore_campaign_state(snap_data)
+		melee_enemy = arena.director.enemies[0] as CombatEnemy
+		melee_enemy.move_speed = 0.0
+		expect(
+			is_equal_approx(melee_enemy.contact_damage, base_yellow_dmg * expected_scale),
+			"%s snapshot restore preserves scaled contact_damage without compounding" % String(diff_mode)
+		)
+		melee_enemy.step_enemy(0.01, arena.player)
+		expect(
+			melee_enemy.attack_phase == &"windup" and is_equal_approx(melee_enemy.attack_timer, expected_windup),
+			"%s melee windup starts at %.2fs" % [String(diff_mode), expected_windup]
+		)
+		# Simulate 2 full melee attack+recharge cycles against a stationary player
+		var reserve_start: float = arena.time_controller.meter
+		for step_i in range(260):
+			var dt := 1.0 / 60.0
+			arena.time_controller.advance(dt)
+			melee_enemy.step_enemy(dt, arena.player)
+		expect(
+			arena.time_controller.meter < reserve_start - 10.0,
+			"%s sustained melee pressure depletes stationary player reserve faster than passive recharge (%.1f -> %.1f)" % [String(diff_mode), reserve_start, arena.time_controller.meter]
+		)
+
+		# Verify ranged damage scaling and stationary reserve depletion > passive recharge
+		arena.director.clear()
+		arena.time_controller.begin_attempt()
+		var ranged_enemy: CombatEnemy = arena.director.spawn(&"ranged", Vector3(0.0, 0.0, -6.5))
+		ranged_enemy.facing = Vector3.BACK
+		expect(
+			is_equal_approx(ranged_enemy.contact_damage, base_ranged_dmg * expected_scale),
+			"%s ranged enemy scales base projectile damage once (%.2f)" % [String(diff_mode), ranged_enemy.contact_damage]
+		)
+		var ranged_reserve_start: float = arena.time_controller.meter
+		for step_i in range(280):
+			var dt := 1.0 / 60.0
+			arena.time_controller.advance(dt)
+			arena.director.step(dt, arena.player)
+			if arena.time_controller.emergency_active or arena.time_controller.exhausted:
+				break
+		expect(
+			arena.time_controller.meter < ranged_reserve_start - 15.0 or arena.time_controller.emergency_active or arena.time_controller.exhausted,
+			"%s sustained ranged pressure depletes stationary player reserve faster than passive recharge" % String(diff_mode)
+		)
+
+	# Verify 3rd charge is a usable emergency rewind, and 4th lethal hit (at 0 charges) triggers explicit Game Over RunResult
+	scenes.clear_popups()
+	game.start_game()
+	arena.debug_start(2, 1)
+	var saved_learned: Dictionary = arena.tutorial.learned.duplicate()
+	var saved_acquired: Array[int] = arena.acquired.duplicate()
+	expect(arena.room_index == 2 and arena.wave_index == 1 and arena.time_controller.charges_remaining == 3 and arena.time_controller.rewind_unlocked, "Room 2 Wave 1 starts with rewind unlocked and 3 charges")
+
+	# Spend charges 1, 2, and 3: 3rd charge must enter EMERGENCY with 0 charges remaining (not Game Over)
+	for charge_step in range(3):
+		arena.time_controller.apply_hit(100.0)
+		var expected_rem := 2 - charge_step
+		expect(
+			arena.is_emergency_active()
+			and not arena.time_controller.exhausted
+			and arena.time_controller.charges_remaining == expected_rem
+			and not scenes.has_popup(&"RunResult")
+			and arena.mode != &"game_over",
+			"Depletion #%d spends charge and enters EMERGENCY with %d charges left (not Game Over)" % [charge_step + 1, expected_rem]
+		)
+		arena.emergency_rewind.confirm()
+		arena.time_controller.advance(arena.time_controller.settings.recovery_grace_seconds + 0.1)
+
+	# Open repair popup and hold Enter + LMB before the final lethal hit at 0 charges
+	arena.equipment.spend(&"beam", 25.0)
+	arena._open_smart_repair()
+	expect(scenes.has_popup(&"Repair"), "Repair popup is open before final lethal hit")
+	var held_enter := InputEventKey.new()
+	held_enter.physical_keycode = KEY_ENTER
+	held_enter.keycode = KEY_ENTER
+	held_enter.pressed = true
+	arena._input(held_enter)
+	var held_lmb := InputEventMouseButton.new()
+	held_lmb.button_index = MOUSE_BUTTON_LEFT
+	held_lmb.pressed = true
+	arena._input(held_lmb)
+	arena.weapons.mouse_held = true
+
+	var enemy_pos_at_death: Vector3 = arena.director.enemies[0].position if not arena.director.enemies.is_empty() else Vector3.ZERO
+	arena.time_controller.apply_hit(100.0)
+	var result_popup: Control = scenes.get_popup(&"RunResult") as Control
+	expect(
+		arena.time_controller.exhausted
+		and not arena.is_emergency_active()
+		and arena.mode == &"game_over"
+		and game.is_game_over()
+		and scenes.has_popup(&"RunResult")
+		and result_popup != null
+		and not result_popup.won
+		and result_popup.retry.text == "Retry room"
+		and not scenes.has_popup(&"Repair")
+		and not arena.weapons.mouse_held
+		and arena.room_index == 2
+		and arena.wave_index == 1,
+		"Lethal hit with 0 charges remaining closes Repair, cancels inputs, freezes gameplay in game_over mode, and opens RunResult without resetting room"
+	)
+
+	# Stepping _physics_process while Game Over is open must not move enemies or open duplicate popups
+	_tick(0.5)
+	var enemy_pos_after_tick: Vector3 = arena.director.enemies[0].position if not arena.director.enemies.is_empty() else Vector3.ZERO
+	expect(
+		enemy_pos_after_tick.is_equal_approx(enemy_pos_at_death)
+		and scenes._popups.size() == 1
+		and arena.mode == &"game_over"
+		and arena.wave_index == 1,
+		"Gameplay remains frozen behind Game Over UI with no duplicate RunResult popups"
+	)
+
+	# Held Enter echo/release and held mouse release must NOT accidentally trigger Retry room
+	var enter_echo := InputEventKey.new()
+	enter_echo.physical_keycode = KEY_ENTER
+	enter_echo.keycode = KEY_ENTER
+	enter_echo.pressed = true
+	enter_echo.echo = true
+	result_popup._input(enter_echo)
+	var enter_rel := InputEventKey.new()
+	enter_rel.physical_keycode = KEY_ENTER
+	enter_rel.keycode = KEY_ENTER
+	enter_rel.pressed = false
+	result_popup._input(enter_rel)
+	arena._input(enter_rel)
+	var lmb_rel := InputEventMouseButton.new()
+	lmb_rel.button_index = MOUSE_BUTTON_LEFT
+	lmb_rel.pressed = false
+	result_popup._input(lmb_rel)
+	arena._input(lmb_rel)
+	expect(
+		scenes.has_popup(&"RunResult") and arena.mode == &"game_over" and arena.wave_index == 1,
+		"Held Enter echo/release and held LMB release from gameplay do not accidentally activate Retry room"
+	)
+
+	# Explicit user choice on Retry room restarts the current room while preserving learned tutorials, tools, and capabilities
+	result_popup._on_retry()
+	expect(
+		not scenes.has_popup(&"RunResult")
+		and game.is_playing()
+		and arena.room_index == 2
+		and arena.mode == &"title"
+		and not arena.time_controller.exhausted
+		and arena.time_controller.charges_remaining == 3
+		and is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity)
+		and arena.acquired == saved_acquired
+		and arena.tutorial.learned == saved_learned
+		and arena.time_controller.slow_unlocked
+		and arena.time_controller.rewind_unlocked,
+		"Choosing Retry room from Game Over cleanly restarts current room with full reserve/charges while preserving tools, capabilities, and learned lessons"
+	)
+
 	Input.action_release(&"move_up")
 	scenes.clear_popups()
 	game.start_game()

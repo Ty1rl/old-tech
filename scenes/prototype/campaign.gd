@@ -515,6 +515,20 @@ func _seed_room_checkpoint() -> void:
 			rh.push(snap)
 
 
+func _prepare_full_loadout_start() -> int:
+	acquired.assign([1, 2, 3])
+	_slow_unlocked = true
+	_rewind_unlocked = true
+	for taught: StringName in Rooms.lesson_ids():
+		tutorial.learned[taught] = true
+		lesson_demo.mark_learned(taught)
+	# Authored entry point avoids tying this behavior to a numerical wave index.
+	for index in waves.size():
+		if bool(waves[index].get("skip_tutorial_start", false)):
+			return index
+	return 0
+
+
 func enter_room(index: int) -> void:
 	_cancel_active_teaching_controllers()
 	AudioManager.stop_dialogue()
@@ -534,6 +548,7 @@ func enter_room(index: int) -> void:
 	director.clear()
 	room = definitions[room_index].duplicate(true)
 	waves = room.waves.duplicate(true)
+	var starting_wave := _prepare_full_loadout_start() if skip_tutorials and room_index == 0 else 0
 	# A later-room checkpoint always includes the preceding rooms' tools and capabilities.
 	for previous in range(room_index):
 		for wave: Dictionary in definitions[previous].waves:
@@ -573,7 +588,7 @@ func enter_room(index: int) -> void:
 	player.position = room.player_spawn
 	player.reset_physics_interpolation()
 	player.reset_input()
-	wave_index = -1
+	wave_index = starting_wave - 1
 	specimens.clear()
 	_specimen_ids.clear()
 	_practice_stage = &""

@@ -285,7 +285,9 @@ func _execute_skip_tutorials_run(diff: StringName) -> void:
 	var bosses_fought: Array[StringName] = []
 	var pressure_waves_seen: Dictionary = {}
 	var practiced_any := false
-	var checked_r0_w4 := false
+	expect(arena.acquired == [1, 2, 3] and arena.weapons.available_tools == [1, 2, 3], "Skip starts with every weapon on " + String(diff))
+	expect(arena.time_controller.slow_unlocked and arena.time_controller.rewind_unlocked and arena.time_controller.charges_remaining == 3, "Skip starts with slow and all three emergency rewinds on " + String(diff))
+	expect(arena.time_controller.meter == arena.time_controller.capacity and not arena._is_yellow_protected(), "Skip starts with full reserve and normal weapon wear on " + String(diff))
 	var checked_r0_w8 := false
 	var checked_r1_w5 := false
 	for step in range(750):
@@ -300,12 +302,9 @@ func _execute_skip_tutorials_run(diff: StringName) -> void:
 			arena.player.position = arena.museum.pickup_position + Vector3.UP * 0.55
 			_tick(0.001)
 		elif arena.mode == &"pressure":
-			if arena.room_index == 0 and arena.wave_index == 4 and not checked_r0_w4:
-				checked_r0_w4 = true
-				expect(arena.acquired == [2, 3] and not arena.time_controller.slow_unlocked and not arena.time_controller.rewind_unlocked, "Skip tutorials grants [2, 3] at Room 0 Wave 4 interlude on " + String(diff))
-			elif arena.room_index == 0 and arena.wave_index == 8 and not checked_r0_w8:
+			if arena.room_index == 0 and arena.wave_index == 8 and not checked_r0_w8:
 				checked_r0_w8 = true
-				expect(arena.acquired == [2, 3, 1] and arena.time_controller.slow_unlocked and not arena.time_controller.rewind_unlocked and not arena._is_yellow_protected(), "Skip tutorials grants [2, 3, 1], slow, and repair eligibility at Room 0 Wave 8 Basic Combat Level on " + String(diff))
+				expect(pressure_waves_seen.is_empty() and arena.acquired == [1, 2, 3] and arena.time_controller.rewind_unlocked, "Skip enters full-kit combat directly, bypassing partial-loadout interlude on " + String(diff))
 			elif arena.room_index == 1 and arena.wave_index == 5 and not checked_r1_w5:
 				checked_r1_w5 = true
 				expect(arena.time_controller.rewind_unlocked and arena.time_controller.charges_remaining == 3, "Skip tutorials unlocks rewind with all 3 charges intact at Room 1 Wave 5 Mixed Level on " + String(diff))
@@ -326,11 +325,13 @@ func _execute_skip_tutorials_run(diff: StringName) -> void:
 		if failures.size() > start_failures:
 			break
 	expect(not practiced_any, "Skip tutorials run executes zero tutorial demos, zero practice stages, and zero RewindLesson scenes on " + String(diff))
-	expect(checked_r0_w4 and checked_r0_w8 and checked_r1_w5, "Skip tutorials run hits all progression checkpoints in order on " + String(diff))
+	expect(checked_r0_w8 and checked_r1_w5, "Skip tutorials run hits all progression checkpoints in order on " + String(diff))
 	expect(visited_rooms.size() == 4 and bosses_fought == [&"sequence_boss", &"loop_boss", &"final_boss"] and arena.mode == &"won", "Skip tutorials run completes all 4 rooms and 3 bosses to victory on " + String(diff))
-	expect(pressure_waves_seen.size() == 15, "Skip tutorials run preserves all 12 combat waves and 3 boss fights on " + String(diff))
+	expect(pressure_waves_seen.size() == 14, "Skip run preserves 11 full-kit combat waves and all 3 bosses on " + String(diff))
 	root.get_node("SceneManager").params = {}
 	arena.set_skip_tutorials(false)
+	arena.start_new_run(diff, false)
+	expect(arena.acquired.is_empty() and not arena.time_controller.slow_unlocked and not arena.time_controller.rewind_unlocked and not arena.tutorial.is_learned(&"shot"), "Turning Skip off restores normal acquisition and teaching on " + String(diff))
 
 
 func _run() -> void:

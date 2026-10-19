@@ -167,7 +167,7 @@ static func definitions(difficulty: Variant = &"easy") -> Array[Dictionary]:
 		_make_wave(&"repair", &"line", [], 0, 0.35, {"pressure": false}, spec),
 		_make_wave(&"slow", &"line", [&"yellow"], 1, 0.35, {"pressure": false, "tier": &"early"}, spec),
 		_make_wave(&"cut", &"curve", [&"blue"], 1, 0.35, {"acquire": 1, "pressure": false, "tier": &"early"}, spec),
-		_make_wave(&"", &"curve", [&"yellow", &"blue", &"orange"], 10, 1.0, {"pressure": true, "burst": 3, "max_live": 5, "interval": 2.9, "refill_delay": 0.6, "tier": &"early", "hard_enemies": [&"yellow", &"blue", &"orange"]}, spec),
+		_make_wave(&"", &"curve", [&"yellow", &"blue", &"orange"], 10, 1.0, {"skip_tutorial_start": true, "pressure": true, "burst": 3, "max_live": 5, "interval": 2.9, "refill_delay": 0.6, "tier": &"early", "hard_enemies": [&"yellow", &"blue", &"orange"]}, spec),
 		_make_wave(&"", &"mixed", [&"blue", &"orange", &"yellow"], 14, 1.2, {"pressure": true, "burst": 4, "max_live": 6, "interval": 2.7, "refill_delay": 0.55, "tier": &"standard", "hard_enemies": [&"blue", &"orange", &"yellow"]}, spec),
 	]
 

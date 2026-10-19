@@ -22,10 +22,16 @@ const SETTINGS_PATH := "user://combat-audio.cfg"
 const LOOP_KINDS: Array[StringName] = [&"ring_loop", &"charge_loop", &"cone_loop", &"clock_loop", &"scrub_older", &"scrub_newer"]
 const CUE_KINDS: Array[StringName] = [&"ring_launch", &"ring_return", &"flash_fire", &"flash_charged", &"flash_ready", &"pierce_hit", &"cone_pulse", &"hit", &"cable_cut", &"vent", &"core_break", &"repair_step", &"repair_full", &"room_open", &"player_hurt", &"recovery_confirm", &"ui_click"]
 const HOSTILE_CUES := {&"hostile_warning": &"hostile_warning", &"hostile_fire": &"hostile_fire", &"player_hurt": &"player_hurt"}
+const RING_EFFECT_KINDS: Array[StringName] = [&"ring_launch", &"ring_return", &"cone_pulse", &"vent", &"repair_step", &"player_hurt"]
 const RING := Color("60dbde")
 const BEAM := Color("f0d77b")
 const CONE := Color("ed9966")
 const CLOCK := Color("ba9ce9")
+const HURT := Color("ff6458")
+
+static var _ring_dirs: PackedVector3Array = PackedVector3Array()
+static var _burst_dirs: PackedVector3Array = PackedVector3Array()
+static var _burst_sides: PackedVector3Array = PackedVector3Array()
 
 @export var cue_library: CombatAudioLibrary = DEFAULT_LIBRARY
 var muted := false
@@ -43,10 +49,29 @@ var _effects: Array[Dictionary] = []
 var _cooldowns: Dictionary = {}
 var _inspecting := false
 var _audio_flush_pending := false
+var _effects_dirty := false
+var _mesh_has_surface := false
+var _audio_manager: Node
 var _mesh := ImmediateMesh.new()
 var _visual: MeshInstance3D
 
+static func _ensure_geometry_tables() -> void:
+	if not _ring_dirs.is_empty():
+		return
+	_ring_dirs.resize(21)
+	for index in range(21):
+		var angle := TAU * float(index) / 20.0
+		_ring_dirs[index] = Vector3(cos(angle), 0.0, sin(angle))
+	_burst_dirs.resize(6)
+	_burst_sides.resize(6)
+	for index in range(6):
+		var angle := TAU * float(index) / 6.0 + 0.4
+		_burst_dirs[index] = Vector3(cos(angle), 0.3 + float(index % 3) * 0.25, sin(angle))
+		_burst_sides[index] = Vector3(-sin(angle), 0.0, cos(angle)) * 0.035
+
 func _ready() -> void:
+	_ensure_geometry_tables()
+	_audio_manager = get_node_or_null("/root/AudioManager")
 	add_to_group(&"world_audio")
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	var config := ConfigFile.new()
@@ -63,7 +88,7 @@ func _ready() -> void:
 		player.process_mode = Node.PROCESS_MODE_ALWAYS if _cues[kind].responsive else Node.PROCESS_MODE_PAUSABLE
 		player.volume_db = -80.0
 		add_child(player)
-		_loops[kind] = {"player": player, "gain": 0.0, "target": 0.0, "pitch": 1.0}
+		_loops[kind] = {"player": player, "gain": 0.0, "target": 0.0, "pitch": 1.0, "stopped": true}
 	for index in range(MAX_VOICES - LOOP_KINDS.size()):
 		var player := AudioStreamPlayer3D.new()
 		player.name = "Cue%d" % index
@@ -179,14 +204,25 @@ func enemy_cue(enemy_kind: StringName, event: StringName, point: Vector3, streng
 
 func set_music_playing(playing: bool) -> void:
 	# Legacy arena hook. Explicit campaign boss/victory contexts take precedence.
-	if playing and get_node("/root/AudioManager").music_context in [&"intro", &"menu", &"encounter"]:
-		get_node("/root/AudioManager").set_music_context(&"encounter")
-	elif not playing and get_node("/root/AudioManager").music_context in [&"encounter", &"boss"]:
-		get_node("/root/AudioManager").set_music_context(&"intro")
+	var mgr := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
+	if mgr == null:
+		return
+	if playing and mgr.music_context in [&"intro", &"menu", &"encounter"]:
+		mgr.set_music_context(&"encounter")
+	elif not playing and mgr.music_context in [&"encounter", &"boss"]:
+		mgr.set_music_context(&"intro")
 
 func step(real_delta: float, world_delta: float, world_scale: float, inspecting: bool, scrub_speed: float, weapons: Node3D, _equipment: RefCounted) -> void:
 	var dt := maxf(0.0, real_delta)
 	var frozen := inspecting or world_scale <= 0.0
+	var scale_target := clampf(world_scale, 0.02, 1.0)
+	_step_pitches_and_cooldowns(dt, frozen, scale_target, scrub_speed)
+	_step_loops(dt, frozen, scale_target, scrub_speed, weapons)
+	_step_voices(dt)
+	_step_effects(world_delta, frozen)
+
+
+func _step_pitches_and_cooldowns(dt: float, frozen: bool, scale_target: float, scrub_speed: float) -> void:
 	if frozen and not _inspecting:
 		# Discard pending and already heard WORLD transients at the boundary.
 		# Responsive confirmations survive; unfreezing never replays a bark/hit.
@@ -197,12 +233,23 @@ func step(real_delta: float, world_delta: float, world_scale: float, inspecting:
 				voice.gain = 0.0
 				voice.player.volume_db = -80.0
 	_inspecting = frozen
-	var scale_target := clampf(world_scale, 0.02, 1.0)
 	world_pitch_target = pow(scale_target, 0.45)
 	clock_pitch_target = clampf(0.45 + absf(scrub_speed) * 0.32, 0.45, 2.6) if frozen else pow(scale_target, 0.65)
 	world_pitch = lerpf(world_pitch, world_pitch_target, 1.0 - exp(-dt / 0.22))
 	clock_pitch = lerpf(clock_pitch, clock_pitch_target, 1.0 - exp(-dt / 0.30))
-	for kind in _cooldowns: _cooldowns[kind] = maxf(0.0, float(_cooldowns[kind]) - dt)
+	if not _cooldowns.is_empty():
+		var expired: Array[StringName] = []
+		for kind: StringName in _cooldowns:
+			var next_cd := float(_cooldowns[kind]) - dt
+			if next_cd <= 0.0:
+				expired.append(kind)
+			else:
+				_cooldowns[kind] = next_cd
+		for kind in expired:
+			_cooldowns.erase(kind)
+
+
+func _step_loops(dt: float, frozen: bool, scale_target: float, scrub_speed: float, weapons: Node3D) -> void:
 	var ring_active := false
 	var charge_active := false
 	var cone_active := false
@@ -214,7 +261,7 @@ func step(real_delta: float, world_delta: float, world_scale: float, inspecting:
 		charge = clampf(weapons.flash.charge, 0.0, 1.0)
 	var bed_gain := 1.0
 	for voice in _voices:
-		if float(voice.remaining) > 0 and int(voice.priority) >= 4:
+		if float(voice.remaining) > 0.0 and int(voice.priority) >= 4:
 			bed_gain = 0.35
 			break
 	_set_loop(&"ring_loop", 0.8 * bed_gain if ring_active else 0.0, world_pitch, dt)
@@ -223,54 +270,91 @@ func step(real_delta: float, world_delta: float, world_scale: float, inspecting:
 	var clock_gain := 0.45 if frozen or scale_target < 0.99 else 0.32 * clampf((1.0 - clock_pitch) / 0.10, 0.0, 1.0)
 	var low_time := false
 	if weapons != null and weapons.time_controller != null:
-		low_time = weapons.time_controller.meter < weapons.time_controller.capacity * .2 and not frozen
-	var clock_stream: AudioStream = _cues[&"time_low_loop"].stream if low_time and scale_target >= .99 else _cues[&"clock_loop"].stream
+		low_time = weapons.time_controller.meter < weapons.time_controller.capacity * 0.2 and not frozen
+	var clock_stream: AudioStream = _cues[&"time_low_loop"].stream if low_time and scale_target >= 0.99 else _cues[&"clock_loop"].stream
 	var clock_player: AudioStreamPlayer = _loops[&"clock_loop"].player
 	if clock_player.stream != clock_stream:
 		clock_player.stop()
 		clock_player.stream = clock_stream
-	if low_time: clock_gain = maxf(clock_gain, .22)
+	if low_time:
+		clock_gain = maxf(clock_gain, 0.22)
 	_set_loop(&"clock_loop", clock_gain, clock_pitch, dt)
-	var scrub_gain := clampf(absf(scrub_speed) * 0.3, 0, 0.7) if frozen else 0.0
-	_set_loop(&"scrub_older", scrub_gain if scrub_speed > 0 else 0.0, clock_pitch, dt)
-	_set_loop(&"scrub_newer", scrub_gain if scrub_speed < 0 else 0.0, clock_pitch, dt)
+	var scrub_gain := clampf(absf(scrub_speed) * 0.3, 0.0, 0.7) if frozen else 0.0
+	_set_loop(&"scrub_older", scrub_gain if scrub_speed > 0.0 else 0.0, clock_pitch, dt)
+	_set_loop(&"scrub_newer", scrub_gain if scrub_speed < 0.0 else 0.0, clock_pitch, dt)
 	# Send the smoothed world policy once; music has no second pitch/bus clock.
-	get_node("/root/AudioManager").set_world_audio_state(world_pitch, frozen, bed_gain, muted)
+	var mgr := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
+	if mgr != null:
+		mgr.set_world_audio_state(world_pitch, frozen, bed_gain, muted)
+
+
+func _step_voices(dt: float) -> void:
 	for voice in _voices:
-		if float(voice.remaining) <= 0: continue
+		var rem := float(voice.remaining)
+		if rem <= 0.0:
+			continue
 		var player: AudioStreamPlayer3D = voice.player
 		var rate := 1.0 if voice.responsive else world_pitch
 		var next_pitch := float(voice.base_pitch) * rate
-		if absf(player.pitch_scale - next_pitch) > 0.001: player.pitch_scale = next_pitch
-		voice.remaining = maxf(0.0, float(voice.remaining) - dt * rate)
-		var target := minf(1.0, float(voice.remaining) / 0.025)
-		voice.gain = move_toward(float(voice.gain), target, dt * 60.0)
-		var next_db := _volume(float(voice.gain) * float(voice.strength), float(voice.volume_db))
-		if absf(player.volume_db - next_db) > 0.02: player.volume_db = next_db
-		if float(voice.remaining) <= 0:
+		if absf(player.pitch_scale - next_pitch) > 0.001:
+			player.pitch_scale = next_pitch
+		rem = maxf(0.0, rem - dt * rate)
+		voice.remaining = rem
+		var target := minf(1.0, rem / 0.025)
+		var next_gain := move_toward(float(voice.gain), target, dt * 60.0)
+		voice.gain = next_gain
+		var next_db := _volume(next_gain * float(voice.strength), float(voice.volume_db))
+		if absf(player.volume_db - next_db) > 0.02:
+			player.volume_db = next_db
+		if rem <= 0.0:
 			voice.pending = false
 			player.volume_db = -80.0
-			if player.playing: player.stop()
-	if not frozen:
+			if player.playing:
+				player.stop()
+
+
+func _step_effects(world_delta: float, frozen: bool) -> void:
+	if not frozen and not _effects.is_empty():
+		var w_dt := maxf(0.0, world_delta)
 		for index in range(_effects.size() - 1, -1, -1):
-			_effects[index].age = float(_effects[index].age) + maxf(0.0, world_delta)
-			if float(_effects[index].age) >= float(_effects[index].life): _effects.remove_at(index)
-	_rebuild_effects()
+			var next_age := float(_effects[index].age) + w_dt
+			_effects[index].age = next_age
+			if next_age >= float(_effects[index].life):
+				_effects.remove_at(index)
+				_effects_dirty = true
+			elif w_dt > 0.0:
+				_effects_dirty = true
+	if _effects_dirty:
+		_rebuild_effects()
+
 
 func _set_loop(kind: StringName, target: float, pitch: float, dt: float) -> void:
 	var loop: Dictionary = _loops[kind]
 	loop.target = target
-	loop.gain = lerpf(float(loop.gain), target, 1.0 - exp(-dt / 0.045))
-	if target <= 0.0005 and float(loop.gain) <= 0.0005: loop.gain = 0.0
 	loop.pitch = pitch
+	var prev_gain := float(loop.gain)
+	if target <= 0.0005 and prev_gain == 0.0 and bool(loop.get("stopped", false)):
+		return
+	var next_gain := lerpf(prev_gain, target, 1.0 - exp(-dt / 0.045))
+	if target <= 0.0005 and next_gain <= 0.0005:
+		next_gain = 0.0
+	loop.gain = next_gain
 	var player: AudioStreamPlayer = loop.player
 	var next_pitch := clampf(pitch, 0.05, 4.0)
-	if absf(player.pitch_scale - next_pitch) > 0.001: player.pitch_scale = next_pitch
-	var next_db := _volume(float(loop.gain), _cues[kind].volume_db)
-	if absf(player.volume_db - next_db) > 0.02: player.volume_db = next_db
-	if float(loop.gain) <= 0.0001 and target <= 0.0005:
-		if player.playing: player.stop()
-	elif not muted and float(loop.gain) > 0.001 and not player.playing: _queue_audio_flush()
+	if absf(player.pitch_scale - next_pitch) > 0.001:
+		player.pitch_scale = next_pitch
+	var next_db := _volume(next_gain, _cues[kind].volume_db)
+	if absf(player.volume_db - next_db) > 0.02:
+		player.volume_db = next_db
+	if next_gain <= 0.0001 and target <= 0.0005:
+		if player.playing:
+			player.stop()
+		player.volume_db = -80.0
+		loop.stopped = true
+	else:
+		loop.stopped = false
+		if not muted and next_gain > 0.001 and not player.playing:
+			_queue_audio_flush()
 
 func _queue_audio_flush() -> void:
 	if not _audio_flush_pending:
@@ -283,9 +367,14 @@ func _flush_audio() -> void:
 	while ancestor != null:
 		if ancestor.is_queued_for_deletion(): return
 		ancestor = ancestor.get_parent()
-	if muted or not is_inside_tree(): return
+	if not is_inside_tree(): return
+	if _effects_dirty:
+		_rebuild_effects()
+	if muted: return
 	for loop in _loops.values():
-		if float(loop.gain) > 0.001 and not loop.player.playing: loop.player.play()
+		if float(loop.gain) > 0.001 and not loop.player.playing:
+			loop.stopped = false
+			loop.player.play()
 	for voice in _voices:
 		if voice.pending and float(voice.remaining) > 0:
 			voice.pending = false
@@ -299,7 +388,9 @@ func toggle_mute() -> void:
 	var config := ConfigFile.new()
 	config.set_value("audio", "muted", muted)
 	config.save(SETTINGS_PATH)
-	get_node("/root/AudioManager").set_world_audio_state(world_pitch, _inspecting, 1.0, muted)
+	var mgr := _audio_manager if _audio_manager != null else get_node_or_null("/root/AudioManager")
+	if mgr != null:
+		mgr.set_world_audio_state(world_pitch, _inspecting, 1.0, muted)
 	if muted:
 		for loop in _loops.values(): loop.player.volume_db = -80.0
 		for voice in _voices:
@@ -309,7 +400,10 @@ func toggle_mute() -> void:
 
 func clear_effects() -> void:
 	_effects.clear()
-	_mesh.clear_surfaces()
+	_effects_dirty = false
+	if _mesh_has_surface:
+		_mesh.clear_surfaces()
+		_mesh_has_surface = false
 	for voice in _voices:
 		voice.pending = false
 		voice.player.volume_db = -80.0
@@ -326,6 +420,7 @@ func reset_state() -> void:
 	for loop in _loops.values():
 		loop.gain = 0.0
 		loop.target = 0.0
+		loop.stopped = true
 		loop.player.volume_db = -80.0
 		loop.player.stop()
 	_cooldowns.clear()
@@ -360,47 +455,69 @@ func _add_effect(kind: StringName, point: Vector3, strength: float) -> void:
 	elif kind in [&"core_break", &"repair_step"]:
 		color = CLOCK
 	elif kind in HOSTILE_CUES:
-		color = Color("ff6458")
-	_effects.append({"kind": kind, "point": to_local(point) + Vector3.UP * 0.12,
-		"age": 0.0, "life": 0.48 if kind == &"player_hurt" else (0.40 if kind == &"core_break" else 0.22),
-		"color": color, "strength": strength})
-	_rebuild_effects()
+		color = HURT
+	var is_hurt := kind == &"player_hurt"
+	_effects.append({
+		"kind": kind,
+		"point": to_local(point) + Vector3.UP * 0.12,
+		"age": 0.0,
+		"life": 0.48 if is_hurt else (0.40 if kind == &"core_break" else 0.22),
+		"color": color,
+		"strength": strength,
+		"is_ring": kind in RING_EFFECT_KINDS,
+		"is_hurt": is_hurt,
+	})
+	_effects_dirty = true
+	_queue_audio_flush()
 
 
 func _rebuild_effects() -> void:
-	_mesh.clear_surfaces()
+	_effects_dirty = false
 	if _effects.is_empty():
+		if _mesh_has_surface:
+			_mesh.clear_surfaces()
+			_mesh_has_surface = false
 		return
+	_ensure_geometry_tables()
+	if _mesh_has_surface:
+		_mesh.clear_surfaces()
+	_mesh_has_surface = true
 	_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 	for effect in _effects:
 		var fraction := clampf(float(effect.age) / float(effect.life), 0.0, 1.0)
+		var fade := 1.0 - fraction
 		var color: Color = effect.color
-		color.a = (1.0 - fraction) * 0.8
+		color.a = fade * 0.8
+		_mesh.surface_set_color(color)
 		var center: Vector3 = effect.point
-		var radius := (0.12 + fraction * 0.8) * float(effect.strength)
-		if effect.kind == &"player_hurt": radius = (.72 + fraction * .6) * float(effect.strength)
-		if effect.kind in [&"ring_launch", &"ring_return", &"cone_pulse", &"vent", &"repair_step", &"player_hurt"]:
+		var strength := float(effect.strength)
+		var is_hurt := bool(effect.get("is_hurt", effect.kind == &"player_hurt"))
+		var radius := ((0.72 + fraction * 0.6) if is_hurt else (0.12 + fraction * 0.8)) * strength
+		if bool(effect.get("is_ring", effect.kind in RING_EFFECT_KINDS)):
+			var outer := radius + (0.09 if is_hurt else 0.035) * fade
+			var dir_a: Vector3 = _ring_dirs[0]
+			var inner_a := center + dir_a * radius
+			var outer_a := center + dir_a * outer
 			for index in range(20):
-				var a := TAU * float(index) / 20.0
-				var b := TAU * float(index + 1) / 20.0
-				var direction_a := Vector3(cos(a), 0, sin(a))
-				var direction_b := Vector3(cos(b), 0, sin(b))
-				var width := 0.035 * (1.0 - fraction)
-				if effect.kind == &"player_hurt": width = .09 * (1.0 - fraction)
-				_triangle(center + direction_a * radius, center + direction_b * radius, center + direction_a * (radius + width), color)
-				_triangle(center + direction_b * radius, center + direction_b * (radius + width), center + direction_a * (radius + width), color)
+				var dir_b: Vector3 = _ring_dirs[index + 1]
+				var inner_b := center + dir_b * radius
+				var outer_b := center + dir_b * outer
+				_mesh.surface_add_vertex(inner_a)
+				_mesh.surface_add_vertex(inner_b)
+				_mesh.surface_add_vertex(outer_a)
+				_mesh.surface_add_vertex(inner_b)
+				_mesh.surface_add_vertex(outer_b)
+				_mesh.surface_add_vertex(outer_a)
+				inner_a = inner_b
+				outer_a = outer_b
 		else:
+			var inner_radius := radius * 0.3
 			for index in range(6):
-				var angle := TAU * float(index) / 6.0 + 0.4
-				var direction := Vector3(cos(angle), 0.3 + float(index % 3) * 0.25, sin(angle))
-				var side := Vector3(-sin(angle), 0, cos(angle)) * 0.035 * (1.0 - fraction)
-				var start := center + direction * radius * 0.3
-				_triangle(start - side, start + side, center + direction * radius, color)
+				var direction: Vector3 = _burst_dirs[index]
+				var side: Vector3 = _burst_sides[index] * fade
+				var start := center + direction * inner_radius
+				_mesh.surface_add_vertex(start - side)
+				_mesh.surface_add_vertex(start + side)
+				_mesh.surface_add_vertex(center + direction * radius)
 	_mesh.surface_end()
 
-
-func _triangle(a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
-	_mesh.surface_set_color(color)
-	_mesh.surface_add_vertex(a)
-	_mesh.surface_add_vertex(b)
-	_mesh.surface_add_vertex(c)

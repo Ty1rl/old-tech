@@ -73,6 +73,11 @@ func practice() -> void:
 		var total_reps:int=arena._stationary_quota+arena._moving_quota
 		expect(total_reps>=2,"Lesson %s defines stationary and moving practice quotas" % String(lesson))
 		for rep_idx in range(total_reps):
+			for wait_tick in range(8):
+				if arena._practice_spawn_delay <= 0: break
+				arena._physics_process(.1)
+			expect(not arena.specimens.is_empty(), "Next practice target arrives after its readable gap")
+			if arena.specimens.is_empty(): return
 			if lesson==&"charge":
 				arena.weapons.select_tool(2)
 				var aim:Vector3=arena.specimens.back().position

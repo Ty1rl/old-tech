@@ -46,6 +46,8 @@ var _repaired := false
 var _rewound := false
 var _injury_given := false
 var _practice_age := 0.0
+const PRACTICE_RESPAWN_SECONDS := 0.45
+var _practice_spawn_delay := 0.0
 var _damage_flash := 0.0
 var _charged_kills: Dictionary = {}
 var _pending := 0
@@ -907,6 +909,13 @@ func _physics_process(delta: float) -> void:
 	if mode == &"pickup":
 		_step_pickup_mode(delta)
 	elif mode == &"practice":
+		if _practice_spawn_delay > 0.0:
+			_practice_spawn_delay = maxf(0.0, _practice_spawn_delay - delta)
+			if _practice_spawn_delay == 0.0:
+				_spawn_practice()
+				_sync_practice_tutorial_prompt()
+				_seed_room_checkpoint()
+			return
 		if tutorial.is_learned(lesson):
 			if lesson == &"time_meter":
 				_finish_time_meter_lesson(true)
@@ -937,7 +946,7 @@ func _physics_process(delta: float) -> void:
 		if _lesson_succeeded():
 			_advance_practice_rep()
 		elif _needs_combat_target() and _alive_specimens() == 0:
-			_spawn_practice()
+			_queue_practice_spawn()
 			_sync_practice_tutorial_prompt()
 	elif mode == &"pressure":
 		_step_pressure(world_delta)
@@ -1199,6 +1208,7 @@ func _desired_tool_for_lesson(id: StringName) -> int:
 
 
 func _reset_rep_flags() -> void:
+	_practice_spawn_delay = 0.0
 	_kills.clear()
 	_charged_kills.clear()
 	_opened = false
@@ -1611,6 +1621,14 @@ func _spawn_practice() -> void:
 		director.flow.reset()
 
 
+func _queue_practice_spawn() -> void:
+	# A killed target should disappear before another exhibit takes its place.
+	director.clear()
+	specimens.clear()
+	_specimen_ids.clear()
+	_practice_spawn_delay = PRACTICE_RESPAWN_SECONDS
+
+
 func _make_specimen_safe(enemy: Node3D) -> void:
 	if not is_instance_valid(enemy):
 		return
@@ -1732,7 +1750,7 @@ func _advance_practice_rep() -> void:
 	if _practice_stage == &"stationary":
 		_stationary_done += 1
 		if _stationary_done < _stationary_quota:
-			_spawn_practice()
+			_queue_practice_spawn()
 			_sync_practice_tutorial_prompt()
 			run_hint.text = "Practice exhibit · stationary target %d / %d." % [clampi(_stationary_done + 1, 1, maxi(1, _stationary_quota)), maxi(1, _stationary_quota)]
 			_seed_room_checkpoint()
@@ -1741,7 +1759,7 @@ func _advance_practice_rep() -> void:
 		if _moving_quota > 0:
 			_practice_stage = &"moving"
 			_moving_done = 0
-			_spawn_practice()
+			_queue_practice_spawn()
 			_sync_practice_tutorial_prompt()
 			run_hint.text = "Practice exhibit · moving target %d / %d." % [clampi(_moving_done + 1, 1, maxi(1, _moving_quota)), maxi(1, _moving_quota)]
 			_seed_room_checkpoint()
@@ -1749,7 +1767,7 @@ func _advance_practice_rep() -> void:
 			return
 	_moving_done += 1
 	if _practice_stage == &"moving" and _moving_done < _moving_quota:
-		_spawn_practice()
+		_queue_practice_spawn()
 		_sync_practice_tutorial_prompt()
 		run_hint.text = "Practice exhibit · moving target %d / %d." % [clampi(_moving_done + 1, 1, maxi(1, _moving_quota)), maxi(1, _moving_quota)]
 		_seed_room_checkpoint()
@@ -1787,6 +1805,7 @@ func _start_pressure() -> void:
 	specimens.clear()
 	_specimen_ids.clear()
 	_practice_stage = &""
+	_practice_spawn_delay = 0.0
 	mode = &"pressure"
 	_sync_training_protection()
 	_pending = int(waves[wave_index].count)
@@ -2044,10 +2063,12 @@ func _capture_practice() -> Dictionary:
 		"slow_used": _slow_used, "pierced": _pierced, "repaired": _repaired,
 		"rewound": _rewound, "injury_given": _injury_given,
 		"age": _practice_age,
+		"spawn_delay": _practice_spawn_delay,
 	}
 
 
 func _restore_practice(state: Dictionary) -> void:
+	_practice_spawn_delay = maxf(0.0, float(state.get("spawn_delay", 0.0)))
 	_practice_stage = StringName(state.get("stage", _practice_stage))
 	_stationary_quota = int(state.get("stat_quota", _stationary_quota))
 	_stationary_done = int(state.get("stat_done", _stationary_done))

@@ -9,6 +9,7 @@ const OPPORTUNITY_SECONDS := 2.4
 const RECOVERY_SECONDS := 4.7
 const MAX_COHORTS := 8
 const MAX_MEMBERS := 8
+const BOTTOM_SPAWN_MARGIN := 6.0
 var arrival_index := 0
 var cohorts: Array[Dictionary] = []
 var pressure_active := false
@@ -62,6 +63,8 @@ static func readable_from_player(point: Vector3, extent: float, player: Vector3)
 func _free_slot(point: Vector3, extent: float, player_position: Vector3, cover: RefCounted, occupied_positions: PackedVector3Array, occupied_clearances: PackedFloat64Array, slots: Array[Dictionary], is_pattern: bool, is_boss: bool) -> bool:
 	var limit := float(Tuning.ARENA_HALF_SIZE) - extent - 0.6
 	if absf(point.x) > limit or absf(point.z) > limit or point.distance_to(player_position) < maxf(5.0, extent + 1.4): return false
+	# The near wall/doorway can hide arrivals from the steep camera.
+	if point.z + extent > float(Tuning.ARENA_HALF_SIZE) - BOTTOM_SPAWN_MARGIN: return false
 	# Keep the boss's whole silhouette out of the bottom entrance area.
 	if is_boss and point.z + extent > float(Tuning.ARENA_HALF_SIZE) * 0.5: return false
 	for occupied_index in range(occupied_positions.size()):
@@ -166,6 +169,7 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 static func safe(point: Vector3, radius: float, player_position: Vector3, cover: RefCounted) -> bool:
 	var limit := float(Tuning.ARENA_HALF_SIZE) - radius - 0.6
 	if absf(point.x) > limit or absf(point.z) > limit or point.distance_to(Vector3(player_position.x, 0, player_position.z)) < maxf(5.0, radius + 1.4): return false
+	if point.z + radius > float(Tuning.ARENA_HALF_SIZE) - BOTTOM_SPAWN_MARGIN: return false
 	return cover == null or not cover.clip_segment(point, point, radius + 0.15).blocked
 
 

@@ -74,6 +74,9 @@ func _pattern(enemy: Node3D) -> void:
 
 
 func _complete_single_rep(lesson_id: StringName) -> void:
+	for wait_tick in range(8):
+		if arena._practice_spawn_delay <= 0: break
+		_tick(.1)
 	if arena.specimens.is_empty():
 		return
 	match lesson_id:
@@ -730,12 +733,18 @@ func _run() -> void:
 	expect(arena._practice_stage == &"stationary" and arena.specimens.size() == 1 and arena.specimens[0].kind == &"side_guard", "Opening stationary rep 1/2 spawns solo side_guard")
 	_complete_single_rep(&"opening")
 	_tick(0.02)
+	expect(arena.specimens.is_empty(), "Completed practice target disappears before its replacement")
+	_tick(0.5)
 	expect(arena._practice_stage == &"stationary" and arena._stationary_done == 1 and arena.specimens.size() == 1 and arena.specimens[0].kind == &"front_guard", "Opening stationary rep 2/2 spawns solo front_guard")
 	_complete_single_rep(&"opening")
 	_tick(0.02)
+	expect(arena.specimens.is_empty(), "Completed practice target disappears before its replacement")
+	_tick(0.5)
 	expect(arena._practice_stage == &"moving" and arena._moving_done == 0 and arena.specimens.size() == 1 and arena.specimens[0].kind == &"side_guard", "Opening moving rep 1/2 spawns moving side_guard")
 	_complete_single_rep(&"opening")
 	_tick(0.02)
+	expect(arena.specimens.is_empty(), "Completed practice target disappears before its replacement")
+	_tick(0.5)
 	expect(arena._practice_stage == &"moving" and arena._moving_done == 1 and arena.specimens.size() == 1 and arena.specimens[0].kind == &"front_guard", "Opening moving rep 2/2 spawns moving front_guard")
 	_complete_single_rep(&"opening")
 	_tick(0.02)

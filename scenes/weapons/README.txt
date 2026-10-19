@@ -1,4 +1,4 @@
-WAVE 2 — THREE WEAPON SCENES
+Weapon scenes
 
 Open scenes/weapons/weapons.tscn. Its named children are the real RingCutter,
 FocusedFlash and HeatBellows implementations; Presentation is shared light/air.
@@ -25,12 +25,11 @@ MANUAL BENCH
 Run scenes/weapons/preview.tscn manually. 1/2/3 select; mouse draws/charges/blows;
 Space manually slows through the one TimeController. R resets targets/conditions.
 V saves and B restores world/weapon values. Time meter/charges are never restored.
-Targets are stationary contact fixtures; CombatPlayer/controller/campaign migration
-belongs to other Wave 2 seats. No other owner's arena/player/HUD source is changed.
-Automated pictures use project render.py only, never a host display.
+Targets are stationary contact fixtures. Use a private virtual display for
+automated pictures.
 
-INTEGRATION FOR JAM-3 / JAM-7 / JAM-1
-Replace the old bare Weapons.new() with:
+COMPOSITION
+The arena binds the same equipment and time controller to the weapons and HUD:
   var weapons: WeaponController = preload("res://scenes/weapons/weapons.tscn").instantiate()
   var equipment := WeaponEquipment.new(weapons.condition_settings)
   weapons.equipment = equipment
@@ -55,8 +54,7 @@ Detailed behavior state belongs to the concrete children, without mirrored alias
   flash.charging, charge, cooldown, pulses, flash_timer, settings.pierce_threshold
   bellows.active, pulse_cooldown, forward, settings
 Rebuild display with rebuild_visuals(player), not the retired private helper.
-Player visual is one Node3D adapter boundary until the independent CombatPlayer
-and gait deliveries are integrated. Components receive concrete origins/muzzles;
+Player visual is a Node3D adapter boundary. Components receive concrete origins/muzzles;
 none reads player health, slow charge or visual internals. Contacts use the actual
 enemy receive_attack/combat_id/attack_radius/has_cuttable_part/apply_control API.
 

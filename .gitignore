@@ -4,3 +4,10 @@
 
 # Local exports
 /build/
+
+# Local workspace coordination belongs beside the checkout.
+/AGENTS.md
+/GEMINI.md
+/COORDINATION*.txt
+/*-BRIEF.txt
+/RUNBOOK.txt

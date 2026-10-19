@@ -134,7 +134,7 @@ history.record(world_delta, capture_state)         # skipped while frozen
   WeaponRepair` and its public `tool`, `switch_tool`, `show_message` and
   `has_active_session`.
 
-## Hookups for campaign (jam-4, Wave B) and HUD (jam-7)
+## Campaign and HUD
 - Campaign: on a NEW run call `time_controller.set_capabilities(false, false)`. Unlock
   slow when the slow lesson starts (`set_capabilities(true, false)`), then rewind
   before the scripted depletion (`set_capabilities(true, true)` → `force_depletion()`).

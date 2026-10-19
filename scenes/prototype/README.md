@@ -1,9 +1,9 @@
-# Some Assembly Required — gameplay and testing
+# Some Assembly Required - gameplay and testing
 
-Use **Godot 4.7.2 Standard / Compatibility**. From the Ubuntu host:
+Use **Godot 4.7.2 Standard / Compatibility**. From the repository root:
 
 ```sh
-~/.local/bin/godot --path ~/game-jams/projects/old-tech/seats/jam-1/repo
+godot --path .
 ```
 
 Restart a running game after updates. Choose **New Game**, then **Easy** or **Hard** for the campaign.
@@ -158,20 +158,14 @@ godot --headless --path . --script res://scenes/prototype/checks/protagonist_voi
 godot --headless --path . --script res://scenes/prototype/checks/audio_s.gd
 ```
 
-Within the lab seat setup, use the shared bounded runner instead:
-
-```sh
-python3 check.py --seat jam-1 --suite complete_run --timeout 60
-```
-
 Additional focused checks cover time/recovery, weapon components, repairs,
 enemy patterns and navigation, speech lifetime, menus and developer encounter
 selection. `developer_encounters` verifies an actual Hard boss launch, including
 enemy tuning and weapon wear. Keep logs and screenshots outside the source tree.
 
-Automated graphical previews must use shared `render.py` on a private display.
+Use a private virtual display for automated graphical previews.
 `flow_capture_k` and `combat_capture_o` are graphical captures, not headless checks: frame-post-draw
-requires a renderer. Never launch automated previews on Matt's desktop.
+requires a renderer. Do not use the active desktop display for automated previews.
 
 Models and sound remain provisional. Human playtesting determines whether the
 resource budgets, repair interruptions and encounter pressure feel right.

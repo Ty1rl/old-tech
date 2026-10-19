@@ -13,4 +13,4 @@ music_tracks = Dictionary[StringName, AudioStream]({
 &"boss": ExtResource("boss"),
 &"victory": ExtResource("victory")
 })
-music_volume_db = -22.0
+music_volume_db = -19.0

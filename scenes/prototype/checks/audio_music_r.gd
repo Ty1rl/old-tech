@@ -149,7 +149,7 @@ func run() -> void:
 	expect(capture != null and capture.data.size() > 1000 and peak > .001 and peak <= .90, "Actual overlapping effects/music/voice capture respects Master ceiling")
 	expect(AudioServer.get_bus_effect(0, 0) is AudioEffectHardLimiter and AudioServer.get_bus_effect(0, 0).ceiling_db == -1, "Existing -1 dB Master limiter retained")
 	expect(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(&"World")) < -7, "World effects/music receive speech ducking")
-	expect(AudioServer.get_bus_volume_db(voice_bus) == original_voice_db and manager.voice.volume_db == -3, "Ducking leaves Voice bus/node gain unchanged")
+	expect(AudioServer.get_bus_volume_db(voice_bus) == original_voice_db and manager.voice.volume_db == -6, "Ducking leaves Voice bus/node gain unchanged")
 	expect(feedback.metrics().voices <= 15, "Overlap admission respects effect voice cap")
 	print(JSON.stringify({"native_mix_peak": peak, "supplied_effect_cues": supplied, "effect_player_cap": 15, "global_music_players": 1, "global_voice_players": 1}))
 	AudioServer.remove_bus_effect(0, AudioServer.get_bus_effect_count(0) - 1)

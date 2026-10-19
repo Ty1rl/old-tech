@@ -53,9 +53,9 @@ func run() -> void:
 		manager.set_world_audio_state(1, false, 1)
 		manager.set_music_context(context)
 		await create_timer(.4).timeout
-		var expected := -16.0 if context == &"menu" else -22.0
+		var expected := -13.0 if context == &"menu" else -19.0
 		expect(absf(manager.music.volume_db - expected) < 1.5, "Only menu music gets +6 dB: " + String(context))
-		expect(manager.voice.volume_db == -3 and AudioServer.get_bus_volume_db(voice_bus) == voice_db, "Music gain preserves Voice: " + String(context))
+		expect(manager.voice.volume_db == -6 and AudioServer.get_bus_volume_db(voice_bus) == voice_db, "Music gain preserves Voice: " + String(context))
 	expect(manager.voice.playback_type == AudioServer.PLAYBACK_TYPE_STREAM and manager.music.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Web streaming playback policy retained")
 	# Stress the raised menu cue with real speech even though the normal menu
 	# has no automatic narration. Capture after the existing Master limiter.
@@ -104,16 +104,16 @@ func run() -> void:
 	reset()
 	manager.say(&"protagonist.repair_started")
 	manager.stop_dialogue()
-	manager._process(17.9)
-	expect(not manager.say(&"protagonist.under_pressure"), "Shared cooldown suppresses chatter for 18 seconds")
+	manager._process(89.9)
+	expect(not manager.say(&"protagonist.under_pressure"), "Shared cooldown suppresses chatter for 90 seconds")
 	manager._process(.2)
 	expect(manager.say(&"protagonist.under_pressure"), "Barks available after shared cooldown")
 	manager.stop_dialogue()
-	expect(manager.say(&"protagonist.boss_defeated", 2), "Boss milestone can bypass incidental cooldown")
+	expect(not manager.say(&"protagonist.boss_defeated", 2), "Protagonist milestones respect the same 90-second limit")
 	reset()
 	manager.say(&"tutorial.time_meter", 3)
 	expect(not manager.say(&"protagonist.multi_kill"), "Teaching suppresses incidental reactions")
-	expect(manager.say(&"protagonist.boss_defeated", 2) and manager._queue.size() == 1, "Milestone queues behind teaching instead of cutting it off")
+	expect(not manager.say(&"protagonist.boss_defeated", 2) and manager._queue.is_empty(), "Protagonist milestones cannot queue chatter behind teaching")
 	reset()
 	# Real campaign signal wiring, using controlled events rather than claiming a
 	# complete combat playthrough. No gameplay/UI source is changed by this check.

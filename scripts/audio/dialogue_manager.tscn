@@ -5,7 +5,7 @@ script = ExtResource("script")
 [node name="Voice" type="AudioStreamPlayer" parent="."]
 playback_type = 1
 bus = &"Voice"
-volume_db = -3.0
+volume_db = -6.0
 [node name="Music" type="AudioStreamPlayer" parent="."]
 playback_type = 1
 bus = &"Music"

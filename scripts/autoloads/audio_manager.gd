@@ -4,6 +4,7 @@ extends Node
 signal speech_finished(event: StringName, interrupted: bool)
 
 const MAX_QUEUE := 3
+const BARK_INTERVAL_SECONDS := 90.0
 const MENU_MUSIC_BOOST_DB := 6.0 # Menu cue only; preserve encounter/boss/victory and Voice.
 @export var music_library: CombatAudioLibrary = preload("res://audio/music/contexts.tres")
 @onready var voice: AudioStreamPlayer = $Voice
@@ -96,7 +97,9 @@ func say(event: StringName, priority: int = 1, once: bool = false) -> bool:
 	for clip in variants:
 		if clip is AudioStream and clip.get_length() > 0: clips.append(clip)
 	if clips.is_empty(): return false
-	if priority == 1 and (_bark_cooldown > 0 or not current_event.is_empty()): return false
+	# Milestones use the same protagonist limit; they must not queue extra chatter.
+	var protagonist := String(event).begins_with("protagonist.")
+	if (priority == 1 or protagonist) and (_bark_cooldown > 0 or not current_event.is_empty()): return false
 	var variant := int(_variants.get(event, 0)) % clips.size()
 	var item := {"event":event, "priority":priority, "once":once, "stream":clips[variant]}
 	_bind_speaker_scene()
@@ -134,7 +137,8 @@ func _start(item: Dictionary) -> void:
 	_speech_elapsed = 0
 	_variants[item.event] = int(_variants.get(item.event, 0)) + 1
 	if item.once: _once[item.event] = true
-	if _priority == 1: _bark_cooldown = 18
+	if _priority == 1 or String(item.event).begins_with("protagonist."):
+		_bark_cooldown = BARK_INTERVAL_SECONDS
 	played_events.append(current_event)
 	if played_events.size() > 64: played_events.pop_front()
 	voice.play()

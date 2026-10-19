@@ -40,7 +40,7 @@ const SPECS := {
 	"shot": {
 		"heading": "Click to shoot",
 		"subtitle": "2 · FOCUSED FLASH",
-		"body": "2 · Focused Flash — aim at the yellow core.",
+		"body": "2 · Focused Flash - aim at the yellow core.",
 		"primary_tool": 2,
 		"secondary_tool": 2,
 		"enemy_kind": &"yellow",
@@ -49,7 +49,7 @@ const SPECS := {
 	"charge": {
 		"heading": "Hold, then release",
 		"subtitle": "2 · FOCUSED FLASH · PIERCE",
-		"body": "2 · Focused Flash — charge until bright to pierce aligned targets.",
+		"body": "2 · Focused Flash - charge until bright to pierce aligned targets.",
 		"primary_tool": 2,
 		"secondary_tool": 2,
 		"enemy_kind": &"yellow",
@@ -57,8 +57,8 @@ const SPECS := {
 	},
 	"cut": {
 		"heading": "Hold, draw, release",
-		"subtitle": "1 · Ring Cutter — draw across the blue link.",
-		"body": "1 · Ring Cutter — draw across the blue link.",
+		"subtitle": "1 · Ring Cutter - draw across the blue link.",
+		"body": "1 · Ring Cutter - draw across the blue link.",
 		"primary_tool": 1,
 		"secondary_tool": 1,
 		"enemy_kind": &"blue",
@@ -67,7 +67,7 @@ const SPECS := {
 	"heat": {
 		"heading": "Aim and hold",
 		"subtitle": "3 · HEAT BELLOWS",
-		"body": "3 · Heat Bellows — strip orange armor and push threats back.",
+		"body": "3 · Heat Bellows - strip orange armor and push threats back.",
 		"primary_tool": 3,
 		"secondary_tool": 3,
 		"enemy_kind": &"orange",
@@ -94,7 +94,7 @@ const SPECS := {
 	"pair": {
 		"heading": "Click A, then B",
 		"subtitle": "2 · FOCUSED FLASH · PAIR",
-		"body": "2 · Focused Flash — shoot A to open B before its shutter closes.",
+		"body": "2 · Focused Flash - shoot A to open B before its shutter closes.",
 		"primary_tool": 2,
 		"secondary_tool": 2,
 		"enemy_kind": &"pair",
@@ -103,7 +103,7 @@ const SPECS := {
 	"loop": {
 		"heading": "Hold, draw, release",
 		"subtitle": "1 · RING CUTTER · LOOP",
-		"body": "1 · Ring Cutter — cut every blue support, then charge 2 on yellow.",
+		"body": "1 · Ring Cutter - cut every blue support, then charge 2 on yellow.",
 		"primary_tool": 1,
 		"secondary_tool": 2,
 		"enemy_kind": &"loop",
@@ -112,7 +112,7 @@ const SPECS := {
 	"zigzag": {
 		"heading": "Hold, draw, release",
 		"subtitle": "1 · RING CUTTER · ZIGZAG",
-		"body": "1 · Ring Cutter — bend across each blue span, then charge 2 on yellow.",
+		"body": "1 · Ring Cutter - bend across each blue span, then charge 2 on yellow.",
 		"primary_tool": 1,
 		"secondary_tool": 2,
 		"enemy_kind": &"zigzag",
@@ -1298,7 +1298,7 @@ func _step_lesson_choreography(_dt: float, world_dt: float) -> void:
 					ToolStyle.BEAM,
 					"2 · FOCUSED FLASH · FINISH YELLOW",
 					"Click to shoot",
-					"2 · Focused Flash — shoot the exposed yellow core."
+					"2 · Focused Flash - shoot the exposed yellow core."
 				)
 				if enemy != null:
 					_current_aim = enemy.call("core_world_position")
@@ -1363,7 +1363,7 @@ func _step_lesson_choreography(_dt: float, world_dt: float) -> void:
 					ToolStyle.BEAM,
 					"2 · FOCUSED FLASH · CHARGE YELLOW",
 					"Hold, then release",
-					"2 · Focused Flash — charge and fire into the exposed yellow core."
+					"2 · Focused Flash - charge and fire into the exposed yellow core."
 				)
 				if enemy != null:
 					_current_aim = enemy.call("core_world_position")

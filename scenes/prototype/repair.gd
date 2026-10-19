@@ -956,7 +956,7 @@ func _handle_spin_button(point: Vector2, pressed: bool) -> void:
 				if spin_stroke_accum >= 0.20 and not trace_bad:
 					spin_base_accum = clampf(spin_accum, 0.0, spin_required)
 				var pct := int(round(clampf(spin_accum / maxf(0.01, spin_required), 0.0, 1.0) * 100.0))
-				_invalid("Released early (%d%% spun). Progress saved — drag again to finish." % pct if spin_base_accum > 0.01 else "Released early (%d%% spun). Completed checkpoints are safe; spin further." % pct)
+				_invalid("Released early (%d%% spun). Progress saved - drag again to finish." % pct if spin_base_accum > 0.01 else "Released early (%d%% spun). Completed checkpoints are safe; spin further." % pct)
 
 
 func _extend_spin(finish: Vector2) -> void:
@@ -1221,7 +1221,7 @@ func _commit_steps(step_count: int) -> int:
 			else:
 				_clear_trace()
 			trace_bad = true
-			feedback.text = "Not enough time for checkpoint — pause gesture to let time recharge."
+			feedback.text = "Not enough time for checkpoint - pause gesture to let time recharge."
 			_queue_redraws()
 		else:
 			_clear_trace()

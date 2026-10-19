@@ -12,7 +12,7 @@ func press(source: Vector3, aim: Vector3) -> void:
 	if not _can_use_tool(&"cone"):
 		active = false
 		fresh_press = false
-		last_feedback = "Cone empty — press E to repair"
+		last_feedback = "Cone empty - press E to repair"
 		return
 	active = true
 	fresh_press = true
@@ -40,7 +40,7 @@ func step(delta: float, w_delta: float, source: Vector3, muzzle: Vector3, enemie
 		fresh_press = false
 		if w_delta > 0.0:
 			pulse_cooldown = maxf(0.0, pulse_cooldown - w_delta)
-		last_feedback = "Cone empty — press E to repair"
+		last_feedback = "Cone empty - press E to repair"
 		return
 
 	# Continuous wear uses REAL delta; continuous damage & pulse cadence use WORLD delta.
@@ -50,7 +50,7 @@ func step(delta: float, w_delta: float, source: Vector3, muzzle: Vector3, enemie
 		fresh_press = false
 		if w_delta > 0.0:
 			pulse_cooldown = maxf(0.0, pulse_cooldown - w_delta)
-		last_feedback = "Cone empty — press E to repair"
+		last_feedback = "Cone empty - press E to repair"
 		return
 
 	var afford_fraction := clampf(actual_real_dt / delta, 0.0, 1.0)
@@ -155,7 +155,7 @@ func step(delta: float, w_delta: float, source: Vector3, muzzle: Vector3, enemie
 	if not _can_use_tool(&"cone"):
 		active = false
 		if not hit_any:
-			last_feedback = "Cone empty — press E to repair"
+			last_feedback = "Cone empty - press E to repair"
 
 func cancel_input() -> void:
 	active = false

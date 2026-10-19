@@ -30,7 +30,7 @@ func press(origin: Vector3, aim: Vector3) -> void:
 		last_feedback = "Ring in flight"
 		return
 	if not _can_use_tool(&"ring", 1.0):
-		last_feedback = "Ring empty — press E to repair"
+		last_feedback = "Ring empty - press E to repair"
 		return
 	drawing = true
 	preview_points.clear()
@@ -50,7 +50,7 @@ func release(origin: Vector3, aim: Vector3, muzzle: Vector3) -> void:
 		return
 	if not _can_use_tool(&"ring", 1.0):
 		clear_preview()
-		last_feedback = "Ring empty — press E to repair"
+		last_feedback = "Ring empty - press E to repair"
 		return
 	_spend_tool(&"ring", 1.0)
 	flight_points = preview_points.duplicate()

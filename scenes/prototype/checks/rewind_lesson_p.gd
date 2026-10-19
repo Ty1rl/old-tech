@@ -39,6 +39,10 @@ func _mouse_button(button: int, pressed: bool) -> InputEventMouseButton:
 func _run() -> void:
 	var old_size := root.size
 	var game_state: Node = root.get_node("GameState")
+	var saved_preferences: Dictionary = game_state.preferences()
+	# This suite asserts actual speech playback, independent of saved playtest settings.
+	game_state.set_setting("sound", true)
+	game_state.set_setting("voice_volume", 0.9)
 	var arena: Node3D = load("res://scenes/prototype/arena.tscn").instantiate()
 	root.add_child(arena)
 	current_scene = arena
@@ -335,6 +339,8 @@ func _run() -> void:
 	root.size = old_size
 	audio_mgr.stop_dialogue()
 	audio_mgr.set_music_context(&"intro")
+	for setting in saved_preferences:
+		game_state.set_setting(setting, saved_preferences[setting])
 	call_group(&"world_audio", &"reset_state")
 	await create_timer(.1).timeout
 	arena.feedback.reset_state()

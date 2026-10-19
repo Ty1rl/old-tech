@@ -28,16 +28,16 @@ const TIME_METER_LINE := "Taking damage, slowing time, and repairing drain your 
 # Entry format: [imperative_heading, subtle_body, lesson_key, subtle_subtitle]
 const LESSONS := {
 	"time_meter": ["Watch your time reserve", TIME_METER_LINE, "time_meter", "TIME RESERVE"],
-	"cut": ["Hold, draw, release", "1 · Ring Cutter — draw across the blue link.", "cut", "1 · RING CUTTER"],
-	"heat": ["Aim and hold", "3 · Heat Bellows — strip orange armor and push threats back.", "heat", "3 · HEAT BELLOWS"],
-	"shot": ["Click to shoot", "2 · Focused Flash — aim at the yellow core.", "shot", "2 · FOCUSED FLASH"],
+	"cut": ["Hold, draw, release", "1 · Ring Cutter - draw across the blue link.", "cut", "1 · RING CUTTER"],
+	"heat": ["Aim and hold", "3 · Heat Bellows - strip orange armor and push threats back.", "heat", "3 · HEAT BELLOWS"],
+	"shot": ["Click to shoot", "2 · Focused Flash - aim at the yellow core.", "shot", "2 · FOCUSED FLASH"],
 	"slow": ["Hold Space", "Hold Space to slow the world, shoot the target, then release.", "slow", "TIME SLOW"],
 	"repair": ["Press E to repair", "Press E to open repair: spin, connect, and trace to 100%; closes when full.", "repair", "TOOL REPAIR"],
-	"charge": ["Hold, then release", "2 · Focused Flash — charge until bright to pierce aligned targets.", "charge", "2 · FOCUSED FLASH · PIERCE"],
+	"charge": ["Hold, then release", "2 · Focused Flash - charge until bright to pierce aligned targets.", "charge", "2 · FOCUSED FLASH · PIERCE"],
 	"opening": ["Cut or heat, then shoot", "Open the blue link or orange armor, then switch to 2 for yellow.", "opening", "OPEN · THEN 2 · FOCUSED FLASH"],
-	"pair": ["Click A, then B", "2 · Focused Flash — shoot A to open B before its shutter closes.", "pair", "2 · FOCUSED FLASH · PAIR"],
-	"loop": ["Hold, draw, release", "1 · Ring Cutter — cut every blue support, then charge 2 on yellow.", "loop", "1 · RING CUTTER · LOOP"],
-	"zigzag": ["Hold, draw, release", "1 · Ring Cutter — bend across each blue span, then charge 2 on yellow.", "zigzag", "1 · RING CUTTER · ZIGZAG"],
+	"pair": ["Click A, then B", "2 · Focused Flash - shoot A to open B before its shutter closes.", "pair", "2 · FOCUSED FLASH · PAIR"],
+	"loop": ["Hold, draw, release", "1 · Ring Cutter - cut every blue support, then charge 2 on yellow.", "loop", "1 · RING CUTTER · LOOP"],
+	"zigzag": ["Hold, draw, release", "1 · Ring Cutter - bend across each blue span, then charge 2 on yellow.", "zigzag", "1 · RING CUTTER · ZIGZAG"],
 	"rewind": ["Scroll, then press Enter", "When a hit spends an emergency charge, scroll the wheel to an earlier safe moment and confirm.", "rewind", "EMERGENCY REWIND"],
 	"final": ["Open each lock, then shoot", "Clear pair, zigzag, and loop phases, then finish the yellow core.", "final", "THE BURIAL DEVICE"],
 }

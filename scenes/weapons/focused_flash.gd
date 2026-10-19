@@ -18,7 +18,7 @@ func press() -> void:
 		charging = false
 		charge_time = 0.0
 		charge = 0.0
-		last_feedback = "Flash empty — press E to repair"
+		last_feedback = "Flash empty - press E to repair"
 		return
 	if cooldown > 0.0:
 		last_feedback = "Flash cooling (%.2fs)" % cooldown
@@ -39,7 +39,7 @@ func release(origin: Vector3, aim: Vector3, muzzle: Vector3) -> void:
 	charge_time = 0.0
 	charge = 0.0
 	if not _can_use_tool(&"beam", 1.0):
-		last_feedback = "Flash empty — press E to repair"
+		last_feedback = "Flash empty - press E to repair"
 		return
 	if pulses.size() >= settings.max_pulses:
 		last_feedback = "Flash max pulses active (%d)" % settings.max_pulses
@@ -80,13 +80,13 @@ func step(delta: float, world_delta: float, enemies: Array, muzzle: Vector3) -> 
 			charging = false
 			charge_time = 0.0
 			charge = 0.0
-			last_feedback = "Flash empty — press E to repair"
+			last_feedback = "Flash empty - press E to repair"
 		elif delta > 0.0:
 			var was_ready := charge >= settings.pierce_threshold
 			charge_time += delta
 			charge = clampf(charge_time / maxf(0.05, settings.charge_time), 0.0, 1.0)
 			if charge >= settings.pierce_threshold:
-				last_feedback = "PIERCE READY — release to fire"
+				last_feedback = "PIERCE READY - release to fire"
 				if not was_ready: combat_event.emit(&"flash_ready", muzzle, 1.0)
 			else:
 				last_feedback = "Charging Flash %.0f%%" % (charge * 100.0)

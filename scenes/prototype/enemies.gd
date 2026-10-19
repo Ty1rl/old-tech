@@ -463,7 +463,7 @@ func status_text() -> String:
 		&"victory":
 			return "Encounter Victory! (F6 replay | R sandbox)"
 		&"defeat":
-			return "Time depleted — Press R to reset or F6 to retry"
+			return "Time depleted - Press R to reset or F6 to retry"
 		_:
 			return "Sandbox"
 

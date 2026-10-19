@@ -4,7 +4,6 @@ extends Node
 signal speech_finished(event: StringName, interrupted: bool)
 
 const MAX_QUEUE := 3
-const BARK_INTERVAL_SECONDS := 150.0
 const BARK_INITIAL_DELAY_SECONDS := 60.0
 const BARK_TUTORIAL_GRACE_SECONDS := 20.0
 const PROTAGONIST_GAIN_DB := -2.0
@@ -20,6 +19,7 @@ var music_context: StringName:
 var _priority := 0
 var _queue: Array[Dictionary] = []
 var _variants: Dictionary = {}
+var reactions := ProtagonistVoice.new()
 var _once: Dictionary = {}
 var _bark_cooldown := 0.0
 var _intro_played := false
@@ -43,6 +43,7 @@ var web_sample_voice := false
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	library = load("res://audio/voice/library.tres") as DialogueLibrary
+	_load_voice_history()
 	configure_playback_types(OS.has_feature("web"))
 	voice.finished.connect(_on_finished)
 	music.finished.connect(func(): _music_completed = true)
@@ -106,6 +107,7 @@ func play_intro() -> bool:
 
 func begin_run() -> void:
 	stop_dialogue()
+	reactions.reset()
 	_once.clear()
 	_bark_cooldown = maxf(_bark_cooldown, BARK_INITIAL_DELAY_SECONDS)
 	_intro_played = false # Next explicit New Game may present its intro again.
@@ -121,7 +123,34 @@ func _bus_audible(name: StringName) -> bool:
 func _speech_available() -> bool:
 	return not _quitting and library != null and is_instance_valid(voice) and _bus_audible(&"Master") and _bus_audible(&"Voice")
 
-func say(event: StringName, priority: int = 1, once: bool = false) -> bool:
+func react(event: StringName) -> void:
+	reactions.offer(event)
+
+
+func step_reactions(delta: float, active: bool, repairing: bool, idle: bool) -> void:
+	reactions.step(delta, active, repairing, idle)
+	if _bark_cooldown > 0 or not current_event.is_empty() or not _queue.is_empty(): return
+	var candidate := reactions.choose()
+	if not candidate.is_empty():
+		say(candidate.event, 1, false, candidate.variant)
+
+
+func _load_voice_history() -> void:
+	var config := ConfigFile.new()
+	if config.load(GameState.SETTINGS_PATH) != OK: return
+	for event in library.clips:
+		if String(event).begins_with("protagonist.") and config.has_section_key("voice_variants", event):
+			_variants[event] = maxi(0, int(config.get_value("voice_variants", event)))
+
+
+func _save_voice_history(event: StringName) -> void:
+	var config := ConfigFile.new()
+	config.load(GameState.SETTINGS_PATH)
+	config.set_value("voice_variants", event, int(_variants[event]) % library.clips[event].size())
+	config.save(GameState.SETTINGS_PATH)
+
+
+func say(event: StringName, priority: int = 1, once: bool = false, variant_override: int = -1) -> bool:
 	if event.is_empty() or _cancelling or not _speech_available() or not library.clips.has(event): return false
 	if not library.clips[event] is Array: return false
 	if once and _once.has(event): return false
@@ -134,8 +163,10 @@ func say(event: StringName, priority: int = 1, once: bool = false) -> bool:
 	# Milestones use the same protagonist limit; they must not queue extra chatter.
 	var protagonist := String(event).begins_with("protagonist.")
 	if (priority == 1 or protagonist) and (_bark_cooldown > 0 or not current_event.is_empty()): return false
-	var variant := int(_variants.get(event, 0)) % clips.size()
-	var item := {"event":event, "priority":priority, "once":once, "stream":clips[variant]}
+	if protagonist and not _variants.has(event): _variants[event] = randi_range(0, clips.size() - 1)
+	var variant := variant_override if variant_override >= 0 else int(_variants.get(event, 0)) % clips.size()
+	if variant >= clips.size(): return false
+	var item := {"event":event, "priority":priority, "once":once, "stream":clips[variant], "variant":variant}
 	_bind_speaker_scene()
 	if not current_event.is_empty() and priority <= _priority:
 		if priority == 1 or _queue.size() >= MAX_QUEUE: return false
@@ -148,6 +179,7 @@ func say(event: StringName, priority: int = 1, once: bool = false) -> bool:
 func stop_dialogue() -> void:
 	if _cancelling: return
 	_cancelling = true
+	reactions.clear_pending()
 	var cancelled: Array[StringName] = []
 	if not current_event.is_empty(): cancelled.append(current_event)
 	for item in _queue: cancelled.append(item.event)
@@ -177,9 +209,15 @@ func _start(item: Dictionary) -> void:
 	_priority = item.priority
 	_speech_elapsed = 0
 	_variants[item.event] = int(_variants.get(item.event, 0)) + 1
+	if protagonist:
+		_variants[item.event] = int(item.variant) + 1
+		reactions.played(item.event)
+		_save_voice_history(item.event)
+	else:
+		reactions.clear_pending()
 	if item.once: _once[item.event] = true
 	if _priority == 1 or protagonist:
-		_bark_cooldown = BARK_INTERVAL_SECONDS
+		_bark_cooldown = reactions.interval() if protagonist else ProtagonistVoice.NORMAL_INTERVAL
 	played_events.append(current_event)
 	if played_events.size() > 64: played_events.pop_front()
 	voice.play()

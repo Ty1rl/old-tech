@@ -1,36 +1,83 @@
 # Some Assembly Required
 
-Our game for [Ludum Dare 60](https://ldjam.com/events/ludum-dare/60).
+**Old tech. Borrowed time.**
 
-- **Theme:** Old Tech
-- **Deadline:** Monday, October 19, 2026 at **5:00pm CDT** (America/Chicago; **22:00 UTC**).
-- **Engine:** Godot **4.7.2 Standard**, using the Compatibility renderer.
+An ancient device has turned museum exhibits into monsters. Cut their connections,
+strip their armor, and finish the exposed cores with cobbled-together old tech.
+Slow time to line up attacks, repair your equipment under pressure, and rewind a
+bad moment when your reserve runs out.
 
-Open `project.godot`, run the project, and choose **New Game**, then Easy or Hard.
-The campaign crosses four museum areas and three bosses. Find the yellow flash
-camera, orange heat bellows, and blue cutter as you progress.
+[Play in your browser](https://ty1rl.itch.io/some-assembly-required)
 
-WASD moves; mouse aims; 1–3 or Tab equips collected weapons. Hold Space to slow
-time once introduced. E toggles repair; you can move and switch weapons while repairing.
+Made for [Ludum Dare 60](https://ldjam.com/events/ludum-dare/60), theme **Old Tech**.
+The campaign crosses four museum areas and three bosses. Choose Easy or Hard;
+**Skip tutorials** starts combat with all three tools, slow time and emergency rewinds.
 
-Time replaces player health: hits, slow motion and repair checkpoints spend a
-recharging meter. A depleting hit spends an emergency rewind charge. Scroll down
-to choose an earlier moment, then click or press Enter to recover. No charges left
-means retrying the room, keeping your equipment and learned tutorials.
+## Controls
 
-**Testing shortcuts:** Encounter select on the menu/pause screen, or F10 in play.
-Choose an area, encounter and optional boss phase. Required equipment is supplied.
-Set `SceneManager.developer_tools` to `false` to hide these entrypoints.
-See [mechanics, source layout and checks](scenes/prototype/README.md).
+| Input | Action |
+|---|---|
+| WASD / mouse | Move / aim |
+| 1, 2, 3 / Tab | Select / cycle collected tools |
+| Left mouse | Draw and release the cutter, charge and release the flash, or hold the heat cone |
+| Hold Space | Slow time |
+| E | Open or close repair; movement and tool switching remain available |
+| Wheel down / up | Choose an older / newer moment during emergency rewind |
+| Enter / click | Confirm the recovery point |
+| Escape | Pause or close repair |
+| + / - | Zoom |
 
-For browser audio testing, export **Web Threaded**. Its audio mixer runs on a
-separate thread so rendering stalls do not interrupt streamed music. On itch.io,
-enable **Embed options > Frame options > SharedArrayBuffer support** before
-uploading the ZIP. Local hosting needs cross-origin isolation headers too.
-The existing **Web** preset remains available without that hosting requirement.
+Hits, slow time and completed repair stages spend a rechargeable time reserve.
+A depleting hit spends one of three emergency rewind charges. With no charges left,
+retry the room with your equipment and learned tutorials. Voluntary slow time and
+repair spending cannot kill you.
 
-Web Threaded streams speech, effects and music through Godot's mixer and limiter,
-with a 100 ms requested audio buffer. The single-threaded Web preset prepares
-browser-native speech and effects on the loading screen. Previously packaged
-single-threaded fallback builds retain their larger buffer. Desktop playback is
-unchanged.
+## Run locally
+
+Use **Godot 4.7.2 Standard**, with the **Compatibility** renderer. No .NET runtime
+is needed. Open `project.godot` and run, or from the repository root:
+
+```sh
+godot --path .
+```
+
+For encounter selection and testing shortcuts:
+
+```sh
+godot --path . -- --developer
+```
+
+F10 opens developer options in that mode. F7 cycles the diagnostic readout.
+Developer options are hidden during normal play and in Web exports.
+
+## Build and upload
+
+Install the matching **4.7.2 export templates** in Godot's export-template manager.
+Run these commands from the repository root, using your Godot executable in place
+of `godot` if it is named differently:
+
+```sh
+godot --headless --path . --editor --quit
+mkdir -p build/web
+godot --headless --path . --export-release "Web Threaded" build/web/index.html
+(cd build/web && python3 -m zipfile -c ../some-assembly-required-web.zip *)
+```
+
+Upload `build/some-assembly-required-web.zip` to itch.io as an HTML Game. Keep
+`index.html` at the ZIP root and every generated export file together. Enable
+**Embed options > Frame options > SharedArrayBuffer support**, and keep
+**Click to Play** enabled for browser audio activation.
+
+For a Linux desktop build:
+
+```sh
+mkdir -p build/linux
+godot --headless --path . --export-release "Linux Playtest" build/linux/SomeAssemblyRequired.x86_64
+./build/linux/SomeAssemblyRequired.x86_64
+```
+
+Keep the desktop executable and its adjacent `.pck` together.
+
+[Mechanics, source layout and checks](scenes/prototype/README.md) ·
+[Browser hosting and audio verification](tools/browser/README.txt) ·
+[Recorded dialogue and selection rules](audio/voice/README.txt)

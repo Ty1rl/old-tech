@@ -7,9 +7,8 @@ Use **Godot 4.7.2 Standard / Compatibility**. From the Ubuntu host:
 ```
 
 Restart a running game after updates. Choose **New Game**, then **Easy** or **Hard** for the campaign.
-**Encounter select** in the main/pause menu, or F10, jumps to a room, encounter or
-boss phase with the required equipment. `SceneManager.developer_tools` hides the
-shortcuts when false.
+Launch with `-- --developer` to enable **Encounter select** in developer options
+and F10. Normal launches and Web exports hide these shortcuts.
 
 ## Controls
 
@@ -132,6 +131,8 @@ projectile heads. Movement dodges them; cover blocks them; time slows them.
 - `scenes/ui/repair_carousel.tscn`: actual owned-tool side previews and shared
   condition arcs. Repair supplies the selected model's viewport-space bounds;
   the carousel requests selection through the existing repair/equipment flow.
+- `scripts/audio/protagonist_voice.gd`: category coverage and sparse reaction selection;
+  `audio/voice/README.txt` documents timing, contexts and clip history.
 - `scenes/navigation/`: native enemy routing and bounded crowd avoidance, using
   the current museum room's authored region and full body clearance.
 - `scenes/tutorial/`: ordinary action demonstrations and the forced emergency
@@ -149,25 +150,24 @@ directory name is retained to avoid a broad path migration during the jam.
 
 ## Verification
 
-From the shared project directory:
+From the repository root, with Godot 4.7.2 Standard:
 
 ```sh
-python3 check.py --seat jam-1 --suite campaign_n
-python3 check.py --seat jam-1 --suite complete_run
-python3 check.py --seat jam-1 --suite repair_n
+godot --headless --path . --script res://scenes/prototype/checks/complete_run.gd
+godot --headless --path . --script res://scenes/prototype/checks/protagonist_voice.gd
+godot --headless --path . --script res://scenes/prototype/checks/audio_s.gd
 ```
 
-Other focused suites cover time_core_n, combat_player_n, emergency_mode_n,
-weapon_components_n, weapon_smoothing_n, enemy_time_n, ui_n, and movement_m.
-Retained earlier combat, pattern, room, menu and animation checks use the current
-components. Logs/receipts stay in each seat's state. Combined Round O evidence:
-`state/old-tech-jam-1/exports/round-o/final/`.
+Within the lab seat setup, use the shared bounded runner instead:
 
-The removed manual-clock/four-tool suites were `rewind`, `presentation_j`,
-`controls_l`, `resource_integration`, `space_m`, `repair_m`, `repairs`, `ui_m` and
-`hud_profile_m`. Their obsolete health/clock assumptions are preserved in Git;
-new time, repair, recovery, UI and integrated checks cover the replacement rules.
-The remaining repair-view check still exercises actual gestures at multiple sizes.
+```sh
+python3 check.py --seat jam-1 --suite complete_run --timeout 60
+```
+
+Additional focused checks cover time/recovery, weapon components, repairs,
+enemy patterns and navigation, speech lifetime, menus and developer encounter
+selection. `developer_encounters` verifies an actual Hard boss launch, including
+enemy tuning and weapon wear. Keep logs and screenshots outside the source tree.
 
 Automated graphical previews must use shared `render.py` on a private display.
 `flow_capture_k` and `combat_capture_o` are graphical captures, not headless checks: frame-post-draw
@@ -186,6 +186,5 @@ and enemies restore together; actual room-layout boundaries clear the history.
 
 The music/SFX and difficulty values need human listening and playtesting. Fixed
 room props use authored scenes/resources; the combat paths, swarms and HUD arcs
-remain generated. Some older preview scripts (`ui_preview_m` and
-`ranged_preview/capture_m.gd`) still target removed APIs; use the current capture
-scripts referenced by the verification receipt.
+remain generated. Superseded previews that relied on removed health/manual-clock
+APIs and the fixed Round R audio audit have been removed; Git retains their history.

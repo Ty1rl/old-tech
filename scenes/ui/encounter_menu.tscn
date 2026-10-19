@@ -86,6 +86,16 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
+[node name="DifficultyPickerLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+layout_mode = 2
+text = "Difficulty"
+theme_override_font_sizes/font_size = 14
+metadata/base_font_size = 14
+
+[node name="DifficultyPicker" type="OptionButton" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="RoomPickerLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -178,6 +188,8 @@ layout_mode = 2
 text = "Back"
 
 [connection signal="item_selected" from="Margin/Center/Panel/Stack/Scroll/Body/RoomPicker" to="." method="_on_room"]
+
+[connection signal="item_selected" from="Margin/Center/Panel/Stack/Scroll/Body/DifficultyPicker" to="." method="_on_difficulty"]
 
 [connection signal="item_selected" from="Margin/Center/Panel/Stack/Scroll/Body/EncounterPicker" to="." method="_on_encounter"]
 

@@ -1036,7 +1036,9 @@ func _on_attempt_exhausted() -> void:
 func _finish_run(won: bool) -> void:
 	if won:
 		_set_music_context(&"victory")
-		AudioManager.say(&"protagonist.boss_defeated", 2)
+		AudioManager.react(&"protagonist.boss_defeated")
+		# Victory immediately leaves active play; resolve this final opportunity now.
+		AudioManager.step_reactions(0.0, true, false, false)
 	_cancel_active_teaching_controllers()
 	if _result_shown:
 		return
@@ -1146,7 +1148,7 @@ func _begin_wave() -> void:
 			museum.set_boss_ceremony_phase(&"inactive")
 			museum.set_exit_open(true)
 			_arm_room_exit()
-			AudioManager.say(&"protagonist.room_cleared")
+			AudioManager.react(&"protagonist.room_cleared")
 			_seed_room_checkpoint()
 			run_hint.text = "GALLERY CLEAR · press E to toggle repair at leisure, then walk through the green doorway."
 		return
@@ -2190,3 +2192,7 @@ func _on_emergency_confirmed(age_seconds: float, state: Dictionary) -> void:
 
 func _incidental_dialogue_allowed() -> bool:
 	return super._incidental_dialogue_allowed() and mode == &"pressure"
+
+
+func _repair_dialogue_allowed() -> bool:
+	return super._incidental_dialogue_allowed() and mode in [&"pressure", &"recovery", &"exit"]

@@ -39,7 +39,7 @@ func run() -> void:
 
 	# 1. Project settings & playback type policy (native vs Web).
 	var web_latency := int(ProjectSettings.get_setting("audio/driver/output_latency.web", 50))
-	expect(web_latency >= 200 and web_latency <= 400, "Web output latency buffering configured in project.godot (%d ms)" % web_latency)
+	expect(web_latency == 100, "Web mixer uses the verified 100 ms request (%d ms)" % web_latency)
 	expect(manager.voice.playback_type == AudioServer.PLAYBACK_TYPE_STREAM and manager.music.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Native runtime keeps Stream playback for Voice and Music")
 	expect((await manager.prepare_web_samples()).is_empty(), "Native loading does not decode or register browser audio samples")
 

@@ -1,6 +1,8 @@
 extends "res://scenes/ui/menu_layout.gd"
 const Rooms = preload("res://scenes/prototype/rooms.gd")
 const PatternEnemy = preload("res://scenes/prototype/pattern_enemy.gd")
+const DIFFICULTIES: Array[StringName] = [&"easy", &"hard"]
+@onready var difficulty_picker: OptionButton = %DifficultyPicker
 @onready var room_picker: OptionButton = %RoomPicker
 @onready var encounter_picker: OptionButton = %EncounterPicker
 @onready var phase_picker: OptionButton = %PhasePicker
@@ -19,18 +21,25 @@ func _ready() -> void:
 		queue_free()
 		return
 	super._ready()
-	for room: Dictionary in Rooms.definitions(): room_picker.add_item(room.title)
+	difficulty_picker.add_item("Easy")
+	difficulty_picker.add_item("Hard")
+	var scene := SceneManager.get_current_scene()
+	var current_difficulty: StringName = scene.difficulty_id if scene != null and scene.has_method("set_difficulty") else StringName(SceneManager.params.get("difficulty", &"easy"))
+	difficulty_picker.select(maxi(0, DIFFICULTIES.find(current_difficulty)))
+	for room: Dictionary in Rooms.definitions(_difficulty()): room_picker.add_item(room.title)
 	_update_encounters()
 	for label: String in ACTIONS: action_picker.add_item(label)
-	var scene := SceneManager.get_current_scene()
 	apply_action.disabled = scene == null or not scene.has_method("run_developer_action")
 	readout_picker.select(int(GameState.preferences().hud))
 	UI.wire_focus(self)
 	UI.focus_on_open(self, room_picker)
 
+func _difficulty() -> StringName:
+	return DIFFICULTIES[difficulty_picker.selected]
+
 func _update_encounters() -> void:
 	encounter_picker.clear()
-	var waves: Array = Rooms.definitions()[room_picker.selected].waves
+	var waves: Array = Rooms.definitions(_difficulty())[room_picker.selected].waves
 	for i in range(waves.size()):
 		var wave: Dictionary = waves[i]
 		var names: Array[String] = []
@@ -45,7 +54,7 @@ func _update_encounters() -> void:
 func _update_phases() -> void:
 	phase_picker.clear()
 	phase_picker.add_item("Boss: start normally")
-	var wave: Dictionary = Rooms.definitions()[room_picker.selected].waves[encounter_picker.selected]
+	var wave: Dictionary = Rooms.definitions(_difficulty())[room_picker.selected].waves[encounter_picker.selected]
 	phase_picker.disabled = not bool(wave.get("boss",false))
 	if not phase_picker.disabled:
 		for i in range(PatternEnemy.phases_for(wave.enemies[0])):
@@ -55,10 +64,12 @@ func _update_phases() -> void:
 func _launch() -> void:
 	if not SceneManager.developer_tools or SceneManager.is_transitioning(): return
 	if SceneManager.go_to(&"Campaign", {"debug_room": room_picker.selected,
-		"debug_wave": encounter_picker.selected, "debug_phase": phase_picker.selected-1}):
+		"debug_wave": encounter_picker.selected, "debug_phase": phase_picker.selected-1,
+		"difficulty": _difficulty()}):
 		GameState.start_game()
 
 func _on_room(_index: int) -> void: _update_encounters()
+func _on_difficulty(_index: int) -> void: _update_encounters()
 func _on_encounter(_index: int) -> void: _update_phases()
 func _on_sandbox() -> void:
 	if SceneManager.developer_tools: SceneManager.start_play(true)

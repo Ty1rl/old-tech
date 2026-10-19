@@ -17,10 +17,12 @@ lesson before shooting; lesson(shot) no longer queues it automatically.
 tutorial.pickup is the walk cue; campaign requests it without blocking movement.
 AudioManager only plays speech; it never freezes movement or constructs lessons.
 
-One Voice player, original -3dB node gain and separate user Voice volume remain.
-World/music duck by8dB during speech. Menu music alone gets a6dB increase; other
-music contexts/effects/Voice levels are unchanged. Voice/Music stay Stream mode;
-Web pause assignments occur only at transitions, not every frame.
+One Voice player uses -6dB node gain;protagonist reactions get another -2dB.
+The separate user Voice setting applies to all speech. World/music duck by8dB
+while speech plays. Menu music alone gets a6dB increase.
+Native and Web Threaded use Stream playback for speech,music and combat effects.
+Legacy Web uses browser Sample speech/effects prepared on the loading screen.
+Music remains streamed. Pause assignments occur only at transitions.
 
 Speech lifetime contract: say/play_intro return whether a request was accepted.
 Only accepted requests receive speech_finished(event, interrupted): false for
@@ -30,14 +32,37 @@ cancels the whole batch. Missing/muted requests return false and do not block.
 Pause holds speech until resume or explicit cancellation. Consumers distinguish
 completion from cancellation instead of treating every terminal as success.
 
-Protagonist: eight events, two recordings each, selected round-robin at playback
-start; rejection never advances a variant. Seven ordinary reactions use priority1
-and a shared18-second cooldown, do not queue, and never interrupt teaching.
-Boss defeat uses priority2 at its gameplay trigger and may queue behind teaching.
-Campaign allows incidental reactions only during pressure combat; acquire/demo/
-practice/exit and emergency/menu/pause suppress them. Room-clear is an explicit
-campaign milestone request; it still competes with the global bark cooldown.
-The focused Round S audit/verification lives in jam-6 state/exports/round-s.
+PROTAGONIST SELECTION
+Eight event categories,two recordings each. EVENTS.tsv lists the supplied labels
+and gameplay triggers. There is no separate player-death or idle recording.
+
+Gameplay offers recent events to scripts/audio/protagonist_voice.gd;AudioManager
+owns playback and the shared cooldown. Competing events are resolved together.
+- Keep60 seconds of initial quiet and at least20 seconds after teaching.
+- Leave at least150 seconds between protagonist lines. After four lines in a run,
+  extend the interval to300 seconds;four is a target,not a permanent silence cap.
+- Favor unheard families:repair,combat,recovery,and room/boss milestones. Within
+  them,favor unheard categories. Boss victory outranks coincident room completion.
+- Reserve early combat opportunities for the first ordinary repair for up to120
+  seconds of active gameplay. Repeated combat cannot claim every opening;it waits
+  five minutes between combat-family reactions. No required repair means no
+  indefinite silence.
+- Repairs can speak during pressure,recovery and room-exit periods,never tutorial
+  practice. An open repair remains relevant if its cooldown ends while repairing.
+- Event opportunities expire after six seconds. Do not deliver old damage,kill
+  or repair remarks when their context is gone. Tutorials and scene changes clear
+  pending opportunities;actual playback alone consumes coverage and cooldown.
+- Five safe,stationary minutes can use Let's keep moving from the room-clear
+  alternatives. Other context-specific lines are not used as idle filler.
+- The first alternative is randomized for new profiles. Each category then
+  alternates,and its next choice is saved in the existing settings file's
+  voice_variants section. New runs reset coverage,not clip history. Rewinds never
+  restore speech counts or spent speech opportunities.
+
+The selector uses active real time,not slowed simulation time. It does not queue
+speech behind tutorials or interrupt narration,boss speech,or another reaction.
+Focused checks:protagonist_voice (selection),audio_s (recordings/wiring/history),
+audio_speech_r (speech lifetime),audio_u (browser audio policy).
 
 Round T adds tutorial.movement and tutorial.tool_switch and replaces tutorial.rewind.
 Exact supplied words: EVENTS.tsv/library.transcripts. One-generation provenance

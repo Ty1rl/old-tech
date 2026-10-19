@@ -147,16 +147,16 @@ func step(world_delta: float, player: Node3D) -> void:
 			_spawn_encounter_wave(encounter_wave_index)
 			encounter_wave_index += 1
 
-	var snapshot: Array[Node3D] = enemies.duplicate()
 	var burst: Dictionary = flow.next_burst(world_delta, player)
 	if not burst.is_empty():
 		spawn_formation(burst.formation, burst.kinds, player, burst.seed)
-		snapshot = enemies.duplicate()
+	var snapshot: Array[Node3D] = enemies.duplicate()
 	var holds: Dictionary = flow.advance(world_delta, snapshot, player)
 	var cohesion: Dictionary = flow.cohesion(world_delta, snapshot, holds)
 	for enemy in snapshot:
 		if is_instance_valid(enemy) and enemy.health > 0.0 and (not is_instance_valid(player) or player.can_act):
-			var hold := float(holds.get(int(enemy.combat_id()), 0.0))
+			var enemy_id := int(enemy.combat_id())
+			var hold := float(holds.get(enemy_id, 0.0))
 			if hold > 0:
 				var speed := float(enemy.move_speed)
 				enemy.move_speed = 0.0
@@ -165,8 +165,8 @@ func step(world_delta: float, player: Node3D) -> void:
 				if revision != _world_revision or _suspend_for_player(player): return
 			if world_delta - hold > 0:
 				var speed := float(enemy.move_speed)
-				enemy.move_speed = speed * flow.approach_scale(int(enemy.combat_id()))
-				enemy.step_enemy(world_delta - hold, player, snapshot, cohesion.get(int(enemy.combat_id()), Vector3.ZERO))
+				enemy.move_speed = speed * (1.0 if flow.cohorts.is_empty() else flow.approach_scale(enemy_id))
+				enemy.step_enemy(world_delta - hold, player, snapshot, cohesion.get(enemy_id, Vector3.ZERO))
 				enemy.move_speed = speed
 			if revision != _world_revision or _suspend_for_player(player): return
 	_draw_arrivals()
@@ -195,6 +195,13 @@ func _retire_enemy_node(enemy: Node3D) -> void:
 
 
 func _prune_dead_enemies() -> void:
+	var has_dead := false
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or enemy.health <= 0.0:
+			has_dead = true
+			break
+	if not has_dead:
+		return
 	var live: Array[Node3D] = []
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
@@ -274,10 +281,12 @@ func start_flow(player: Node3D, seed: int = 0) -> void:
 
 
 func _draw_arrivals() -> void:
-	var warnings: Array[Dictionary] = []
+	var has_warnings := false
 	for cohort: Dictionary in flow.cohorts:
-		if cohort.warning > 0: warnings.append(cohort)
-	if warnings.is_empty():
+		if float(cohort.warning) > 0.0:
+			has_warnings = true
+			break
+	if not has_warnings:
 		if _arrival_mesh != null and _arrival_mesh.get_surface_count() > 0:
 			_arrival_mesh.clear_surfaces()
 		return
@@ -304,7 +313,9 @@ func _draw_arrivals() -> void:
 				v0 * 1.01, v0 * 1.09, v1 * 1.01, v0 * 1.09, v1 * 1.09, v1 * 1.01]))
 	_arrival_mesh.clear_surfaces()
 	_arrival_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	for cohort: Dictionary in warnings:
+	for cohort: Dictionary in flow.cohorts:
+		if float(cohort.warning) <= 0.0:
+			continue
 		var color := Color("479cff")
 		if cohort.formation == &"line": color = Color("ffe066")
 		elif cohort.formation == &"cluster": color = Color("f9974b")
@@ -531,14 +542,27 @@ func hostile_cue(kind: StringName, point: Vector3, strength: float = 1.0) -> voi
 			if not combat_event.is_connected(callback): callback.call(kind, point, strength)
 
 
+func _has_living_owner(owner_id: int) -> bool:
+	if owner_id <= 0:
+		return true
+	for enemy in enemies:
+		if is_instance_valid(enemy) and int(enemy.combat_id()) == owner_id and enemy.health > 0.0:
+			return true
+	return false
+
+
 func _discard_orphaned_projectiles() -> void:
 	if projectiles.is_empty(): return
-	var living := {}
-	for enemy in enemies:
-		if is_instance_valid(enemy) and enemy.health > 0: living[int(enemy.combat_id())] = true
+	var has_orphan := false
+	for shot: Dictionary in projectiles:
+		if not _has_living_owner(int(shot.get("owner_id", 0))):
+			has_orphan = true
+			break
+	if not has_orphan: return
 	var live: Array[Dictionary] = []
 	for shot: Dictionary in projectiles:
-		if int(shot.get("owner_id", 0)) == 0 or living.has(int(shot.owner_id)): live.append(shot)
+		if _has_living_owner(int(shot.get("owner_id", 0))):
+			live.append(shot)
 	projectiles = live
 
 
@@ -661,16 +685,37 @@ func repair_head_projections() -> Array[Dictionary]:
 	return result
 
 
+const TRAIL_OUTER_COLOR := Color("241318")
+const TRAIL_MID_COLOR := Color("fa5547")
+const TRAIL_CORE_COLOR := Color("fff1cf")
+
+
 func _trail_triangle(a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
 	_trail_mesh.surface_set_color(color)
-	for point in [a, b, c]:
-		_trail_mesh.surface_add_vertex(point)
+	_trail_mesh.surface_add_vertex(a)
+	_trail_mesh.surface_add_vertex(b)
+	_trail_mesh.surface_add_vertex(c)
 
 
 func _trail_ribbon(start: Vector3, finish: Vector3, half_width: float, color: Color) -> void:
 	var side := (finish - start).cross(Vector3.UP).normalized() * half_width
-	_trail_triangle(start - side, start + side, finish - side, color)
-	_trail_triangle(start + side, finish + side, finish - side, color)
+	_trail_mesh.surface_set_color(color)
+	_trail_mesh.surface_add_vertex(start - side)
+	_trail_mesh.surface_add_vertex(start + side)
+	_trail_mesh.surface_add_vertex(finish - side)
+	_trail_mesh.surface_add_vertex(start + side)
+	_trail_mesh.surface_add_vertex(finish + side)
+	_trail_mesh.surface_add_vertex(finish - side)
+
+
+func _trail_ribbon_perp(start: Vector3, finish: Vector3, side: Vector3, color: Color) -> void:
+	_trail_mesh.surface_set_color(color)
+	_trail_mesh.surface_add_vertex(start - side)
+	_trail_mesh.surface_add_vertex(start + side)
+	_trail_mesh.surface_add_vertex(finish - side)
+	_trail_mesh.surface_add_vertex(start + side)
+	_trail_mesh.surface_add_vertex(finish + side)
+	_trail_mesh.surface_add_vertex(finish - side)
 
 
 func _sync_projectile_visuals() -> void:
@@ -694,11 +739,19 @@ func _sync_projectile_visuals() -> void:
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(node)
 		_projectile_visuals.append(node)
+	var proj_count := projectiles.size()
 	for i in range(_projectile_visuals.size()):
-		_projectile_visuals[i].visible = i < projectiles.size()
-		if i < projectiles.size():
-			_projectile_visuals[i].position = projectiles[i].position
-			_projectile_visuals[i].mesh.size = Vector2.ONE * float(projectiles[i].get("radius", PROJECTILE_RADIUS)) * 2
+		var vis := _projectile_visuals[i]
+		var active := i < proj_count
+		if vis.visible != active:
+			vis.visible = active
+		if active:
+			var shot: Dictionary = projectiles[i]
+			vis.position = shot.position
+			var desired_size := Vector2.ONE * float(shot.get("radius", PROJECTILE_RADIUS)) * 2.0
+			var quad := vis.mesh as QuadMesh
+			if quad.size != desired_size:
+				quad.size = desired_size
 	if _trail_mesh == null:
 		_trail_mesh = ImmediateMesh.new()
 		var node := MeshInstance3D.new()
@@ -712,15 +765,18 @@ func _sync_projectile_visuals() -> void:
 		node.material_override = material
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(node)
-	_trail_mesh.clear_surfaces()
-	if projectiles.is_empty(): return
+	if _trail_mesh.get_surface_count() > 0:
+		_trail_mesh.clear_surfaces()
+	if proj_count == 0: return
 	_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 	for shot: Dictionary in projectiles:
 		var head: Vector3 = shot.position
 		var velocity: Vector3 = shot.velocity
-		var direction := velocity.normalized()
-		var tail := head - direction * minf(.8, velocity.length() * float(shot.get("age", 0)))
-		_trail_ribbon(tail, head, .11, Color("241318"))
-		_trail_ribbon(tail, head, .075, Color("fa5547"))
-		_trail_ribbon(tail, head, .022, Color("fff1cf"))
+		var speed := velocity.length()
+		var direction := velocity / speed if speed > .0001 else Vector3.ZERO
+		var tail := head - direction * minf(.8, speed * float(shot.get("age", 0)))
+		var perp := Vector3(-direction.z, 0.0, direction.x)
+		_trail_ribbon_perp(tail, head, perp * .11, TRAIL_OUTER_COLOR)
+		_trail_ribbon_perp(tail, head, perp * .075, TRAIL_MID_COLOR)
+		_trail_ribbon_perp(tail, head, perp * .022, TRAIL_CORE_COLOR)
 	_trail_mesh.surface_end()

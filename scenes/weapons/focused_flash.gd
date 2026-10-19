@@ -68,7 +68,7 @@ func release(origin: Vector3, aim: Vector3, muzzle: Vector3) -> void:
 	flash_timer = 0.14
 	flash_charge = charge_frac
 	last_feedback = "Piercing flash launched" if pulse.piercing else "Flash launched (%.0f dmg)" % dmg
-	combat_event.emit(&"flash_fire", pulse.muzzle, 0.4 + charge_frac * 0.6)
+	combat_event.emit(&"flash_fire", pulse.muzzle, 0.75 + charge_frac * 0.25)
 	if pulse.piercing: combat_event.emit(&"flash_pierce", pulse.muzzle, 1.0)
 
 func step(delta: float, world_delta: float, enemies: Array, muzzle: Vector3) -> void:

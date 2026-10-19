@@ -16,6 +16,8 @@ const DEFAULT_LIBRARY: CombatAudioLibrary = preload("res://audio/combat/palette.
 const MAX_VOICES := 15 # six loops + nine transients; music belongs to AudioManager
 const MAX_EFFECTS := 24
 const RESERVED_IMPORTANT := 2
+const MAX_MONSTER_VOICES := 2
+const MONSTER_INTERVAL := 0.45
 const SETTINGS_PATH := "user://combat-audio.cfg"
 const LOOP_KINDS: Array[StringName] = [&"ring_loop", &"charge_loop", &"cone_loop", &"clock_loop", &"scrub_older", &"scrub_newer"]
 const CUE_KINDS: Array[StringName] = [&"ring_launch", &"ring_return", &"flash_fire", &"flash_charged", &"flash_ready", &"pierce_hit", &"cone_pulse", &"hit", &"cable_cut", &"vent", &"core_break", &"repair_step", &"repair_full", &"room_open", &"player_hurt", &"recovery_confirm", &"ui_click"]
@@ -160,8 +162,20 @@ func cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:
 	_queue_audio_flush()
 
 func enemy_cue(enemy_kind: StringName, event: StringName, point: Vector3, strength: float = 1.0) -> void:
-	# Semantic events only, never inferred by polling a restored enemy's pose.
-	cue(StringName("enemy_%s_%s" % [enemy_kind, event]), point, strength)
+	# A mixed swarm shares one cadence and two slots, rather than barking per type.
+	var kind := StringName("enemy_%s_%s" % [enemy_kind, event])
+	if not _cues.has(kind) or _inspecting or muted: return
+	var active := 0
+	for voice in _voices:
+		if float(voice.remaining) > 0 and String(voice.cue).begins_with("enemy_"):
+			active += 1
+	if float(_cooldowns.get(&"monster_voice", 0.0)) > 0 or active >= MAX_MONSTER_VOICES:
+		dropped_cues += 1
+		return
+	var before := accepted_cues
+	cue(kind, point, strength)
+	if accepted_cues > before: _cooldowns[&"monster_voice"] = MONSTER_INTERVAL
+
 
 func set_music_playing(playing: bool) -> void:
 	# Legacy arena hook. Explicit campaign boss/victory contexts take precedence.

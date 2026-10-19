@@ -141,6 +141,32 @@ func run() -> void:
 		voices_stopped = voices_stopped and not v.player.playing and is_equal_approx(v.player.volume_db, -80.0)
 	expect(voices_stopped, "Expired transient 3D voices stop their players cleanly")
 
+	# Mixed archetypes share a quiet crowd budget without blocking player shots.
+	feedback.reset_state()
+	feedback.enemy_cue(&"blue", &"warning", Vector3.ZERO)
+	for kind: StringName in [&"yellow", &"orange", &"swarmer", &"brute", &"ranged"]:
+		feedback.enemy_cue(kind, &"warning", Vector3.ZERO)
+	var monster_count := 0
+	for voice in feedback._voices:
+		if float(voice.remaining) > 0 and String(voice.cue).begins_with("enemy_"): monster_count += 1
+	expect(monster_count == 1, "Mixed swarm burst produces one monster cue, not one per archetype")
+	# Release cadence to exercise the separate overlapping-voice limit.
+	feedback._cooldowns[&"monster_voice"] = 0.0
+	feedback.enemy_cue(&"orange", &"death", Vector3.ZERO)
+	feedback._cooldowns[&"monster_voice"] = 0.0
+	feedback.enemy_cue(&"yellow", &"attack", Vector3.ZERO)
+	monster_count = 0
+	for voice in feedback._voices:
+		if float(voice.remaining) > 0 and String(voice.cue).begins_with("enemy_"): monster_count += 1
+	expect(monster_count == 2, "At most two monster sounds overlap even with cadence released")
+	feedback.cue(&"flash_fire", Vector3.ZERO, .75)
+	var shot_pending := false
+	for voice in feedback._voices:
+		if voice.cue == &"flash_fire" and voice.pending: shot_pending = true
+	expect(shot_pending, "Monster crowd leaves room for the player's shot")
+	feedback.reset_state()
+	expect(not feedback._cooldowns.has(&"monster_voice"), "Restart clears monster cadence")
+
 	feedback.muted = orig_mute
 	feedback.free()
 	weapons.free()

@@ -87,19 +87,7 @@ def build():
     bake('cone_loop',1,lambda t: air_loop(t,32,1100)+np.sin(TAU*66*t)*.025,True)
     # Time motor and signed scrub content deliberately retain their identities.
     bake('clock_loop',1,lambda t: np.sin(TAU*64*t)*.30+np.sin(TAU*192*t)*.1+np.sin(TAU*1152*t)*(.5+.5*np.cos(TAU*8*t))**18*.35,True)
-    families={'cable':(180,1),'glass':(360,2),'steam':(76,3),'shield':(120,4),'relay':(240,5),'pack':(235,6),'boss':(55,7)}
-    for family,(freq,seed) in families.items():
-        for event,duration,decay,mul in [('warning',.34,14,1.5),('attack',.16,30,1),('hurt',.10,48,1.5),('death',.36,16,.65)]:
-            def make(t,f=freq*mul,d=decay,s=seed,event=event,family=family):
-                x=body(t,f,d)
-                if family=='steam': x=.1*x+noise(t,s,16)*np.exp(-d*t)
-                elif family=='glass': x+=tone(t,f*2,d*2,.10)
-                elif family=='relay': x*=.85+.15*np.cos(TAU*4*t)
-                elif family=='pack': x+=noise(t,s,24)*np.exp(-d*t)*.2
-                elif family=='boss': x+=tone(t,f*.5,d,.5)
-                if event=='warning': x+=body(np.maximum(0,t-.10),f*1.12,d*1.6)*(t>=.10)*.30
-                return x
-            bake(f'{family}_{event}',duration,make)
+    bake_monsters()
     visual={'ring_launch':'ring_launch','ring_return':'ring_return','flash_fire':'flash_fire','flash_charged':'flash_fire','cone_pulse':'cone_pulse','hit':'hit','cable_cut':'cable_cut','vent':'vent','core_break':'core_break','repair_step':'repair_step','player_hurt':'player_hurt'}
     for name in ['ring_launch','ring_return','flash_fire','flash_charged','flash_ready','pierce_hit','cone_pulse','hit','cable_cut','vent','core_break','repair_step','repair_full','room_open','player_hurt','recovery_confirm','ui_click']:
         responsive=name in ['repair_step','repair_full','recovery_confirm','ui_click']
@@ -121,6 +109,26 @@ def build():
         cue('repair_'+gesture,responsive=True,gain=-22,cooldown=.2)
     write_library()
     return kinds
+
+def bake_monsters():
+    # Short mechanical growls with breath/grit, rather than pitched UI beeps.
+    families = {'cable': (104, 1), 'glass': (175, 2), 'steam': (68, 3),
+                'shield': (80, 4), 'relay': (135, 5), 'pack': (155, 6), 'boss': (48, 7)}
+    for family, (root, seed) in families.items():
+        for event, duration in [('warning', .42), ('attack', .22), ('hurt', .16), ('death', .48)]:
+            def make(t, family=family, root=root, seed=seed, event=event, duration=duration):
+                progress = t / duration
+                start, end = (.8, 1.1) if event == 'warning' else (1.25, .65)
+                phase = TAU * root * (start * t + (end - start) * t * t / (2 * duration))
+                rasp = np.tanh(2.0 * (np.sin(phase) + .28 * np.sin(phase * 2)))
+                breath = noise(t, seed * 11 + len(event), 14 if family == 'steam' else 5)
+                envelope = np.sin(np.pi * progress) ** .65
+                flutter = .75 + .25 * np.sin(TAU * (17 if family == 'relay' else 9) * t)
+                voice = .15 * rasp + .85 * breath if family == 'steam' else .65 * rasp + .35 * breath
+                if family == 'glass': voice += .08 * np.sin(phase * 3)
+                return voice * envelope * flutter
+            bake(f'{family}_{event}', duration, make)
+
 
 def write_library():
     assets=sorted(ASSETS);resources=['[gd_resource type="Resource" script_class="CombatAudioLibrary" load_steps=%d format=3]'%(len(assets)+len(CUES)+3),'','[ext_resource type="Script" path="res://scripts/audio/combat_audio_library.gd" id="1"]','[ext_resource type="Script" path="res://scripts/audio/combat_audio_cue.gd" id="2"]']
@@ -167,7 +175,13 @@ def reel(out):
     (out/'audition-index.json').write_text(json.dumps(index,indent=2)+'\n')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);p.add_argument('--monsters-only', action='store_true');a=p.parse_args()
+    if a.monsters_only:
+        bake_monsters()
+        a.out.mkdir(parents=True, exist_ok=True)
+        (a.out/'monster-analysis.json').write_text(json.dumps(ASSETS, indent=2)+'\n')
+        print(json.dumps({'assets':len(ASSETS),'bytes':sum((ROOT/row['path']).stat().st_size for row in ASSETS.values())}))
+        raise SystemExit(0)
     kinds=build();reel(a.out)
     (a.out/'bank-analysis.json').write_text(json.dumps({'sample_rate':RATE,'assets':ASSETS,'cues':CUES,'enemy_kinds':kinds},indent=2)+'\n')
     print(json.dumps({'assets':len(ASSETS),'cues':len(CUES),'bytes':sum(p.stat().st_size for p in BANK.glob('*.wav')),'audition':str(a.out/'audition.wav')}))

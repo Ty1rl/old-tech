@@ -4,6 +4,8 @@ signal scene_changed(key: StringName)
 signal popup_opened(key: StringName, popup: Node)
 signal popup_closed(key: StringName)
 signal restart_room_requested
+signal transition_failed(key: StringName, reason: String)
+signal _transition_tick
 
 # &"scene_name": "res://path/to/scene_name.tscn",
 const SCENES: Dictionary[StringName, String] = {
@@ -26,6 +28,7 @@ const POPUPS: Dictionary[StringName, String] = {
 const POPUP_LAYER: int = 100
 const FADE_LAYER: int = 128
 const KEY_META: StringName = &"popup_key"
+const LoadingScene = preload("res://scenes/loading_r/loading.tscn")
 
 var fade_color: Color = Color.BLACK
 var fade_duration: float = 0.3
@@ -40,6 +43,20 @@ var _transitioning: bool = false
 var _fade_rect: ColorRect
 var _popup_layer: CanvasLayer
 var _popups: Array[Control] = []
+var _loading: Control
+var _loading_status: Label
+var _loading_progress: ProgressBar
+var _loading_cancel: Button
+var _loading_path := ""
+var _cancel_requested := false
+var _can_cancel := false
+var _load_error := false
+var _failure_focus: WeakRef
+var _exiting := false
+var _swap_ready := false
+var _swap_ready_at_usec := 0
+## Last completed transition, bounded diagnostic data in microseconds (not a clock).
+var last_transition_profile: Dictionary = {}
 
 
 func _ready() -> void:
@@ -59,6 +76,14 @@ func _ready() -> void:
 	_fade_rect.color = Color(fade_color, 0.0)
 	_fade_rect.visible = false
 	layer.add_child(_fade_rect)
+	_loading = LoadingScene.instantiate()
+	layer.add_child(_loading)
+	_loading_status = _loading.get_node("%Status")
+	_loading_progress = _loading.get_node("%Progress")
+	_loading_cancel = _loading.get_node("%Cancel")
+	_loading_cancel.pressed.connect(_on_loading_cancel)
+	get_tree().scene_changed.connect(_on_tree_ready)
+	get_tree().root.close_requested.connect(cancel_transition)
 
 
 ## Changes to a registered scene. 
@@ -195,39 +220,208 @@ func get_param(param_name: StringName, default: Variant = null) -> Variant:
 	return params.get(param_name, default)
 
 
+# Whole-graph worker loading is unsafe for this preload graph, including quit.
+# Dependency hints let us load small resources between frames on the main thread.
+const ResourceSteps = preload("res://scenes/loading_r/resource_steps.gd")
+
+
+func _on_tree_ready() -> void:
+	_swap_ready = true
+	_swap_ready_at_usec = Time.get_ticks_usec()
+
+
+func _process(_delta: float) -> void:
+	_transition_tick.emit()
+
+
+func _exit_tree() -> void:
+	_exiting = true
+	_cancel_requested = true
+	# Wake suspended transition/fade states so their retained resources release
+	# before the autoload disappears, including direct engine quit mid-load.
+	_transition_tick.emit()
+
+
+func _on_loading_cancel() -> void:
+	if _load_error:
+		_load_error = false
+		_loading.hide()
+		var focus: Control = _failure_focus.get_ref() if _failure_focus != null else null
+		if is_instance_valid(focus) and focus.is_inside_tree(): focus.grab_focus()
+		_failure_focus = null
+	else:
+		cancel_transition()
+
+
+## Cancels before scene ownership is committed. Never interrupts _ready halfway.
+func cancel_transition() -> bool:
+	if not _transitioning or not _can_cancel or _cancel_requested: return false
+	_cancel_requested = true
+	_loading_cancel.disabled = true
+	_loading_status.text = "Returning…"
+	return true
+
+
+func _present_loading() -> void:
+	if _exiting: return
+	await _transition_tick
+	if _exiting: return
+	# A full rendered frame lies between these ticks. This also remains wakeable
+	# on teardown, unlike awaiting a renderer signal after rendering has stopped.
+	if DisplayServer.get_name() != "headless": await _transition_tick
+
+
 func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) -> void:
 	_transitioning = true
+	_cancel_requested = false
+	_can_cancel = true
+	_load_error = false
+	_failure_focus = null
+	_loading.hide()
+	var next_params := new_params.duplicate(true)
+	var previous_params := params
 	var old_scene := get_tree().current_scene
 	var old_process := old_scene.process_mode if old_scene else Node.PROCESS_MODE_INHERIT
-	if old_scene:
-		old_scene.process_mode = Node.PROCESS_MODE_DISABLED
-	
-	if fade:
-		await _fade_to(1.0)
-	
-	clear_popups()
-	params = new_params
-	var err: Error = get_tree().change_scene_to_file(path)
-	if err != OK:
-		if is_instance_valid(old_scene):
+	var old_state: int = GameState.state
+	var focused := get_viewport().gui_get_focus_owner()
+	var previous_focus: WeakRef = weakref(focused) if focused != null else null
+	var was_disabled: bool = focused.disabled if focused is BaseButton else false
+	var profile := {"key": String(key), "path": path, "fade": fade}
+	var started := Time.get_ticks_usec()
+	if old_scene: old_scene.process_mode = Node.PROCESS_MODE_DISABLED
+	if fade: await _fade_to(1.0)
+	if _exiting: return
+	profile.fade_out_usec = Time.get_ticks_usec() - started
+	_loading_status.text = "Loading museum…" if key in [&"Campaign", &"Prototype"] else "Loading…"
+	_loading_progress.indeterminate = true
+	_loading_progress.value = 0
+	_loading_progress.show()
+	_loading_cancel.text = "Cancel"
+	_loading_cancel.disabled = _cancel_requested
+	_loading.show()
+	_loading_cancel.grab_focus()
+	# Present feedback before parsing or constructing anything. No campaign is
+	# loaded/instantiated by the manager until an explicit go_to/start_play call.
+	await _present_loading()
+	if _exiting: return
+	var mark := Time.get_ticks_usec()
+	var failure := ""
+	var packed: PackedScene
+	if not _cancel_requested:
+		_loading_path = path
+		var steps: Array = ResourceSteps.STEPS if key in [&"Campaign", &"Prototype"] or path == SCENES[&"Campaign"] or path == SCENES[&"Prototype"] else []
+		# Keep weak-cache dependencies alive until the root scene owns its graph.
+		var retained: Array[Resource] = []
+		var slice_started := Time.get_ticks_usec()
+		var largest_step := 0
+		var largest_path := ""
+		var loaded_steps := 0
+		for step_path in steps:
+			if _cancel_requested: break
+			if not ResourceLoader.exists(step_path): continue # Hints may age at integration.
+			var step_started := Time.get_ticks_usec()
+			var resource := ResourceLoader.load(step_path)
+			var elapsed := Time.get_ticks_usec() - step_started
+			if elapsed > largest_step:
+				largest_step = elapsed
+				largest_path = step_path
+			if resource != null: retained.append(resource)
+			loaded_steps += 1
+			if Time.get_ticks_usec() - slice_started >= 8000:
+				await _transition_tick
+				if _exiting: return
+				slice_started = Time.get_ticks_usec()
+		profile.resource_steps = loaded_steps
+		profile.largest_resource_step_usec = largest_step
+		profile.largest_resource_path = largest_path
+		if not _cancel_requested:
+			var root_started := Time.get_ticks_usec()
+			packed = ResourceLoader.load(path) as PackedScene
+			profile.root_resource_usec = Time.get_ticks_usec() - root_started
+			if packed == null: failure = "Could not open the room."
+	profile.resource_wait_usec = Time.get_ticks_usec() - mark
+	_loading_path = ""
+	_can_cancel = false
+	if not _cancel_requested and failure.is_empty():
+		_loading_status.text = "Preparing the room…"
+		_loading_progress.indeterminate = false
+		_loading_progress.value = 1
+		_loading_cancel.disabled = true
+		await _present_loading()
+	if _exiting: return
+	# Recheck after the last yield, before committing ownership/params.
+	if not _cancel_requested and failure.is_empty() and get_tree().current_scene != old_scene:
+		failure = "The scene changed while loading."
+	if not _cancel_requested and failure.is_empty():
+		# Scene-tree creation and _ready stay on the main thread, measured separately.
+		params = next_params
+		mark = Time.get_ticks_usec()
+		var instance := packed.instantiate()
+		profile.instantiate_usec = Time.get_ticks_usec() - mark
+		if instance == null:
+			failure = "Could not create the room."
+		else:
+			var next_process := instance.process_mode
+			instance.process_mode = Node.PROCESS_MODE_DISABLED
+			clear_popups()
+			mark = Time.get_ticks_usec()
+			_swap_ready = false
+			var err := get_tree().change_scene_to_node(instance)
+			if err != OK:
+				instance.free()
+				failure = "Could not enter the room."
+			else:
+				while not _swap_ready and not _exiting: await _transition_tick
+				if _exiting: return
+				profile.swap_ready_usec = _swap_ready_at_usec - mark
+				scene_changed.emit(key)
+				# Include graphics work since the native ready signal, even if the
+				# next manager tick arrives after the first blocking render.
+				mark = _swap_ready_at_usec
+				await _present_loading()
+				if _exiting: return
+				profile.first_draw_wait_usec = Time.get_ticks_usec() - mark
+				_loading.hide()
+				mark = Time.get_ticks_usec()
+				if fade: await _fade_to(0.0)
+				profile.fade_in_usec = Time.get_ticks_usec() - mark
+				if is_instance_valid(instance): instance.process_mode = next_process
+	if _cancel_requested or not failure.is_empty():
+		params = previous_params
+		if is_instance_valid(old_scene) and get_tree().current_scene == old_scene:
 			old_scene.process_mode = old_process
-		push_error("SceneManager: failed to load scene '%s'" % path)
-	else:
-		# The swap happens at the end of the frame.
-		await get_tree().process_frame
-		scene_changed.emit(key)
-	
-	if fade:
-		await _fade_to(0.0)
-	
+		GameState.change_state(old_state)
+		_loading.hide()
+		if fade: await _fade_to(0.0)
+		var focus: Control = previous_focus.get_ref() if previous_focus != null else null
+		if is_instance_valid(focus) and focus.is_inside_tree():
+			if focus is BaseButton: focus.disabled = was_disabled
+			focus.grab_focus()
+		if not failure.is_empty():
+			_load_error = true
+			_failure_focus = previous_focus
+			_loading_status.text = failure + " Please try again."
+			_loading_progress.hide()
+			_loading_cancel.text = "Back"
+			_loading_cancel.disabled = false
+			_loading.show()
+			_loading_cancel.grab_focus()
+	profile.status = "cancelled" if _cancel_requested else ("failed" if not failure.is_empty() else "completed")
+	profile.total_usec = Time.get_ticks_usec() - started
+	last_transition_profile = profile
 	_transitioning = false
+	if not failure.is_empty(): transition_failed.emit(key, failure)
 
 
 func _fade_to(alpha: float) -> void:
+	if _exiting: return
 	_fade_rect.visible = true
-	var tween: Tween = create_tween()
+	var tween := create_tween()
 	tween.tween_property(_fade_rect, "color:a", alpha, fade_duration)
-	await tween.finished
+	while tween.is_running() and not _exiting: await _transition_tick
+	if _exiting:
+		tween.kill()
+		return
 	_fade_rect.visible = alpha > 0.0
 
 
@@ -246,10 +440,10 @@ func _on_popup_removed(holder: Control, key: StringName) -> void:
 func play_key(sandbox: bool = false) -> StringName:
 	return &"Campaign" if not sandbox and ResourceLoader.exists(SCENES[&"Campaign"]) else &"Prototype"
 
-func start_play(sandbox: bool = false, difficulty: StringName = &"easy") -> bool:
+func start_play(sandbox: bool = false, difficulty: StringName = &"easy", skip_tutorials: bool = false) -> bool:
 	if _transitioning or difficulty not in [&"easy", &"hard"]:
 		return false
-	var accepted := go_to(play_key(sandbox), {"new_run": true, "difficulty": difficulty})
+	var accepted := go_to(play_key(sandbox), {"new_run": true, "difficulty": difficulty, "skip_tutorials": skip_tutorials})
 	if accepted:
 		GameState.start_game()
 	return accepted

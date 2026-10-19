@@ -271,6 +271,9 @@ func _run() -> void:
 	arena.emergency_rewind.confirm()
 	_tick(0.02)
 	expect(arena.tutorial.is_learned(&"rewind") and arena.mode == &"pressure" and arena.time_controller.charges_remaining == 3 and is_equal_approx(arena.time_controller.meter, 100.0), "Confirming RewindLesson hands off to finite pressure with all 3 charges and 100% meter")
+	arena.start_new_run()
+	expect(not arena.rewind_lesson.is_completed and arena.rewind_lesson.completed_count == 0,
+		"Starting another campaign resets the actual rewind completion latch and count")
 
 	# 7. Verify phase-specific final boss guidance across all 4 phases
 	var expected_phase_tokens := [

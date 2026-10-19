@@ -102,7 +102,7 @@ func run() -> void:
 	arena.debug_start(1, 3)
 	expect(arena.acquired == [2, 3, 1], "Acquisition order across campaign is strictly yellow orange blue")
 	arena.tutorial.learned.erase(&"rewind")
-	arena.rewind_lesson.is_completed = false
+	arena.rewind_lesson.reset_for_new_run()
 	arena.director.clear(); arena.wave_index = 2; arena._begin_wave()
 	for i in range(60):
 		tick(0.04)

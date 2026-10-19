@@ -10,8 +10,8 @@ const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 @onready var tutorial: Control = get_node_or_null("Overlay/Tutorial") as Control
 @onready var title: Label = get_node_or_null("Overlay/TitleLabel") as Label
 @onready var run_hint: Label = get_node_or_null("Overlay/RunHintLabel") as Label
-@onready var lesson_demo: LessonDemo = get_node_or_null("LessonDemo") as LessonDemo
-@onready var rewind_lesson: RewindLesson = get_node_or_null("RewindLesson") as RewindLesson
+@onready var lesson_demo: LessonDemo = $LessonDemo
+@onready var rewind_lesson: RewindLesson = $RewindLesson
 
 var difficulty_id: StringName = &"easy"
 var difficulty_spec: CampaignDifficulty = null
@@ -109,7 +109,7 @@ func start_new_run(new_difficulty: Variant = null) -> void:
 	if lesson_demo != null:
 		lesson_demo.reset_run()
 	if rewind_lesson != null:
-		rewind_lesson.is_completed = false
+		rewind_lesson.reset_for_new_run()
 	_slow_unlocked = false
 	_rewind_unlocked = false
 	_apply_time_capabilities()
@@ -120,14 +120,6 @@ func start_new_run(new_difficulty: Variant = null) -> void:
 
 func _ready() -> void:
 	super._ready()
-	if lesson_demo == null:
-		lesson_demo = LessonDemo.new()
-		lesson_demo.name = "LessonDemo"
-		add_child(lesson_demo)
-	if rewind_lesson == null:
-		rewind_lesson = RewindLesson.new()
-		rewind_lesson.name = "RewindLesson"
-		add_child(rewind_lesson)
 	if not lesson_demo.ready_for_practice.is_connected(_on_lesson_demo_ready_for_practice):
 		lesson_demo.ready_for_practice.connect(_on_lesson_demo_ready_for_practice)
 	if not rewind_lesson.completed.is_connected(_on_rewind_lesson_completed):
@@ -267,7 +259,7 @@ func debug_start(index: int, requested_wave: int = 0, boss_phase: int = -1) -> v
 	if lesson_demo != null:
 		lesson_demo.reset_run()
 	if rewind_lesson != null:
-		rewind_lesson.is_completed = false
+		rewind_lesson.reset_for_new_run()
 	_slow_unlocked = false
 	_rewind_unlocked = false
 	var definitions := _room_definitions()
@@ -289,8 +281,6 @@ func debug_start(index: int, requested_wave: int = 0, boss_phase: int = -1) -> v
 					_slow_unlocked = true
 				elif taught == &"rewind":
 					_rewind_unlocked = true
-					if rewind_lesson != null:
-						rewind_lesson.is_completed = true
 	_apply_time_capabilities()
 	enter_room(target_room)
 	wave_index = target_wave - 1
@@ -708,7 +698,6 @@ func _spawn_wave() -> void:
 		tutorial.dismiss()
 		run_hint.text = ""
 		if rewind_lesson != null:
-			rewind_lesson.reset_for_new_run()
 			rewind_lesson.begin(self)
 		_update_run_hud()
 		return

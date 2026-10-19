@@ -89,9 +89,16 @@ Easy and Hard share time, damage, and weapon-condition rules. Hard adds concurre
 threats and faster finite arrivals. Tune the authored `settings/difficulty_*.tres`
 resources; `rooms.gd` contains the per-wave rosters and formations.
 
-New mechanics get an explanation, safe practice and then staged combat. Emergency
-rewind is taught through a real controlled depletion after usable history exists.
-Retries retain completed lessons. Cleared rooms open a real north-wall doorway.
+New mechanics demonstrate the actual action, then give two stationary and two
+moving practice attempts before a finite combat wave. Combination and pattern
+lessons use one of each. Familiar mixed waves separate new introductions. The
+demonstration's Try it button skips directly to practice; learned lessons stay quiet.
+
+Emergency rewind uses a short staged action and unavoidable hit, then opens the
+real scrubber on a safe earlier moment. Confirming completes the lesson once and
+starts real play with all three charges. Ordinary rewinds still spend a charge.
+Retries retain completed lessons. Cleared rooms open a real north-wall doorway
+with green floor arrows.
 
 | Part | Efficient interaction |
 |---|---|

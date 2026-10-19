@@ -31,17 +31,13 @@ func reset() -> void:
 const PatternVisual = preload("res://scenes/prototype/pattern_visual.gd")
 const UNIT_CLEARANCE = {&"blue": 1.5, &"yellow": 0.85, &"orange": 1.1,
 	&"side_guard": 2.15, &"front_guard": 1.25, &"warden": 1.8, &"pair": 1.8}
-static var _placement_radii: Dictionary = {}
 
 static func _is_pattern_kind(kind: StringName) -> bool:
 	return kind == &"loop" or kind == &"zigzag" or kind == &"pair" or kind == &"loop_boss" or kind == &"sequence_boss" or kind == &"final_boss"
 
 static func placement_radius(kind: StringName) -> float:
-	if _placement_radii.has(kind):
-		return float(_placement_radii[kind])
 	var body := float(Tuning.ENEMIES.get(String(kind), {}).get("radius", 0.8))
 	var radius := maxf(body, PatternVisual.silhouette_radius(kind) + float(Tuning.RING.radius) + 0.2) if _is_pattern_kind(kind) else maxf(body, float(UNIT_CLEARANCE.get(kind, body)))
-	_placement_radii[kind] = radius
 	return radius
 
 # Prefer complete silhouettes inside the normal gameplay perspective. This is
@@ -49,34 +45,25 @@ static func placement_radius(kind: StringName) -> float:
 # fallback. No Camera/Node reference is stored in formation or rewind state.
 static func readable_from_player(point: Vector3, extent: float, player: Vector3) -> bool:
 	var view := Basis.from_euler(Vector3(deg_to_rad(-55), 0, 0)).inverse()
-	var rel := point - (player + Vector3(0, 20, 14))
+	var relative_position := point - (player + Vector3(0, 20, 14))
 	var half_y := tan(deg_to_rad(float(Tuning.VIEW.fov)) * .5)
 	var limit_y := half_y * .92
 	var limit_x := half_y * 1.6 * .94
+	# Visit the eight box corners without allocating nested temporary arrays.
 	for corner in range(8):
-		var ox := -extent if (corner & 4) == 0 else extent
-		var oz := -extent if (corner & 2) == 0 else extent
-		var oy := 0.0 if (corner & 1) == 0 else 5.2
-		var local := view * (rel + Vector3(ox, oy, oz))
+		var corner_x := -extent if (corner & 4) == 0 else extent
+		var corner_z := -extent if (corner & 2) == 0 else extent
+		var corner_y := 0.0 if (corner & 1) == 0 else 5.2
+		var local := view * (relative_position + Vector3(corner_x, corner_y, corner_z))
 		if local.z >= 0 or absf(local.y) > -local.z * limit_y or absf(local.x) > -local.z * limit_x:
 			return false
 	return true
 
-func _free_slot(point: Vector3, extent: float, player_position: Vector3, cover: RefCounted, occupied: Array, slots: Array[Dictionary], kind: StringName) -> bool:
-	if not safe(point, extent, player_position, cover): return false
-	# A clear support ring behind a cabinet still gives a blocked first launch.
-	if _is_pattern_kind(kind) and cover != null and cover.clip_segment(player_position, point, float(Tuning.RING.radius)).blocked: return false
-	for node in occupied:
-		if is_instance_valid(node) and node.health > 0 and point.distance_to(Vector3(node.position.x, 0, node.position.z)) < extent + placement_radius(StringName(node.kind)) + 0.25: return false
-	for prior: Dictionary in slots:
-		if point.distance_to(prior.position) < extent + float(prior.radius) + 0.15: return false
-	return true
-
-func _free_slot_prepared(point: Vector3, extent: float, player_position: Vector3, cover: RefCounted, occupied_positions: PackedVector3Array, occupied_clearances: PackedFloat32Array, slots: Array[Dictionary], is_pattern: bool) -> bool:
+func _free_slot(point: Vector3, extent: float, player_position: Vector3, cover: RefCounted, occupied_positions: PackedVector3Array, occupied_clearances: PackedFloat64Array, slots: Array[Dictionary], is_pattern: bool) -> bool:
 	var limit := float(Tuning.ARENA_HALF_SIZE) - extent - 0.6
 	if absf(point.x) > limit or absf(point.z) > limit or point.distance_to(player_position) < maxf(5.0, extent + 1.4): return false
-	for occ_i in range(occupied_positions.size()):
-		if point.distance_to(occupied_positions[occ_i]) < extent + occupied_clearances[occ_i]: return false
+	for occupied_index in range(occupied_positions.size()):
+		if point.distance_to(occupied_positions[occupied_index]) < extent + occupied_clearances[occupied_index]: return false
 	for prior: Dictionary in slots:
 		if point.distance_to(prior.position) < extent + float(prior.radius) + 0.15: return false
 	if cover != null:
@@ -104,7 +91,7 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 		extents.append(placement_radius(k))
 		widest = maxf(widest, extents[-1])
 	var occupied_positions := PackedVector3Array()
-	var occupied_clearances := PackedFloat32Array()
+	var occupied_clearances := PackedFloat64Array()
 	for node in occupied:
 		if is_instance_valid(node) and node.health > 0:
 			occupied_positions.append(Vector3(node.position.x, 0, node.position.z))
@@ -133,7 +120,7 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 					_:
 						var arc := index * maxf(0.21, spacing / distance)
 						point = player + (radial * cos(arc) + side * sin(arc)) * (distance + jitter[i])
-				if not _free_slot_prepared(point, extents[i], player, cover, occupied_positions, occupied_clearances, slots, member_is_pattern[i]): break
+				if not _free_slot(point, extents[i], player, cover, occupied_positions, occupied_clearances, slots, member_is_pattern[i]): break
 				if extents[i] > 3.0 and not readable_from_player(point, extents[i], player): break
 				if formation == &"line" and cover != null and cover.clip_segment(player, point).blocked: break
 				slots.append({"kind": member_kinds[i], "position": point, "radius": extents[i], "source_index": i})
@@ -151,20 +138,20 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 		if included: continue
 		var candidate := Vector3.ZERO
 		var score := INF
-		var extent_i := extents[i]
-		var is_pat_i := member_is_pattern[i]
+		var member_extent := extents[i]
+		var member_is_cuttable := member_is_pattern[i]
 		for x in range(-16, 17, 2):
 			for z in range(-16, 17, 2):
 				var point := Vector3(x, 0, z)
 				var relative := point - player
 				var cost := point.distance_squared_to(desired) + absf(relative.length() - 9) * 3
 				if cost >= score: continue
-				if not _free_slot_prepared(point, extent_i, player, cover, occupied_positions, occupied_clearances, best, is_pat_i): continue
-				if extent_i > 3.0 and not readable_from_player(point, extent_i, player): cost += 10000
+				if not _free_slot(point, member_extent, player, cover, occupied_positions, occupied_clearances, best, member_is_cuttable): continue
+				if member_extent > 3.0 and not readable_from_player(point, member_extent, player): cost += 10000
 				if cost < score:
 					score = cost
 					candidate = point
-		if score < INF: best.append({"kind": member_kinds[i], "position": candidate, "radius": extent_i, "source_index": i})
+		if score < INF: best.append({"kind": member_kinds[i], "position": candidate, "radius": member_extent, "source_index": i})
 		else: break # Keep the director's finite roster prefix intact.
 	best.sort_custom(func(a: Dictionary, b: Dictionary): return int(a.source_index) < int(b.source_index))
 	return best
@@ -245,7 +232,7 @@ func cohesion(dt: float, nodes: Array[Node3D], holds: Dictionary = {}) -> Dictio
 				count += 1
 		if count < 2: continue
 		center /= count
-		var max_len := .35 * clampf(float(cohort.window) / OPPORTUNITY_SECONDS, 0, 1)
+		var maximum_bias := .35 * clampf(float(cohort.window) / OPPORTUNITY_SECONDS, 0, 1)
 		for i in range(cohort.ids.size()):
 			var member_id: int = cohort.ids[i]
 			if not by_id.has(member_id): continue
@@ -257,7 +244,7 @@ func cohesion(dt: float, nodes: Array[Node3D], holds: Dictionary = {}) -> Dictio
 			var forward: Vector3 = node.facing
 			toward -= forward * toward.dot(forward)
 			if dt - float(holds.get(member_id, 0.0)) <= 0: continue
-			biases[member_id] = toward.limit_length(max_len)
+			biases[member_id] = toward.limit_length(maximum_bias)
 	return biases
 
 

@@ -542,27 +542,14 @@ func hostile_cue(kind: StringName, point: Vector3, strength: float = 1.0) -> voi
 			if not combat_event.is_connected(callback): callback.call(kind, point, strength)
 
 
-func _has_living_owner(owner_id: int) -> bool:
-	if owner_id <= 0:
-		return true
-	for enemy in enemies:
-		if is_instance_valid(enemy) and int(enemy.combat_id()) == owner_id and enemy.health > 0.0:
-			return true
-	return false
-
-
 func _discard_orphaned_projectiles() -> void:
 	if projectiles.is_empty(): return
-	var has_orphan := false
-	for shot: Dictionary in projectiles:
-		if not _has_living_owner(int(shot.get("owner_id", 0))):
-			has_orphan = true
-			break
-	if not has_orphan: return
+	var living := {}
+	for enemy in enemies:
+		if is_instance_valid(enemy) and enemy.health > 0: living[int(enemy.combat_id())] = true
 	var live: Array[Dictionary] = []
 	for shot: Dictionary in projectiles:
-		if _has_living_owner(int(shot.get("owner_id", 0))):
-			live.append(shot)
+		if int(shot.get("owner_id", 0)) == 0 or living.has(int(shot.owner_id)): live.append(shot)
 	projectiles = live
 
 
@@ -690,25 +677,7 @@ const TRAIL_MID_COLOR := Color("fa5547")
 const TRAIL_CORE_COLOR := Color("fff1cf")
 
 
-func _trail_triangle(a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
-	_trail_mesh.surface_set_color(color)
-	_trail_mesh.surface_add_vertex(a)
-	_trail_mesh.surface_add_vertex(b)
-	_trail_mesh.surface_add_vertex(c)
-
-
-func _trail_ribbon(start: Vector3, finish: Vector3, half_width: float, color: Color) -> void:
-	var side := (finish - start).cross(Vector3.UP).normalized() * half_width
-	_trail_mesh.surface_set_color(color)
-	_trail_mesh.surface_add_vertex(start - side)
-	_trail_mesh.surface_add_vertex(start + side)
-	_trail_mesh.surface_add_vertex(finish - side)
-	_trail_mesh.surface_add_vertex(start + side)
-	_trail_mesh.surface_add_vertex(finish + side)
-	_trail_mesh.surface_add_vertex(finish - side)
-
-
-func _trail_ribbon_perp(start: Vector3, finish: Vector3, side: Vector3, color: Color) -> void:
+func _trail_ribbon(start: Vector3, finish: Vector3, side: Vector3, color: Color) -> void:
 	_trail_mesh.surface_set_color(color)
 	_trail_mesh.surface_add_vertex(start - side)
 	_trail_mesh.surface_add_vertex(start + side)
@@ -739,17 +708,17 @@ func _sync_projectile_visuals() -> void:
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(node)
 		_projectile_visuals.append(node)
-	var proj_count := projectiles.size()
+	var projectile_count := projectiles.size()
 	for i in range(_projectile_visuals.size()):
-		var vis := _projectile_visuals[i]
-		var active := i < proj_count
-		if vis.visible != active:
-			vis.visible = active
+		var visual := _projectile_visuals[i]
+		var active := i < projectile_count
+		if visual.visible != active:
+			visual.visible = active
 		if active:
 			var shot: Dictionary = projectiles[i]
-			vis.position = shot.position
+			visual.position = shot.position
 			var desired_size := Vector2.ONE * float(shot.get("radius", PROJECTILE_RADIUS)) * 2.0
-			var quad := vis.mesh as QuadMesh
+			var quad := visual.mesh as QuadMesh
 			if quad.size != desired_size:
 				quad.size = desired_size
 	if _trail_mesh == null:
@@ -767,7 +736,7 @@ func _sync_projectile_visuals() -> void:
 		add_child(node)
 	if _trail_mesh.get_surface_count() > 0:
 		_trail_mesh.clear_surfaces()
-	if proj_count == 0: return
+	if projectile_count == 0: return
 	_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 	for shot: Dictionary in projectiles:
 		var head: Vector3 = shot.position
@@ -775,8 +744,8 @@ func _sync_projectile_visuals() -> void:
 		var speed := velocity.length()
 		var direction := velocity / speed if speed > .0001 else Vector3.ZERO
 		var tail := head - direction * minf(.8, speed * float(shot.get("age", 0)))
-		var perp := Vector3(-direction.z, 0.0, direction.x)
-		_trail_ribbon_perp(tail, head, perp * .11, TRAIL_OUTER_COLOR)
-		_trail_ribbon_perp(tail, head, perp * .075, TRAIL_MID_COLOR)
-		_trail_ribbon_perp(tail, head, perp * .022, TRAIL_CORE_COLOR)
+		var side := Vector3(-direction.z, 0.0, direction.x)
+		_trail_ribbon(tail, head, side * .11, TRAIL_OUTER_COLOR)
+		_trail_ribbon(tail, head, side * .075, TRAIL_MID_COLOR)
+		_trail_ribbon(tail, head, side * .022, TRAIL_CORE_COLOR)
 	_trail_mesh.surface_end()

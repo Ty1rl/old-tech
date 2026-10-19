@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Round R provenance/gain checks against the delegated base; never bakes audio."""
+"""Audio provenance, derived encoding and gain checks; never bakes audio."""
 import ast
 import hashlib
 import json
@@ -39,18 +39,20 @@ def cues(text):
 
 
 provenance = json.loads((ROOT / "audio/music/supplied-round-r.json").read_text())
+encoding = json.loads((ROOT / "audio/encoding.json").read_text())["files"]
 digests = []
 for track in provenance["tracks"]:
     data = (ROOT / track["asset"]).read_bytes()
     expect(sha(data) == track["sha256"] and len(data) == track["bytes"], "Music manifest matches: " + track["context"])
-    expect(data == Path(track["source"]).read_bytes(), "Music supplied bytes unchanged: " + track["context"])
+    expect(sha(Path(track["source"]).read_bytes()) == encoding[track["asset"]]["source_sha256"], "Original music upload provenance retained: " + track["context"])
     digests.append(sha(data))
 expect(len(set(digests)) == 4, "Four distinct source tracks")
 voices = sorted((ROOT / "audio/voice").rglob("*.mp3"))
 expect(len(voices) == 37, "37 supplied voice recordings retained")
 for path in voices:
     relative = path.relative_to(ROOT).as_posix()
-    expect(sha(path.read_bytes()) == sha(original(relative)), "Voice bytes unchanged: " + relative)
+    row = encoding[relative]
+    expect(sha(path.read_bytes()) == row["encoded_sha256"] and sha(original(relative)) == row["source_sha256"], "Derived voice matches encoding and original provenance: " + relative)
 expect((ROOT / "audio/voice/library.tres").read_bytes() == original("audio/voice/library.tres"), "Voice event resource unchanged")
 
 before = cues(original("audio/combat/palette.tres").decode())
@@ -62,14 +64,13 @@ for name, (gain, properties) in after.items():
     expect(gain == min(-6, old_gain + 6), "Raised gain with headroom cap: " + name)
     expect(properties == old_properties, "Cue stream/pitch/priority/timing unchanged: " + name)
     boosts.append(gain - old_gain)
-changed_audio = subprocess.check_output(["git", "diff", "--name-only", BASE, "--", "audio/voice", "audio/combat"], cwd=ROOT).decode().splitlines()
-expect(changed_audio == ["audio/combat/palette.tres"], "Only combat metadata changed; no effect/voice source asset or import changes")
+expect(len(encoding) == 63 and all((ROOT / name).is_file() and sha((ROOT / name).read_bytes()) == row["encoded_sha256"] for name, row in encoding.items()), "All63 derived audio assets match their encoding receipt")
 expect("glow.ogg" not in (ROOT / "audio/combat/palette.tres").read_text(), "Old music bed removed from live bank")
 expect((ROOT / "default_bus_layout.tres").read_bytes() == original("default_bus_layout.tres"), "Voice/Master/World bus layout unchanged")
 ast.parse((ROOT / "tools/audio/bake_palette.py").read_text())
 expect(True, "Offline baker parses without running a generation pass")
 print(json.dumps({"status": "failed" if failures else "passed", "checks": checks, "failures": failures,
-                  "music_files": 4, "unchanged_voice_mp3s": len(voices), "cue_count": len(after),
+                  "music_files": 4, "retained_voice_recordings": len(voices), "cue_count": len(after),
                   "effect_boost_db": {"min": min(boosts), "max": max(boosts)},
                   "note": "Signal/provenance checks; no subjective listening claim."}))
 raise SystemExit(bool(failures))

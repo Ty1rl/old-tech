@@ -21,7 +21,7 @@ func _on_start() -> void:
 	intro.begin(selected_difficulty(), skip_tutorials.button_pressed)
 func _on_intro_cancelled() -> void:
 	SceneManager.close_popup(&"NewGame")
-	var scene := SceneManager.get_current_scene()
+	var scene: Node = SceneManager.get_current_scene()
 	if scene != null and scene.scene_file_path != "res://scenes/main.tscn":
 		SceneManager.return_main()
 func _on_back() -> void:

@@ -33,6 +33,7 @@ func run() -> void:
 	AudioServer.remove_bus_effect(voice_bus, AudioServer.get_bus_effect_count(voice_bus)-1)
 	expect(not manager.say(&"protagonist.under_pressure"), "Barks cannot interrupt teaching")
 	manager.stop_dialogue()
+	manager.set_music_context(&"intro")
 	manager._bark_cooldown = 0
 	expect(manager.say(&"protagonist.repair_started"), "Repair bark plays when speech is idle")
 	manager.stop_dialogue()
@@ -65,6 +66,7 @@ func run() -> void:
 	arena._restore_world(snapshot, true)
 	expect(manager.played_events == before, "World history preview never replays dialogue")
 	manager.stop_dialogue()
+	manager.set_music_context(&"intro")
 	await create_timer(.12).timeout
 	arena.feedback.reset_state();arena.queue_free()
 	await process_frame;await create_timer(.3).timeout

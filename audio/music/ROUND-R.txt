@@ -1,3 +1,7 @@
+CURRENT DISTRIBUTION:Game MP3 copies compressed;original uploads remain unchanged.
+See audio/encoding.json for original/encoded digests and exact parameters.
+The original Round R import record follows.
+
 Round R audio contract — jam-6
 
 AudioManager is the sole music owner. Call set_music_context(StringName):

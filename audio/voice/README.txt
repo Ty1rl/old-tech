@@ -1,5 +1,7 @@
 SUPPLIED DIALOGUE — Some Assembly Required
-37 original MP3 recordings supplied by Matt, 2026-10-19. Bytes unchanged.
+37 recordings supplied by Matt, 2026-10-19. Game MP3 copies compressed for distribution.
+Original upload hashes and encoding parameters:audio/encoding.json; originals remain
+in shared uploads and Git history. No loudness normalization.
 
 EVENTS.tsv maps event IDs, relative filenames, suggested triggers and upload names.
 Tutorial lesson filenames match the actual lesson keys:shot,charge,heat,repair,

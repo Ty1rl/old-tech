@@ -224,7 +224,7 @@ func _exit_tree() -> void:
 
 func _process(delta: float) -> void:
 	_bark_cooldown = maxf(0, _bark_cooldown - delta)
-	var paused := GameState.is_paused() or get_tree().paused
+	var paused: bool = GameState.is_paused() or get_tree().paused
 	# Web Sample playback restarts its source on every unpause assignment.
 	# Only send pause transitions, even though the desktop mixer tolerates repeats.
 	if voice.stream_paused != paused: voice.stream_paused = paused

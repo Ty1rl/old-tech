@@ -1,4 +1,4 @@
-Supplied by Matt, 2026-10-19. Original MP3 bytes retained.
+Supplied by Matt, 2026-10-19. Source uploads retained; game MP3 copies compressed. See audio/encoding.json.
 New emergency activates ->emergency_start;new time low ->time_low_loop;
 room finished sound ->room_open. Other names match their combat cue IDs.
 The matching generated WAVs remain as replaceable fallbacks.

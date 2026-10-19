@@ -155,7 +155,7 @@ func add(formation: StringName, members: Array[Node3D]) -> void:
 
 func advance(world_delta: float, nodes: Array[Node3D], player: Node3D) -> Dictionary:
 	var dt := maxf(0, world_delta)
-	if dt <= 0: return {}
+	if dt <= 0 or cohorts.is_empty(): return {}
 	var by_id := {}
 	for node in nodes:
 		if is_instance_valid(node) and node.health > 0: by_id[int(node.combat_id())] = node
@@ -185,7 +185,7 @@ func advance(world_delta: float, nodes: Array[Node3D], player: Node3D) -> Dictio
 
 func cohesion(dt: float, nodes: Array[Node3D], holds: Dictionary = {}) -> Dictionary:
 	var biases := {}
-	if dt <= 0: return biases
+	if dt <= 0 or cohorts.is_empty(): return biases
 	var by_id := {}
 	for node in nodes:
 		if is_instance_valid(node) and node.health > 0: by_id[int(node.combat_id())] = node

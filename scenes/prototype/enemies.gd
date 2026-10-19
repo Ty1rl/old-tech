@@ -49,6 +49,7 @@ var projectiles: Array[Dictionary] = []
 var _projectile_visuals: Array[MeshInstance3D] = []
 var flow: CombatFlow = Flow.new()
 var _arrival_mesh: ImmediateMesh
+var _arrival_ring := PackedVector3Array()
 
 var enemies: Array[Node3D] = []
 var cover: RefCounted
@@ -273,6 +274,13 @@ func start_flow(player: Node3D, seed: int = 0) -> void:
 
 
 func _draw_arrivals() -> void:
+	var warnings: Array[Dictionary] = []
+	for cohort: Dictionary in flow.cohorts:
+		if cohort.warning > 0: warnings.append(cohort)
+	if warnings.is_empty():
+		if _arrival_mesh != null and _arrival_mesh.get_surface_count() > 0:
+			_arrival_mesh.clear_surfaces()
+		return
 	if _arrival_mesh == null:
 		_arrival_mesh = ImmediateMesh.new()
 		var instance := MeshInstance3D.new()
@@ -285,27 +293,27 @@ func _draw_arrivals() -> void:
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		instance.material_override = mat
 		add_child(instance)
+		# The same 24-segment ring is translated for every arrival. Its shape
+		# never changes with the countdown, so calculate it once per director.
+		for i in range(24):
+			var a := TAU * float(i) / 24
+			var b := TAU * float(i + 1) / 24
+			var v0 := Vector3(cos(a), 0, sin(a))
+			var v1 := Vector3(cos(b), 0, sin(b))
+			_arrival_ring.append_array(PackedVector3Array([
+				v0 * 1.01, v0 * 1.09, v1 * 1.01, v0 * 1.09, v1 * 1.09, v1 * 1.01]))
 	_arrival_mesh.clear_surfaces()
-	var warnings: Array[Dictionary] = []
-	for cohort: Dictionary in flow.cohorts:
-		if cohort.warning > 0: warnings.append(cohort)
-	if warnings.is_empty(): return
 	_arrival_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 	for cohort: Dictionary in warnings:
 		var color := Color("479cff")
 		if cohort.formation == &"line": color = Color("ffe066")
 		elif cohort.formation == &"cluster": color = Color("f9974b")
 		color.a = 0.55 + 0.35 * (1.0 - float(cohort.warning) / Flow.WARNING_SECONDS)
+		_arrival_mesh.surface_set_color(color)
 		for offset: Vector3 in cohort.offsets:
 			var center: Vector3 = cohort.center + offset + Vector3.UP * 0.035
-			for i in range(24):
-				var a := TAU * float(i) / 24
-				var b := TAU * float(i + 1) / 24
-				var v0 := Vector3(cos(a), 0, sin(a))
-				var v1 := Vector3(cos(b), 0, sin(b))
-				for point in [v0 * 1.01, v0 * 1.09, v1 * 1.01, v0 * 1.09, v1 * 1.09, v1 * 1.01]:
-					_arrival_mesh.surface_set_color(color)
-					_arrival_mesh.surface_add_vertex(center + point)
+			for point: Vector3 in _arrival_ring:
+				_arrival_mesh.surface_add_vertex(center + point)
 	_arrival_mesh.surface_end()
 
 
@@ -524,6 +532,7 @@ func hostile_cue(kind: StringName, point: Vector3, strength: float = 1.0) -> voi
 
 
 func _discard_orphaned_projectiles() -> void:
+	if projectiles.is_empty(): return
 	var living := {}
 	for enemy in enemies:
 		if is_instance_valid(enemy) and enemy.health > 0: living[int(enemy.combat_id())] = true
@@ -653,8 +662,8 @@ func repair_head_projections() -> Array[Dictionary]:
 
 
 func _trail_triangle(a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
+	_trail_mesh.surface_set_color(color)
 	for point in [a, b, c]:
-		_trail_mesh.surface_set_color(color)
 		_trail_mesh.surface_add_vertex(point)
 
 

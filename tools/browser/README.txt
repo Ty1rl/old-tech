@@ -11,6 +11,9 @@ It saves console/network records,screenshots,audio-source counts,output signal,
 frame gaps and summed browser-process RSS. Browser/server close after the run.
 No host desktop window or X11 connection is used. Headless SwiftShader timing is
 not host GPU performance. RSS includes shared pages;it is not unique memory.
+The bounded frame probe also records per-sampling-window frame-time median,
+95th percentile and maximum,plus cumulative browser long-task counts. These
+measure main-thread/browser frame stalls,not subjective audio continuity or GPU time.
 
 Install requirements.txt into a disposable seat-specific environment. Reuse an
 existing Playwright Chromium/headless-shell executable with --browser;no second

@@ -66,6 +66,7 @@ async def run(args, url):
                 "content_type": response.headers.get("content-type")}))
             page.on("crash", lambda _: failures.append("Browser renderer crashed"))
             await page.add_init_script(path=Path(__file__).with_name("audio_probe.js"))
+            await page.add_init_script(path=Path(__file__).with_name("frame_probe.js"))
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             began = time.monotonic()
             for second in range(args.seconds):
@@ -100,7 +101,8 @@ async def run(args, url):
                         engine_seen = True
                         game_frame = frame
                         break
-                audit = await asyncio.wait_for(game_frame.evaluate("window.__readWebAudit?.() || {}"), timeout=8)
+                audit = await asyncio.wait_for(game_frame.evaluate(
+                    "({...window.__readWebAudit?.(), ...window.__readFrameAudit?.()})"), timeout=8)
                 audit["game_frame"] = game_frame.url
                 samples.append({"second": second, "browser_rss_bytes": rss, **audit})
                 with (args.output / "samples.jsonl").open("a") as handle:

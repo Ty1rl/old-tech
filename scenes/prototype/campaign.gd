@@ -15,6 +15,7 @@ const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 
 var difficulty_id: StringName = &"easy"
 var difficulty_spec: CampaignDifficulty = null
+var skip_tutorials := false
 var room_index := 0
 var wave_index := -1
 var mode: StringName = &"title"
@@ -51,16 +52,122 @@ var _pending := 0
 var _spawned := 0
 var _spawn_timer := 0.0
 var _debug_boss_phase := -1
+var _debug_direct_wave := false
 var _result_shown := false
 var _emergency_selected_index := 0
+var _exit_requires_reentry := false
+var _exit_blocked_by_held_forward := false
+var _forward_held_at_wave_clear := false
+var _w_key_held := false
+var _last_music_context: StringName = &""
 
 
 static func practice_quotas_for(id: StringName) -> Vector2i:
-	if id in [&"shot", &"charge", &"heat", &"slow", &"cut"]:
+	if id in [&"shot", &"charge", &"heat", &"slow", &"cut", &"opening", &"pair", &"loop", &"zigzag"]:
 		return Vector2i(2, 2)
-	if id in [&"opening", &"pair", &"loop", &"zigzag"]:
-		return Vector2i(1, 1)
 	return Vector2i.ZERO
+
+
+func set_skip_tutorials(value: bool) -> void:
+	skip_tutorials = value
+
+
+func _prefs_skip_tutorials() -> bool:
+	if GameState == null:
+		return false
+	var direct_prop: Variant = GameState.get("skip_tutorials")
+	if direct_prop != null and bool(direct_prop):
+		return true
+	if GameState.has_method("preferences"):
+		var prefs: Dictionary = GameState.preferences()
+		if bool(prefs.get("skip_tutorials", false)) or bool(prefs.get("skip_tutorial", false)):
+			return true
+		if prefs.has("tutorial") and not bool(prefs.get("tutorial", true)):
+			return true
+	return false
+
+
+func _params_skip_tutorials() -> Variant:
+	if SceneManager == null:
+		return null
+	if SceneManager.params.has("skip_tutorials"):
+		return bool(SceneManager.params.get("skip_tutorials", false))
+	if SceneManager.params.has("skip_tutorial"):
+		return bool(SceneManager.params.get("skip_tutorial", false))
+	if SceneManager.params.has("tutorial"):
+		return not bool(SceneManager.params.get("tutorial", true))
+	return null
+
+
+func _is_skip_tutorials_active() -> bool:
+	return skip_tutorials or _prefs_skip_tutorials()
+
+
+func _set_music_context(context: StringName) -> void:
+	_last_music_context = context
+	if AudioManager == null or not AudioManager.has_method("set_music_context"):
+		return
+	AudioManager.call("set_music_context", context)
+	if context == &"regular_combat":
+		var active_ctx: Variant = AudioManager.get("music_context")
+		if active_ctx == null:
+			active_ctx = AudioManager.get("current_music_context")
+		if active_ctx != null and StringName(active_ctx) != &"regular_combat":
+			AudioManager.call("set_music_context", &"encounter")
+
+
+func _is_instruction_speech_busy() -> bool:
+	if AudioManager == null:
+		return false
+	if AudioManager.has_method("instruction_busy"):
+		return bool(AudioManager.call("instruction_busy"))
+	return false
+
+
+func _on_audio_speech_finished(_event: StringName, _interrupted: bool) -> void:
+	if mode == &"practice" and _practice_stage == &"await_speech" and not _is_instruction_speech_busy():
+		_start_stationary_practice()
+
+
+func _is_forward_move_held() -> bool:
+	return _w_key_held or Input.is_action_pressed(&"move_up") or Input.get_action_strength(&"move_up") > 0.05
+
+
+func _is_in_exit_approach_zone(point: Vector3) -> bool:
+	var door_dict: Dictionary = room.get("exit_door", {})
+	var door: Vector3 = door_dict.get("position", Vector3(0.0, 0.0, -19.5))
+	var width: float = float(door_dict.get("width", 4.4))
+	return absf(point.x - door.x) <= width * 0.65 and point.z >= door.z - 1.5 and point.z <= door.z + 2.6
+
+
+func _arm_room_exit() -> void:
+	var pos := player.position if is_instance_valid(player) else Vector3.ZERO
+	_exit_requires_reentry = _is_in_exit_approach_zone(pos) or (museum != null and bool(museum.player_in_exit(pos)))
+	_exit_blocked_by_held_forward = _forward_held_at_wave_clear or _is_forward_move_held()
+	if _exit_blocked_by_held_forward and _exit_requires_reentry:
+		_exit_requires_reentry = true
+
+
+func _update_exit_gate_state() -> void:
+	if mode != &"exit" or not is_instance_valid(player):
+		return
+	var in_approach: bool = _is_in_exit_approach_zone(player.position) or (museum != null and bool(museum.player_in_exit(player.position)))
+	var forward_held := _is_forward_move_held()
+	if _exit_blocked_by_held_forward and in_approach:
+		_exit_requires_reentry = true
+	if not forward_held:
+		_exit_blocked_by_held_forward = false
+		_forward_held_at_wave_clear = false
+	if _exit_requires_reentry and not in_approach and not _exit_blocked_by_held_forward:
+		_exit_requires_reentry = false
+
+
+func _can_traverse_open_exit() -> bool:
+	if mode != &"exit" or not is_instance_valid(player) or museum == null or not museum.exit_open:
+		return false
+	if _exit_requires_reentry or _exit_blocked_by_held_forward:
+		return false
+	return bool(museum.player_in_exit(player.position))
 
 
 func create_museum() -> Node3D:
@@ -95,13 +202,21 @@ func _cancel_active_teaching_controllers() -> void:
 		rewind_lesson.cancel()
 
 
-func start_new_run(new_difficulty: Variant = null) -> void:
+func start_new_run(new_difficulty: Variant = null, new_skip_tutorials: Variant = null) -> void:
 	AudioManager.begin_run()
 	_cancel_active_teaching_controllers()
 	if new_difficulty != null:
 		set_difficulty(new_difficulty)
 	elif SceneManager.params.has("difficulty"):
 		set_difficulty(SceneManager.params.get("difficulty", &"easy"))
+	if new_skip_tutorials != null:
+		set_skip_tutorials(bool(new_skip_tutorials))
+	else:
+		var param_skip: Variant = _params_skip_tutorials()
+		if param_skip != null:
+			set_skip_tutorials(bool(param_skip))
+		else:
+			set_skip_tutorials(_prefs_skip_tutorials())
 	SceneManager.clear_popups()
 	GameState.start_game()
 	acquired.clear()
@@ -122,6 +237,9 @@ func start_new_run(new_difficulty: Variant = null) -> void:
 func _ready() -> void:
 	super._ready()
 	AudioManager.begin_run()
+	if AudioManager != null and AudioManager.has_signal("speech_finished"):
+		if not AudioManager.is_connected("speech_finished", _on_audio_speech_finished):
+			AudioManager.connect("speech_finished", _on_audio_speech_finished)
 	if not lesson_demo.ready_for_practice.is_connected(_on_lesson_demo_ready_for_practice):
 		lesson_demo.ready_for_practice.connect(_on_lesson_demo_ready_for_practice)
 	if not rewind_lesson.completed.is_connected(_on_rewind_lesson_completed):
@@ -141,6 +259,11 @@ func _ready() -> void:
 	if not SceneManager.restart_room_requested.is_connected(retry_room):
 		SceneManager.restart_room_requested.connect(retry_room)
 	set_difficulty(SceneManager.params.get("difficulty", &"easy"))
+	var param_skip: Variant = _params_skip_tutorials()
+	if param_skip != null:
+		set_skip_tutorials(bool(param_skip))
+	else:
+		set_skip_tutorials(_prefs_skip_tutorials())
 	_slow_unlocked = false
 	_rewind_unlocked = false
 	_apply_time_capabilities()
@@ -194,6 +317,7 @@ func _seed_room_checkpoint() -> void:
 
 func enter_room(index: int) -> void:
 	_cancel_active_teaching_controllers()
+	AudioManager.stop_dialogue()
 	var definitions := _room_definitions()
 	if index >= definitions.size():
 		_finish_run(true)
@@ -221,6 +345,7 @@ func enter_room(index: int) -> void:
 	museum.set_exit_open(false)
 	player.position = room.player_spawn
 	player.reset_physics_interpolation()
+	player.reset_input()
 	wave_index = -1
 	specimens.clear()
 	_specimen_ids.clear()
@@ -233,11 +358,15 @@ func enter_room(index: int) -> void:
 	_spawned = 0
 	_spawn_timer = 0.0
 	_debug_boss_phase = -1
+	_exit_requires_reentry = false
+	_exit_blocked_by_held_forward = false
+	_forward_held_at_wave_clear = false
 	mode = &"title"
 	timer = 2.0
-	title.text = "%d / 4 · %s" % [room_index + 1, room.title]
+	title.text = "%d / %d · %s" % [room_index + 1, definitions.size(), room.title]
 	run_hint.text = "WASD move · mouse aim · collect the lit equipment exhibit."
 	_result_shown = false
+	_set_music_context(&"regular_combat")
 	_sync_training_protection()
 	_apply_time_capabilities()
 	if time_controller != null:
@@ -251,6 +380,7 @@ func enter_room(index: int) -> void:
 # A boss phase uses the real enemy's restore_state, preserving its native geometry.
 func debug_start(index: int, requested_wave: int = 0, boss_phase: int = -1) -> void:
 	_cancel_active_teaching_controllers()
+	AudioManager.stop_dialogue()
 	if SceneManager.params.has("difficulty"):
 		set_difficulty(SceneManager.params.get("difficulty", difficulty_id))
 	SceneManager.clear_popups()
@@ -287,11 +417,14 @@ func debug_start(index: int, requested_wave: int = 0, boss_phase: int = -1) -> v
 	enter_room(target_room)
 	wave_index = target_wave - 1
 	_debug_boss_phase = boss_phase
+	_debug_direct_wave = true
 	_begin_wave()
+	_debug_direct_wave = false
 
 
 func retry_room() -> void:
 	_cancel_active_teaching_controllers()
+	AudioManager.stop_dialogue()
 	SceneManager.clear_popups()
 	GameState.start_game()
 	tutorial.dismiss()
@@ -354,6 +487,10 @@ func _on_teaching_block(blocked: bool) -> void:
 		elif lesson == &"rewind":
 			_rewind_unlocked = true
 			_apply_time_capabilities()
+		if _practice_stage == &"await_speech":
+			AudioManager.stop_dialogue()
+			_start_stationary_practice()
+			return
 		# The explanation's click has been consumed; the next attack needs no re-arm.
 		weapons.require_fresh_press = false
 		time_controller.slow_requested = _is_slow_held()
@@ -361,6 +498,10 @@ func _on_teaching_block(blocked: bool) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var kcode: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if kcode in [KEY_W, KEY_UP]:
+			_w_key_held = event.pressed
 	if _campaign_ready and rewind_lesson != null and rewind_lesson.active and rewind_lesson.phase == RewindLesson.Phase.STAGING:
 		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_F10:
 			super._input(event)
@@ -425,6 +566,13 @@ func _physics_process(delta: float) -> void:
 		feedback.step(delta, delta * _world_scale(), _world_scale(), false, 0.0, weapons, equipment)
 		_update_run_hud()
 		return
+	if mode == &"practice" and _practice_stage == &"await_speech":
+		if not _is_instruction_speech_busy():
+			_start_stationary_practice()
+		else:
+			feedback.step(delta, delta * _world_scale(), _world_scale(), false, 0.0, weapons, equipment)
+			_update_run_hud()
+			return
 	if bool(tutorial.blocking):
 		return
 	if mode == &"title":
@@ -441,6 +589,8 @@ func _physics_process(delta: float) -> void:
 	if time_controller != null and time_controller.exhausted:
 		retry_room()
 		return
+	if mode == &"exit":
+		_update_exit_gate_state()
 	var emergency_before := is_emergency_active()
 	super._physics_process(delta)
 	if time_controller != null and time_controller.exhausted:
@@ -462,8 +612,12 @@ func _physics_process(delta: float) -> void:
 			_spawn_wave()
 	elif mode == &"practice":
 		if tutorial.is_learned(lesson):
+			tutorial.learned[lesson] = true
+			if lesson_demo != null:
+				lesson_demo.mark_learned(lesson)
+			_cancel_active_teaching_controllers()
+			tutorial.dismiss()
 			if lesson == &"repair":
-				tutorial.learned[&"repair"] = true
 				_sync_training_protection()
 				equipment.restore_tool(&"beam", 1.0)
 			elif lesson == &"slow":
@@ -489,6 +643,7 @@ func _physics_process(delta: float) -> void:
 	elif mode == &"pressure":
 		_step_pressure(world_delta)
 		if _pending == 0 and director.enemies.is_empty() and director.projectiles.is_empty():
+			_forward_held_at_wave_clear = _is_forward_move_held()
 			mode = &"recovery"
 			timer = float(waves[wave_index].get("recovery", 1.8))
 			_seed_room_checkpoint()
@@ -497,11 +652,14 @@ func _physics_process(delta: float) -> void:
 			else:
 				run_hint.text = "Exhibits quiet · press E to toggle tool repair before the next group."
 	elif mode == &"recovery":
+		if not _is_forward_move_held():
+			_forward_held_at_wave_clear = false
 		timer -= world_delta
 		if timer <= 0.0 and equipment.repairing == &"":
 			_begin_wave()
 	elif mode == &"exit":
-		if equipment.repairing == &"" and museum.player_in_exit(player.position):
+		_update_exit_gate_state()
+		if equipment.repairing == &"" and _can_traverse_open_exit():
 			enter_room(room_index + 1)
 
 
@@ -575,7 +733,9 @@ func _on_attempt_exhausted() -> void:
 
 
 func _finish_run(won: bool) -> void:
-	if won: AudioManager.say(&"protagonist.boss_defeated", 2)
+	if won:
+		_set_music_context(&"victory")
+		AudioManager.say(&"protagonist.boss_defeated", 2)
 	_cancel_active_teaching_controllers()
 	if _result_shown:
 		return
@@ -586,17 +746,75 @@ func _finish_run(won: bool) -> void:
 	SceneManager.show_run_result(won)
 
 
+func _wave_has_post_lesson_pressure() -> bool:
+	if wave_index < 0 or wave_index >= waves.size():
+		return false
+	var w: Dictionary = waves[wave_index]
+	var w_lesson := StringName(w.get("lesson", &""))
+	return bool(w.get("pressure", w_lesson.is_empty()))
+
+
+func _complete_teaching_wave(custom_hint: String = "") -> void:
+	director.clear()
+	specimens.clear()
+	_specimen_ids.clear()
+	_practice_stage = &""
+	_pending = 0
+	_spawned = 0
+	_spawn_timer = 0.0
+	mode = &"recovery"
+	timer = float(waves[wave_index].get("recovery", 0.35)) if wave_index >= 0 and wave_index < waves.size() else 0.35
+	_sync_training_protection()
+	_apply_time_capabilities()
+	_seed_room_checkpoint()
+	if not custom_hint.is_empty():
+		run_hint.text = custom_hint
+	else:
+		run_hint.text = "Training complete · next exhibit ready."
+	_update_run_hud()
+
+
 func _begin_wave() -> void:
 	_cancel_active_teaching_controllers()
+	if _is_instruction_speech_busy():
+		AudioManager.stop_dialogue()
 	_seed_room_checkpoint()
 	wave_index += 1
+	if not _debug_direct_wave:
+		var skip_all_tutorials := _is_skip_tutorials_active()
+		while wave_index < waves.size():
+			var cand: Dictionary = waves[wave_index]
+			var cand_lesson := StringName(cand.get("lesson", &""))
+			var cand_pressure := bool(cand.get("pressure", cand_lesson.is_empty()))
+			if not cand_lesson.is_empty() and not cand_pressure and (bool(tutorial.learned.get(cand_lesson, false)) or skip_all_tutorials):
+				tutorial.learned[cand_lesson] = true
+				if lesson_demo != null:
+					lesson_demo.mark_learned(cand_lesson)
+				var cand_tool := int(cand.get("acquire", 0))
+				if cand_tool > 0 and cand_tool <= 3 and not (cand_tool in acquired):
+					acquired.append(cand_tool)
+				weapons.set_loadout(acquired, _preferred_tool(cand_tool if cand_tool > 0 else weapons.selected_tool))
+				if cand_lesson == &"repair":
+					_sync_training_protection()
+					equipment.restore_tool(&"beam", 1.0)
+					equipment.restore_tool(&"cone", 1.0)
+				elif cand_lesson == &"slow":
+					_slow_unlocked = true
+					_apply_time_capabilities()
+				elif cand_lesson == &"rewind":
+					_rewind_unlocked = true
+					_apply_time_capabilities()
+				wave_index += 1
+			else:
+				break
 	if wave_index >= waves.size():
-		if room_index == 3:
+		if room_index >= _room_definitions().size() - 1:
 			_finish_run(true)
 		else:
 			mode = &"exit"
 			museum.set_boss_ceremony_phase(&"inactive")
 			museum.set_exit_open(true)
+			_arm_room_exit()
 			AudioManager.say(&"protagonist.room_cleared")
 			_seed_room_checkpoint()
 			run_hint.text = "GALLERY CLEAR · press E to toggle repair at leisure, then walk through the green doorway."
@@ -604,6 +822,10 @@ func _begin_wave() -> void:
 	var wave: Dictionary = waves[wave_index]
 	lesson = StringName(wave.get("lesson", &""))
 	_sync_training_protection()
+	if bool(wave.get("boss", false)):
+		_set_music_context(&"boss")
+	else:
+		_set_music_context(&"regular_combat")
 	var tool := int(wave.get("acquire", 0))
 	if tool > 0 and tool <= 3 and not tool in acquired:
 		mode = &"pickup"
@@ -661,6 +883,10 @@ func _spawn_wave() -> void:
 	_spawned = 0
 	_spawn_timer = 0.0
 	_sync_training_protection()
+	if wave_index >= 0 and wave_index < waves.size() and bool(waves[wave_index].get("boss", false)):
+		_set_music_context(&"boss")
+	else:
+		_set_music_context(&"regular_combat")
 	if lesson.is_empty() or tutorial.is_learned(lesson):
 		if lesson == &"repair":
 			tutorial.learned[&"repair"] = true
@@ -675,6 +901,10 @@ func _spawn_wave() -> void:
 		_practice_stage = &""
 		specimens.clear()
 		_specimen_ids.clear()
+		if not lesson.is_empty() and not _wave_has_post_lesson_pressure() and not _debug_direct_wave and bool(GameState.preferences().get("tutorial", true)):
+			lesson = &""
+			_complete_teaching_wave()
+			return
 		_start_pressure()
 		return
 	_reset_rep_flags()
@@ -726,12 +956,28 @@ func _on_lesson_demo_ready_for_practice(id: StringName) -> void:
 			_slow_unlocked = true
 			_apply_time_capabilities()
 		_practice_stage = &""
-		_start_pressure()
+		if not _wave_has_post_lesson_pressure() and bool(GameState.preferences().get("tutorial", true)):
+			lesson = &""
+			_complete_teaching_wave()
+		else:
+			_start_pressure()
+		return
+	var was_skipped := lesson_demo != null and bool(lesson_demo.last_summary.get("skipped", false))
+	if was_skipped or tutorial.practicing:
+		if _is_instruction_speech_busy():
+			AudioManager.stop_dialogue()
+		_start_stationary_practice()
+		return
+	if _is_instruction_speech_busy():
+		_practice_stage = &"await_speech"
+		_update_run_hud()
 		return
 	_start_stationary_practice()
 
 
 func _start_stationary_practice() -> void:
+	if _is_instruction_speech_busy():
+		AudioManager.stop_dialogue()
 	AudioManager.say(&"tutorial.practice_ready", 2)
 	if lesson == &"slow":
 		_slow_unlocked = true
@@ -763,7 +1009,10 @@ func _on_rewind_lesson_completed() -> void:
 	lesson = &""
 	tutorial.dismiss()
 	_apply_time_capabilities()
-	_start_pressure()
+	if _wave_has_post_lesson_pressure():
+		_start_pressure()
+	else:
+		_complete_teaching_wave("Emergency rewind ready · next exhibit group approaching.")
 	_update_run_hud()
 
 
@@ -788,8 +1037,10 @@ func _spawn_practice() -> void:
 	weapons.select_tool(_preferred_tool(_desired_tool_for_lesson(lesson)))
 	var rep_seed := room_index * 37 + wave_index * 13 + _stationary_done * 5 + _moving_done * 11
 	if lesson == &"opening":
-		var guard_kinds: Array = [&"side_guard", &"front_guard"]
-		specimens.assign(director.spawn_formation(&"curve", guard_kinds, player, rep_seed))
+		var rep_idx := _stationary_done if _practice_stage == &"stationary" else _moving_done
+		var guard_kind: StringName = &"side_guard" if (rep_idx % 2) == 0 else &"front_guard"
+		weapons.select_tool(_preferred_tool(1 if guard_kind == &"side_guard" else 3))
+		specimens.assign(director.spawn_formation(&"curve", [guard_kind], player, rep_seed))
 	else:
 		var kind: StringName = StringName(waves[wave_index].enemies[0])
 		if lesson == &"cut":
@@ -884,7 +1135,10 @@ func _sync_practice_tutorial_prompt() -> void:
 		return
 	var base_sub := Tutorial.subtitle_for_lesson(lesson)
 	var col := Tutorial.accent_for_lesson(lesson)
-	if lesson in [&"opening", &"loop", &"zigzag"] and _opened:
+	if lesson == &"opening" and not _opened and not specimens.is_empty() and is_instance_valid(specimens[0]) and specimens[0].kind == &"front_guard":
+		col = ToolStyle.CONE
+		base_sub = "3 · HEAT BELLOWS · THEN 2"
+	elif lesson in [&"opening", &"loop", &"zigzag"] and _opened:
 		col = ToolStyle.BEAM
 		base_sub = "2 · FOCUSED FLASH · CHARGE YELLOW" if lesson in [&"loop", &"zigzag"] else "2 · FOCUSED FLASH · SHOOT YELLOW"
 	if _practice_stage == &"stationary" and _stationary_quota > 0:
@@ -897,6 +1151,8 @@ func _sync_practice_tutorial_prompt() -> void:
 
 func _advance_practice_rep() -> void:
 	if lesson == &"repair":
+		if _is_instruction_speech_busy():
+			AudioManager.stop_dialogue()
 		if tutorial.blocking:
 			tutorial.request_practice()
 		tutorial.complete_lesson(lesson)
@@ -910,8 +1166,11 @@ func _advance_practice_rep() -> void:
 		equipment.restore_tool(&"cone", 1.0)
 		if SceneManager.has_popup(&"Repair"):
 			_close_repair()
-		_seed_room_checkpoint()
-		_start_pressure()
+		if _wave_has_post_lesson_pressure():
+			_seed_room_checkpoint()
+			_start_pressure()
+		else:
+			_complete_teaching_wave("Tools restored · next exhibit group approaching.")
 		return
 	if _practice_stage == &"stationary":
 		_stationary_done += 1
@@ -940,6 +1199,8 @@ func _advance_practice_rep() -> void:
 		_update_run_hud()
 		return
 	var finished_lesson := lesson
+	if _is_instruction_speech_busy():
+		AudioManager.stop_dialogue()
 	if tutorial.blocking:
 		tutorial.request_practice()
 	tutorial.complete_lesson(finished_lesson)
@@ -949,8 +1210,11 @@ func _advance_practice_rep() -> void:
 	_practice_stage = &""
 	_sync_training_protection()
 	_apply_time_capabilities()
-	_seed_room_checkpoint()
-	_start_pressure()
+	if _wave_has_post_lesson_pressure():
+		_seed_room_checkpoint()
+		_start_pressure()
+	else:
+		_complete_teaching_wave()
 
 
 func _repeat(kind: StringName, count: int) -> Array:
@@ -1130,7 +1394,7 @@ func _targets() -> Array[Vector3]:
 		if enemy.has_method("active_pattern") and enemy.active_pattern() == &"pair":
 			points.append(enemy.valve_world_position(0))
 			points.append(enemy.valve_world_position(1))
-		elif lesson == &"heat" and is_instance_valid(enemy.part_visual) and is_instance_valid(enemy.part_visual.plate):
+		elif (lesson == &"heat" or (lesson == &"opening" and enemy.kind == &"front_guard" and not enemy.is_core_exposed())) and is_instance_valid(enemy.part_visual) and is_instance_valid(enemy.part_visual.plate):
 			points.append(enemy.part_visual.plate.global_position + Vector3.UP * 0.5)
 		elif lesson == &"opening" and not enemy.is_core_exposed():
 			var ends: Array = enemy.cable_world_points()
@@ -1271,6 +1535,9 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 				_practice_stage = &""
 				museum.clear_tool_pickup()
 				museum.set_exit_open(mode == &"exit")
+				if mode == &"exit":
+					_forward_held_at_wave_clear = false
+					_arm_room_exit()
 			elif snap_mode == &"title":
 				mode = &"title"
 				timer = float(schedule.get("mode_timer", 0.0))
@@ -1289,12 +1556,15 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 				elif not snap_lesson.is_empty() and not tutorial.is_learned(snap_lesson):
 					mode = &"practice"
 					lesson = snap_lesson
-					if _practice_stage.is_empty() or _practice_stage == &"demo":
+					if _practice_stage.is_empty() or _practice_stage in [&"demo", &"await_speech"]:
 						_practice_stage = &"stationary"
 				else:
 					lesson = &""
 					_practice_stage = &""
-					_start_pressure()
+					if _wave_has_post_lesson_pressure():
+						_start_pressure()
+					else:
+						_complete_teaching_wave()
 			elif snap_mode == &"pickup":
 				museum.set_exit_open(false)
 				var wave_tool := int(waves[wave_index].get("acquire", 0)) if wave_index >= 0 and wave_index < waves.size() else 0
@@ -1304,6 +1574,10 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 				else:
 					museum.clear_tool_pickup()
 					_spawn_wave()
+		if wave_index >= 0 and wave_index < waves.size() and bool(waves[wave_index].get("boss", false)):
+			_set_music_context(&"boss")
+		elif mode != &"won":
+			_set_music_context(&"regular_combat")
 	_sync_training_protection()
 	_apply_time_capabilities()
 	if mode == &"practice":

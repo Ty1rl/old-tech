@@ -3,7 +3,7 @@ extends RefCounted
 # Distances are world units; durations are real seconds unless stated otherwise.
 const PLAYER = {"speed": 6.0, "visual_scale": 1.3, "tool_scale": 1.25}
 const MOVEMENT = {"acceleration": 48.0, "braking": 80.0, "reversal": 72.0}
-const VIEW = {"fov": 52.0, "camera_size": 22.0, "showcase_size": 18.0, "blue_assist_pixels": 22.0,
+const VIEW = {"fov": 52.0, "camera_size": 22.0, "default_zoom": 18.0, "showcase_size": 18.0, "blue_assist_pixels": 22.0,
 	"yellow_assist_pixels": 20.0}
 # Actual inspector resources, also read by world geometry and aim helpers.
 const RING = preload("res://scenes/weapons/settings/ring_cutter.tres")

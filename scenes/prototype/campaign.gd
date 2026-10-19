@@ -512,33 +512,18 @@ func _on_tutorial_skip_requested(id: StringName) -> void:
 		_finish_time_meter_lesson(true)
 		return
 	if target_id == &"repair" or lesson == &"repair":
-		_skip_repair_lesson()
+		_skip_repair_explanation()
 		return
 
 
-func _skip_repair_lesson() -> void:
+func _skip_repair_explanation() -> void:
 	if _is_instruction_speech_busy() or (AudioManager != null and String(AudioManager.get("current_event")).begins_with("tutorial.repair")):
 		AudioManager.stop_dialogue()
-	tutorial.learned[&"repair"] = true
-	if lesson_demo != null:
-		lesson_demo.mark_learned(&"repair")
-	tutorial.dismiss()
-	lesson = &""
-	_practice_stage = &""
-	_sync_training_protection()
-	_apply_time_capabilities()
-	equipment.restore_tool(&"beam", 1.0)
-	equipment.restore_tool(&"cone", 1.0)
-	if SceneManager.has_popup(&"Repair"):
-		_close_repair()
-	weapons.cancel_input()
-	weapons.mouse_held = false
-	weapons.require_fresh_press = true
-	if _wave_has_post_lesson_pressure():
-		_seed_room_checkpoint()
-		_start_pressure()
-	else:
-		_complete_teaching_wave("Tools restored · next exhibit group approaching.")
+	# Skip narration, not the player's first repair. E still opens the damaged
+	# tool, and only completing its stages can finish this lesson.
+	if tutorial.blocking:
+		tutorial.request_practice()
+	_sync_repair_lesson_guidance()
 
 
 func _on_teaching_block(blocked: bool) -> void:

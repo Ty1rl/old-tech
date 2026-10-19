@@ -40,7 +40,7 @@ var aim_valid: bool = false
 ## Camera distance scale in Tuning.VIEW.camera_size units (22 = authored framing).
 ## The authored Camera3D in combat_player.tscn keeps its inspector settings; zoom
 ## only scales its offset from the player.
-var zoom: float = float(Tuning.VIEW.camera_size)
+var zoom: float = float(Tuning.VIEW.default_zoom)
 ## Last slow_time press/release seen by _input. OR-ed with the native action state;
 ## cleared on every pause/state/focus change so a missed release cannot stick.
 var _space_action_held := false
@@ -574,7 +574,7 @@ func reset_arena() -> void:
 	var three_tools: Array[int] = [1, 2, 3]
 	weapons.set_loadout(three_tools, 1)
 	player.reset_state()
-	_set_zoom(float(Tuning.VIEW.camera_size))
+	_set_zoom(float(Tuning.VIEW.default_zoom))
 	director.reset_state()
 	time_feedback = ""
 	if history != null:

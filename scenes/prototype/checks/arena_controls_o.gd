@@ -77,19 +77,19 @@ func run() -> void:
 func check_camera(arena: Node) -> void:
 	var cam: Camera3D = arena.player.camera
 	expect(cam.projection == Camera3D.PROJECTION_PERSPECTIVE and near(cam.fov, 52.0), "Arena keeps the authored camera projection/fov")
-	expect(cam.position.is_equal_approx(Vector3(0, 20, 14)) and near(arena.zoom, 22.0), "Authored framing is zoom 22")
+	expect(cam.position.is_equal_approx(Vector3(0, 20, 14) * (18.0 / 22.0)) and near(arena.zoom, 18.0), "Default framing matches two Plus presses from authored zoom 22")
 	cam.fov = 40.0 # an inspector edit must survive zoom changes
 	arena._unhandled_input(_pressed_key(KEY_EQUAL))
-	expect(near(arena.zoom, 20.0) and cam.position.is_equal_approx(Vector3(0, 20, 14) * (20.0 / 22.0)), "Plus zooms in by scaling the authored offset")
+	expect(near(arena.zoom, 16.0) and cam.position.is_equal_approx(Vector3(0, 20, 14) * (16.0 / 22.0)), "Plus zooms in by scaling the authored offset")
 	expect(near(cam.fov, 40.0), "Zoom never overwrites the inspector fov")
 	arena._unhandled_input(_pressed_key(KEY_MINUS))
 	arena._unhandled_input(_pressed_key(KEY_MINUS))
-	expect(near(arena.zoom, 24.0), "Minus zooms out")
+	expect(near(arena.zoom, 20.0), "Minus zooms out")
 	for i in range(10):
 		arena._unhandled_input(_pressed_key(KEY_MINUS))
 	expect(near(arena.zoom, 32.0), "Zoom is clamped")
 	arena.reset_arena()
-	expect(near(arena.zoom, 22.0) and cam.position.is_equal_approx(Vector3(0, 20, 14)), "Reset restores the authored framing")
+	expect(near(arena.zoom, 18.0) and cam.position.is_equal_approx(Vector3(0, 20, 14) * (18.0 / 22.0)), "Reset restores the closer default framing")
 	cam.fov = 52.0
 
 

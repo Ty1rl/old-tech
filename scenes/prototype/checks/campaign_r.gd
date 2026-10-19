@@ -464,22 +464,42 @@ func _run() -> void:
 		"Orange practice target is visibly pushed back by Heat Bellows before breaking (pushed +%.2fm from %.2fm to %.2fm)" % [max_orange_dist - initial_orange_dist, initial_orange_dist, max_orange_dist]
 	)
 
-	# Verify Skip on repair lesson stops speech, restores tools, arms fresh-press guard, and completes once
+	# Skip ends narration only; first repair remains mandatory and resumable.
 	arena.debug_start(0, 5)
 	arena.tutorial.learned.erase(&"repair")
 	arena.director.clear()
 	arena.wave_index = 4
 	arena._begin_wave()
 	expect(arena.lesson == &"repair" and arena.mode == &"practice", "Room 0 Wave 5 starts repair lesson")
-	arena._on_tutorial_skip_requested(&"repair")
+	var broken_condition: float = arena.equipment.remaining(&"beam")
+	expect(arena.tutorial.skip_active_lesson(true), "Actual repair Skip button accepts the explanation skip")
 	expect(
-		arena.tutorial.is_learned(&"repair")
-		and arena.equipment.is_full(&"beam")
-		and arena.equipment.is_full(&"cone")
-		and arena.weapons.require_fresh_press
-		and arena.mode == &"recovery",
-		"Skipping repair lesson restores tools, arms fresh-press guard, and transitions cleanly to recovery"
+		not arena.tutorial.is_learned(&"repair")
+		and is_equal_approx(arena.equipment.remaining(&"beam"), broken_condition)
+		and arena.lesson == &"repair" and arena.mode == &"practice"
+		and not arena.tutorial.blocking and arena.tutorial.practicing,
+		"Skipping repair narration preserves broken tool and mandatory repair practice"
 	)
+	_tick(0.05)
+	expect(arena.lesson == &"repair" and not arena._lesson_succeeded(), "Skipping narration cannot advance to time slow")
+	var open_repair := InputEventKey.new()
+	open_repair.physical_keycode = KEY_E
+	open_repair.pressed = true
+	root.push_input(open_repair, true)
+	var repair_popup: WeaponRepair = root.get_node("SceneManager").get_popup(&"Repair")
+	expect(repair_popup != null and repair_popup.tool == &"beam" and arena.equipment.stage(&"beam") == 0, "E opens the required first repair from its first stage after Skip")
+	if repair_popup != null:
+		repair_popup._commit_steps(1)
+		arena._close_repair()
+		_tick(0.05)
+		expect(arena.lesson == &"repair" and arena.equipment.stage(&"beam") == 1 and not arena.tutorial.is_learned(&"repair"), "Closing a partial repair preserves progress without completing the lesson")
+		arena._open_smart_repair()
+		repair_popup = root.get_node("SceneManager").get_popup(&"Repair")
+		for stage in range(1, arena.equipment.repair_steps):
+			repair_popup.trace_stage = arena.equipment.stage(&"beam")
+			repair_popup._commit_steps(1)
+		_tick(0.01)
+		expect(arena.tutorial.is_learned(&"repair") and arena.mode == &"recovery", "Completing all repair stages, rather than Skip, completes the lesson")
 
 	# Test opening lesson (Room 1 Wave 0): Demo -> 2 stationary (side_guard, front_guard) -> 2 moving (side_guard, front_guard) -> recovery -> Wave 1 real combat
 	arena.debug_start(1, 0)

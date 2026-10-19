@@ -22,6 +22,13 @@ PROBE = (Path(__file__).resolve().parent / 'audio_continuity_probe.js').read_tex
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map, '.wasm': 'application/wasm', '.pck': 'application/octet-stream'}
+    isolated = False
+
+    def end_headers(self):
+        if self.isolated:
+            self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
+            self.send_header('Cross-Origin-Embedder-Policy', 'require-corp')
+        super().end_headers()
 
     def log_message(self, *_args):
         pass
@@ -97,10 +104,12 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--seconds', type=int, default=45)
     parser.add_argument('--max-rss-mb', type=int, default=1200)
+    parser.add_argument('--isolate', action='store_true', help='Serve headers required by threaded Web exports')
     parser.add_argument('--actions', default='[{"at": 5, "click": [190, 450]}, {"at": 7, "click": [640, 470]}]')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    actions = json.loads(Path(args.actions).read_text() if Path(args.actions).is_file() else args.actions)
+    actions = json.loads(args.actions if args.actions.lstrip().startswith('[') else Path(args.actions).read_text())
+    Handler.isolated = args.isolate
     server = Server(('127.0.0.1', 0), functools.partial(Handler, directory=str(args.dir.resolve())))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f'http://127.0.0.1:{server.server_port}/index.html'
@@ -158,6 +167,8 @@ def main():
         'max_registered_sample_bytes': max_reg_bytes,
         'stream_ring_buffer_frames': last.get('streamRingBufferFrames', 0),
         'stream_ring_buffer_ms': last.get('streamRingBufferMs', 0),
+        'worklet_probe_installed': last.get('workletProbeInstalled', False),
+        'stream_mode': last.get('streamMode', 'unknown'),
         'worklet_total_quanta': last.get('workletTotalQuanta', 0),
         'worklet_underflow_quanta': last.get('workletUnderflowQuanta', 0),
         'worklet_underflow_ms': last.get('workletUnderflowMs', 0),

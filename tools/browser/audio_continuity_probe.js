@@ -28,6 +28,9 @@
     currentAudibleUnderflowMs: 0,
     maxAudibleDropoutMs: 0,
     inAudibleUnderflow: false,
+    workletProbeInstalled: false,
+    streamMode: 'unknown',
+    sharedOutput: null,
   };
 
   const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -54,6 +57,7 @@
           const src = await resp.text();
           const commentTarget = "// this.port.postMessage('Output buffer has not enough frames! Skipping output frame.');";
           if (src.includes(commentTarget)) {
+            state.workletProbeInstalled = true;
             const patched = src.replace(
               commentTarget,
               "this.port.postMessage({ 'cmd': '__jam_underflow', 'data': chunk });"
@@ -79,8 +83,14 @@
         const origPostMessage = node.port.postMessage.bind(node.port);
         node.port.postMessage = function (msg, ...rest) {
           if (msg && msg.cmd === 'start_nothreads' && Array.isArray(msg.data) && msg.data[0]) {
+            state.streamMode = 'single-threaded';
             const floats = msg.data[0].length || 0;
             state.streamRingBufferFrames = Math.floor(floats / 2);
+            state.streamRingBufferMs = Number(((state.streamRingBufferFrames / sampleRate) * 1000).toFixed(2));
+          } else if (msg && msg.cmd === 'start' && Array.isArray(msg.data) && msg.data[2]) {
+            state.streamMode = 'threaded';
+            state.sharedOutput = msg.data[2];
+            state.streamRingBufferFrames = Math.floor(msg.data[2].length / 2);
             state.streamRingBufferMs = Number(((state.streamRingBufferFrames / sampleRate) * 1000).toFixed(2));
           } else if (msg && msg.cmd === 'chunk' && msg.data) {
             const now = performance.now();
@@ -264,6 +274,13 @@
   window.__jamAudioProbe = {
     snapshot() {
       sampleOutput();
+      if (state.sharedOutput) {
+        let peak = 0;
+        for (let index = 0; index < state.sharedOutput.length; index += 64) {
+          peak = Math.max(peak, Math.abs(state.sharedOutput[index]));
+        }
+        state.lastChunkPeak = peak;
+      }
       const sampleStats = getSampleStats();
       return {
         created: state.created,
@@ -291,6 +308,8 @@
         activeSampleNodes: sampleStats.activeSampleNodes,
         registeredSamples: sampleStats.registeredSamples,
         registeredSampleBytes: sampleStats.registeredSampleBytes,
+        workletProbeInstalled: state.workletProbeInstalled,
+        streamMode: state.streamMode,
       };
     },
   };

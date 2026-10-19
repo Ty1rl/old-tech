@@ -22,3 +22,12 @@ means retrying the room, keeping your equipment and learned tutorials.
 Choose an area, encounter and optional boss phase. Required equipment is supplied.
 Set `SceneManager.developer_tools` to `false` to hide these entrypoints.
 See [mechanics, source layout and checks](scenes/prototype/README.md).
+
+For browser audio testing, export **Web Threaded**. Its audio mixer runs on a
+separate thread so rendering stalls do not interrupt streamed music. On itch.io,
+enable **Embed options > Frame options > SharedArrayBuffer support** before
+uploading the ZIP. Local hosting needs cross-origin isolation headers too.
+The existing **Web** preset remains available without that hosting requirement.
+
+Short browser sound effects and speech are prepared on the loading screen.
+Music stays streamed to limit decoded memory; desktop playback is unchanged.

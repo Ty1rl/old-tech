@@ -47,13 +47,20 @@ func run() -> void:
 		expect(scenes.push_popup(&"Settings") == null, "Duplicate settings popup refused")
 		settings.widgets.sound.button_pressed = false
 		settings.widgets.volume.value = 37
-		settings.widgets.hud.select(2)
-		settings.widgets.hud.item_selected.emit(2)
 		expect(not state.preferences().sound and is_equal_approx(state.preferences().volume, 0.37), "Settings controls apply actual values")
 		expect(AudioServer.is_bus_mute(0) and absf(AudioServer.get_bus_volume_db(0) - linear_to_db(0.37)) < 0.01, "Master bus sound and volume applied")
 		scenes.close_popup(&"Settings")
 		await settle()
 		expect(state.is_in_menu() and not scenes.has_popup(), "Settings Back returns to menu without starting play")
+		# Diagnostic readout controls live in opt-in Developer options now.
+		var original_gate: bool = scenes.developer_tools
+		scenes.developer_tools = true
+		var developer: Control = scenes.push_popup(&"Developer")
+		developer.readout_picker.select(2)
+		developer.readout_picker.item_selected.emit(2)
+		scenes.close_popup(&"Developer")
+		scenes.developer_tools = original_gate
+		await settle()
 	state.reload_preferences()
 	expect(not state.preferences().sound and state.preferences().hud == 2 and is_equal_approx(state.preferences().volume, 0.37), "Audio, volume and HUD survive preference reload")
 	state.set_setting("tutorial", false)

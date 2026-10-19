@@ -102,7 +102,9 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 			occupied_clearances.append(placement_radius(StringName(node.kind)) + 0.25)
 	# First use the authored formation at one entrance, scaled for its members.
 	# Alternative distances and entrances preserve a usable escape side.
-	var entrance := posmod(arrival_index + seed, 4)
+	# Bosses first try above the player. The usual safe-position search still
+	# finds a side/upper-room fallback when the north wall or exhibits block it.
+	var entrance := 0 if member_is_boss.has(true) else posmod(arrival_index + seed, 4)
 	var spacing := maxf(1.65, widest * 2 + 0.2)
 	for attempt in range(32):
 		for distance: float in [9.0, 11.5, 7.0, 13.5]:

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run repeatable Web Audio continuity probe against a local Web export."""
 import argparse
+import base64
 import functools
 import http.server
 import json
@@ -105,6 +106,7 @@ def main():
     parser.add_argument('--seconds', type=int, default=45)
     parser.add_argument('--max-rss-mb', type=int, default=1200)
     parser.add_argument('--isolate', action='store_true', help='Serve headers required by threaded Web exports')
+    parser.add_argument('--capture-audio', action='store_true', help='Save the actual summed stereo output as float32 PCM')
     parser.add_argument('--actions', default='[{"at": 5, "click": [190, 450]}, {"at": 7, "click": [640, 470]}]')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -124,6 +126,8 @@ def main():
             )
             context = browser.new_context(viewport={'width': 1280, 'height': 800})
             context.add_init_script(PROBE)
+            if args.capture_audio:
+                context.add_init_script(Path(__file__).with_name('audio_capture.js').read_text())
             page = context.new_page()
             page.on('console', lambda m: console.append({'type': m.type, 'text': m.text}))
             page.on('pageerror', lambda e: errors.append(str(e)))
@@ -145,6 +149,14 @@ def main():
                     failures.append(f'browser RSS exceeded {args.max_rss_mb} MiB at {sec}s: {sample["browser_rss_bytes"]}')
                     break
             page.screenshot(path=str(args.out / 'final.png'))
+            if args.capture_audio:
+                recording = frame.evaluate('window.__jamAudioCapture ? window.__jamAudioCapture.read() : null')
+                if not recording or not recording['ready'] or recording['error'] or not recording['frames']:
+                    failures.append('Audio capture did not produce PCM; inspect audio-capture.json')
+                if recording:
+                    raw = base64.b64decode(recording.pop('base64'))
+                    (args.out / 'audio.f32').write_bytes(raw)
+                    (args.out / 'audio-capture.json').write_text(json.dumps(recording, indent=2) + '\n')
             browser.close()
     finally:
         server.shutdown()

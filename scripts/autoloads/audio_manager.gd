@@ -68,9 +68,10 @@ func prepare_web_samples() -> Dictionary:
 	for variants: Array in library.clips.values():
 		for stream: AudioStream in variants:
 			streams.append(stream)
-	var combat := load("res://audio/combat/palette.tres") as CombatAudioLibrary
-	for cue: CombatAudioCue in combat.cues:
-		streams.append(cue.stream)
+	if not OS.has_feature("web_threaded"):
+		var combat := load("res://audio/combat/palette.tres") as CombatAudioLibrary
+		for cue: CombatAudioCue in combat.cues:
+			streams.append(cue.stream)
 	var prepared := 0
 	var decoded_seconds := 0.0
 	var longest_decode_usec := 0

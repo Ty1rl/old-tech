@@ -25,7 +25,7 @@ func run() -> void:
 				if not bool(wave.get("boss", false)):
 					continue
 				var kind: StringName = wave.enemies[0]
-				for player_z in [0.0, 12.0]:
+				for player_z in [-15.0, 0.0, 12.0]:
 					var player := Vector3(0, 0, player_z)
 					for entrance in range(4):
 						var flow := Flow.new()
@@ -39,6 +39,8 @@ func run() -> void:
 						expect(slot.position.z + float(slot.radius) <= float(Tuning.ARENA_HALF_SIZE) * 0.5,
 							context + " keeps the entire boss clear of the bottom entrance")
 						expect(Flow.safe(slot.position, slot.radius, player, cover), context + " remains cover-safe")
+						if player_z == 12.0:
+							expect(slot.position.z < player.z, context + " favors above the player at normal room entry")
 	# Ordinary reinforcements can still approach from the bottom.
 	var escort_flow := Flow.new()
 	var escorts := escort_flow.layout(&"mixed", [&"yellow"], Vector3.ZERO, Cover.new(), 2, [])

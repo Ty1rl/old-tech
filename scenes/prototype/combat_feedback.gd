@@ -81,8 +81,12 @@ func _ready() -> void:
 	for entry in cue_library.cues:
 		_cues[entry.id] = entry
 		samples[entry.id] = entry.stream
+	# The threaded browser can use the same mixer as desktop: gain ramps,
+	# positional audio and the Master limiter all run on its audio thread.
+	var playback_type := AudioServer.PLAYBACK_TYPE_STREAM if OS.has_feature("web_threaded") else AudioServer.PLAYBACK_TYPE_DEFAULT
 	for kind in LOOP_KINDS:
 		var player := AudioStreamPlayer.new()
+		player.playback_type = playback_type
 		player.name = String(kind).to_pascal_case()
 		player.stream = _cues[kind].stream
 		player.bus = &"Time" if _cues[kind].responsive else &"World"
@@ -92,6 +96,7 @@ func _ready() -> void:
 		_loops[kind] = {"player": player, "gain": 0.0, "target": 0.0, "pitch": 1.0, "stopped": true}
 	for index in range(MAX_VOICES - LOOP_KINDS.size()):
 		var player := AudioStreamPlayer3D.new()
+		player.playback_type = playback_type
 		player.name = "Cue%d" % index
 		player.volume_db = -80.0
 		# Top-down camera is above the action: generous falloff, restrained pan.

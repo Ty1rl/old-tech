@@ -70,14 +70,14 @@ func _run() -> void:
 	for lesson_id: StringName in Rooms.lesson_ids():
 		expect(arena.tutorial.is_learned(lesson_id), "Skip tutorials marks lesson '%s' learned" % String(lesson_id))
 
-	_tick(2.1)
+	_tick(1.0 / 60.0)
 	expect(
 		arena.room_index == 0
 		and arena.wave_index == expected_skip_wave
 		and arena.mode == &"pressure"
 		and arena.lesson == &""
 		and not arena.director.enemies.is_empty(),
-		"After room title, Skip tutorials enters Gallery full-kit combat wave directly"
+		"Skip tutorials enters Gallery full-kit combat on the first tick without a title wait"
 	)
 	var skip_snap: Dictionary = arena.capture_state()
 	var skip_wave_state: Dictionary = skip_snap.get("campaign_wave", {})

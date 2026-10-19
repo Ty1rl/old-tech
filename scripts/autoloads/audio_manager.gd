@@ -53,6 +53,36 @@ func configure_playback_types(for_web: bool = OS.has_feature("web")) -> void:
 	if is_instance_valid(music):
 		music.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 
+
+func prepare_web_samples() -> Dictionary:
+	if not OS.has_feature("web"):
+		return {}
+	# Web Sample playback decodes a whole clip on its first play. Do that on
+	# the loading screen, one clip per frame, instead of during a shot or hit.
+	# Music stays streamed: decoding long tracks would use much more memory.
+	var streams: Array[AudioStream] = []
+	for variants: Array in library.clips.values():
+		for stream: AudioStream in variants:
+			streams.append(stream)
+	var combat := load("res://audio/combat/palette.tres") as CombatAudioLibrary
+	for cue: CombatAudioCue in combat.cues:
+		streams.append(cue.stream)
+	var prepared := 0
+	var decoded_seconds := 0.0
+	var longest_decode_usec := 0
+	for stream in streams:
+		if _quitting:
+			break
+		if stream == null or AudioServer.is_stream_registered_as_sample(stream):
+			continue
+		var started := Time.get_ticks_usec()
+		AudioServer.register_stream_as_sample(stream)
+		longest_decode_usec = maxi(longest_decode_usec, Time.get_ticks_usec() - started)
+		prepared += 1
+		decoded_seconds += stream.get_length()
+		await get_tree().process_frame
+	return {"prepared": prepared, "decoded_seconds": decoded_seconds, "longest_decode_usec": longest_decode_usec}
+
 func instruction_busy() -> bool:
 	if not _speech_available(): return false
 	if String(current_event).begins_with("tutorial."): return true

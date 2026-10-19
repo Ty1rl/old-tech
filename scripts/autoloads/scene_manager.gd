@@ -427,6 +427,9 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 		_loading_progress.value = 1
 		_loading_cancel.disabled = true
 		await _present_loading()
+		if key in [&"Campaign", &"Prototype"]:
+			_loading_status.text = "Preparing sound…"
+			profile.audio_samples = await AudioManager.prepare_web_samples()
 	if _exiting: return
 	# Recheck after the last yield, before committing ownership/params.
 	if not _cancel_requested and failure.is_empty() and get_tree().current_scene != old_scene:

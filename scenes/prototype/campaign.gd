@@ -604,7 +604,7 @@ func enter_room(index: int) -> void:
 	_exit_blocked_by_held_forward = false
 	_forward_held_at_wave_clear = false
 	mode = &"title"
-	timer = 2.0
+	timer = 0.0 if skip_tutorials else 2.0
 	title.text = "%d / %d · %s" % [room_index + 1, definitions.size(), room.title]
 	run_hint.text = PICKUP_WALK_LINE
 	_result_shown = false

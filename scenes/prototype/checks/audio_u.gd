@@ -176,4 +176,8 @@ func run() -> void:
 	for key in ["sound", "volume", "voice_volume"]:
 		state.set_setting(key, saved[key])
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
-	quit(0 if failures.is_empty() else 1)
+	if failures.is_empty():
+		# Use the game's shutdown path so the native mixer can release playbacks.
+		manager.request_quit()
+	else:
+		quit(1)

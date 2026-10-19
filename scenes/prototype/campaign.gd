@@ -1063,9 +1063,11 @@ func _finish_run(won: bool) -> void:
 func _wave_has_post_lesson_pressure() -> bool:
 	if wave_index < 0 or wave_index >= waves.size():
 		return false
-	var w: Dictionary = waves[wave_index]
-	var w_lesson := StringName(w.get("lesson", &""))
-	return bool(w.get("pressure", w_lesson.is_empty()))
+	var wave: Dictionary = waves[wave_index]
+	var wave_lesson := StringName(wave.get("lesson", &""))
+	# Waves without a lesson default to combat pressure; lesson waves only run
+	# post-lesson combat when explicitly authored with `pressure: true`.
+	return bool(wave.get("pressure", wave_lesson.is_empty()))
 
 
 func _complete_teaching_wave(custom_hint: String = "") -> void:
@@ -1077,7 +1079,9 @@ func _complete_teaching_wave(custom_hint: String = "") -> void:
 	_spawned = 0
 	_spawn_timer = 0.0
 	mode = &"recovery"
-	timer = float(waves[wave_index].get("recovery", 0.35)) if wave_index >= 0 and wave_index < waves.size() else 0.35
+	var in_valid_wave := wave_index >= 0 and wave_index < waves.size()
+	var recovery_seconds := float(waves[wave_index].get("recovery", 0.35)) if in_valid_wave else 0.35
+	timer = recovery_seconds
 	_sync_training_protection()
 	_apply_time_capabilities()
 	_seed_room_checkpoint()
@@ -1088,43 +1092,54 @@ func _complete_teaching_wave(custom_hint: String = "") -> void:
 	_update_run_hud()
 
 
+# Fast-forwards past pure teaching waves whose lesson is already learned (or when
+# Skip tutorials is active), while still granting each skipped wave's tool and
+# capability unlocks so later combat waves start with the expected loadout.
+func _skip_completed_teaching_waves() -> void:
+	var skip_all_tutorials := _is_skip_tutorials_active()
+	while wave_index < waves.size():
+		var candidate_wave: Dictionary = waves[wave_index]
+		var candidate_lesson := StringName(candidate_wave.get("lesson", &""))
+		var has_post_lesson_pressure := bool(candidate_wave.get("pressure", candidate_lesson.is_empty()))
+		var is_pure_teaching_wave := not candidate_lesson.is_empty() and not has_post_lesson_pressure
+		var is_lesson_learned := bool(tutorial.learned.get(candidate_lesson, false))
+		if not (is_pure_teaching_wave and (is_lesson_learned or skip_all_tutorials)):
+			break
+		tutorial.learned[candidate_lesson] = true
+		if lesson_demo != null:
+			lesson_demo.mark_learned(candidate_lesson)
+		var acquired_tool := int(candidate_wave.get("acquire", 0))
+		if acquired_tool > 0 and acquired_tool <= 3 and not (acquired_tool in acquired):
+			acquired.append(acquired_tool)
+		var preferred_slot := acquired_tool if acquired_tool > 0 else weapons.selected_tool
+		weapons.set_loadout(acquired, _preferred_tool(preferred_slot))
+		if candidate_lesson == &"repair":
+			_sync_training_protection()
+			equipment.restore_tool(&"beam", 1.0)
+			equipment.restore_tool(&"cone", 1.0)
+		elif candidate_lesson == &"slow":
+			_slow_unlocked = true
+			_apply_time_capabilities()
+		elif candidate_lesson == &"rewind":
+			_rewind_unlocked = true
+			_apply_time_capabilities()
+		wave_index += 1
+
+
 func _begin_wave() -> void:
 	_cancel_active_teaching_controllers()
 	if _is_instruction_speech_busy():
-		var cur_ev := String(AudioManager.get("current_event")) if AudioManager != null else ""
-		if not (cur_ev in ["tutorial.movement", "tutorial.pickup", "tutorial.tool_switch", "tutorial.rewind_charges"]):
+		var current_event := String(AudioManager.get("current_event")) if AudioManager != null else ""
+		var carryover_cues := ["tutorial.movement", "tutorial.pickup", "tutorial.tool_switch", "tutorial.rewind_charges"]
+		if not (current_event in carryover_cues):
 			AudioManager.stop_dialogue()
 	_seed_room_checkpoint()
 	wave_index += 1
 	if not _debug_direct_wave:
-		var skip_all_tutorials := _is_skip_tutorials_active()
-		while wave_index < waves.size():
-			var cand: Dictionary = waves[wave_index]
-			var cand_lesson := StringName(cand.get("lesson", &""))
-			var cand_pressure := bool(cand.get("pressure", cand_lesson.is_empty()))
-			if not cand_lesson.is_empty() and not cand_pressure and (bool(tutorial.learned.get(cand_lesson, false)) or skip_all_tutorials):
-				tutorial.learned[cand_lesson] = true
-				if lesson_demo != null:
-					lesson_demo.mark_learned(cand_lesson)
-				var cand_tool := int(cand.get("acquire", 0))
-				if cand_tool > 0 and cand_tool <= 3 and not (cand_tool in acquired):
-					acquired.append(cand_tool)
-				weapons.set_loadout(acquired, _preferred_tool(cand_tool if cand_tool > 0 else weapons.selected_tool))
-				if cand_lesson == &"repair":
-					_sync_training_protection()
-					equipment.restore_tool(&"beam", 1.0)
-					equipment.restore_tool(&"cone", 1.0)
-				elif cand_lesson == &"slow":
-					_slow_unlocked = true
-					_apply_time_capabilities()
-				elif cand_lesson == &"rewind":
-					_rewind_unlocked = true
-					_apply_time_capabilities()
-				wave_index += 1
-			else:
-				break
+		_skip_completed_teaching_waves()
 	if wave_index >= waves.size():
-		if room_index >= _room_definitions().size() - 1:
+		var is_final_room := room_index >= _room_definitions().size() - 1
+		if is_final_room:
 			_finish_run(true)
 		else:
 			mode = &"exit"
@@ -1136,29 +1151,30 @@ func _begin_wave() -> void:
 			run_hint.text = "GALLERY CLEAR · press E to toggle repair at leisure, then walk through the green doorway."
 		return
 	var wave: Dictionary = waves[wave_index]
+	var is_boss_wave := bool(wave.get("boss", false))
 	lesson = StringName(wave.get("lesson", &""))
 	_sync_training_protection()
-	if bool(wave.get("boss", false)):
-		_set_music_context(&"boss")
-	else:
-		_set_music_context(&"regular_combat")
-	var tool := int(wave.get("acquire", 0))
-	if tool > 0 and tool <= 3 and not tool in acquired:
-		_enter_pickup_mode(tool, true)
+	_set_music_context(&"boss" if is_boss_wave else &"regular_combat")
+	var required_tool := int(wave.get("acquire", 0))
+	var needs_tool_pickup := required_tool > 0 and required_tool <= 3 and not (required_tool in acquired)
+	var needs_boss_ceremony := is_boss_wave and _debug_boss_phase < 0
+	if needs_tool_pickup:
+		_enter_pickup_mode(required_tool, true)
 		_seed_room_checkpoint()
-	elif bool(wave.get("boss", false)) and _debug_boss_phase < 0:
+	elif needs_boss_ceremony:
 		weapons.cancel_input()
 		weapons.mouse_held = false
 		player.reset_input()
 		time_controller.slow_requested = false
 		mode = &"ceremony"
+		var boss_kind: StringName = wave.enemies[0]
 		title.text = {
 			&"loop_boss": "The Loop Curator",
 			&"sequence_boss": "The Sequence Warden",
 			&"final_boss": "The Burial Device",
-		}.get(wave.enemies[0], "Exhibition Guardian")
+		}.get(boss_kind, "Exhibition Guardian")
 		museum.start_boss_entrance()
-		AudioManager.say(StringName("boss." + String(wave.enemies[0]) + ".entrance"), 3)
+		AudioManager.say(StringName("boss." + String(boss_kind) + ".entrance"), 3)
 	else:
 		_spawn_wave()
 
@@ -1198,11 +1214,11 @@ func _spawn_wave() -> void:
 	_spawned = 0
 	_spawn_timer = 0.0
 	_sync_training_protection()
-	if wave_index >= 0 and wave_index < waves.size() and bool(waves[wave_index].get("boss", false)):
-		_set_music_context(&"boss")
-	else:
-		_set_music_context(&"regular_combat")
-	if lesson.is_empty() or tutorial.is_learned(lesson):
+	var is_boss_wave := wave_index >= 0 and wave_index < waves.size() and bool(waves[wave_index].get("boss", false))
+	_set_music_context(&"boss" if is_boss_wave else &"regular_combat")
+	var has_lesson := not lesson.is_empty()
+	var is_lesson_learned := bool(tutorial.is_learned(lesson))
+	if not has_lesson or is_lesson_learned:
 		if lesson == &"repair":
 			tutorial.learned[&"repair"] = true
 			_sync_training_protection()
@@ -1216,7 +1232,9 @@ func _spawn_wave() -> void:
 		_practice_stage = &""
 		specimens.clear()
 		_specimen_ids.clear()
-		if not lesson.is_empty() and not _wave_has_post_lesson_pressure() and not _debug_direct_wave and bool(GameState.preferences().get("tutorial", true)):
+		var is_teaching_only_wave := has_lesson and not _wave_has_post_lesson_pressure()
+		var tutorial_hud_enabled := bool(GameState.preferences().get("tutorial", true))
+		if is_teaching_only_wave and not _debug_direct_wave and tutorial_hud_enabled:
 			lesson = &""
 			_complete_teaching_wave()
 			return

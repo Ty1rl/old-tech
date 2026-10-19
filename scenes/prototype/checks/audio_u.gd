@@ -44,7 +44,7 @@ func run() -> void:
 	expect((await manager.prepare_web_samples()).is_empty(), "Native loading does not decode or register browser audio samples")
 
 	manager.configure_playback_types(true)
-	expect(manager.web_sample_voice and manager.voice.playback_type == AudioServer.PLAYBACK_TYPE_SAMPLE and manager.music.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Web policy selects Sample for Voice while keeping Music on Stream to bound decoded memory")
+	expect(manager.web_sample_voice and manager.voice.playback_type == AudioServer.PLAYBACK_TYPE_SAMPLE and manager.music.playback_type == AudioServer.PLAYBACK_TYPE_SAMPLE, "Web voice and music use browser playback independently of game-frame stalls")
 	manager.configure_playback_types(false)
 	expect(not manager.web_sample_voice and manager.voice.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Restoring native policy returns Voice to Stream")
 

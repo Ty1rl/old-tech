@@ -66,3 +66,13 @@ References:
 https://docs.godotengine.org/en/stable/classes/class_scenetree.html
 https://docs.godotengine.org/en/stable/tutorials/io/background_loading.html
 https://github.com/godotengine/godot/issues/120827 (related engine failure report)
+
+Round S lifecycle updates:
+- Developer tools default off before ready; native -- --developer opts in. Web
+  ignores this flag. Disabled tools cannot open the Developer popup.
+- Outgoing scene/popup speech receivers and explicit ALWAYS processing modes are
+  suspended during loading. Cancel/failure restores them after transition ends.
+- scene_leaving(scene,destination) fires at irreversible commit while attached;
+  the existing campaign cancellation hook runs before stopping speech/detaching.
+  Global speech terminal observers remain connected; cancellation grants no practice.
+- Cached PackedScene roots bypass the hint sweep; obsolete glow.ogg hint removed.

@@ -6,6 +6,8 @@ signal popup_closed(key: StringName)
 signal restart_room_requested
 signal transition_failed(key: StringName, reason: String)
 signal transition_cancelled(key: StringName)
+## Emitted at irreversible commit, while the outgoing tree is still attached.
+signal scene_leaving(scene: Node, destination: StringName)
 signal _transition_tick
 
 # &"scene_name": "res://path/to/scene_name.tscn",
@@ -39,7 +41,7 @@ var popup_dim_color: Color = Color(0.0, 0.0, 0.0, 0.5)
 ## Data handed to the next scene. Replaced on every change, read it in _ready().
 var params: Dictionary = {}
 
-var developer_tools: bool = true # One switch removes the jam encounter backdoor.
+var developer_tools: bool = developer_opt_in(OS.get_cmdline_user_args(), OS.has_feature("web"))
 var _transitioning: bool = false
 var _fade_rect: ColorRect
 var _popup_layer: CanvasLayer
@@ -54,6 +56,7 @@ var _can_cancel := false
 var _load_error := false
 var _failure_focus: WeakRef
 var _exiting := false
+var _closing := false
 var _swap_ready := false
 var _swap_ready_at_usec := 0
 ## Last completed transition, bounded diagnostic data in microseconds (not a clock).
@@ -84,7 +87,7 @@ func _ready() -> void:
 	_loading_cancel = _loading.get_node("%Cancel")
 	_loading_cancel.pressed.connect(_on_loading_cancel)
 	get_tree().scene_changed.connect(_on_tree_ready)
-	get_tree().root.close_requested.connect(cancel_transition)
+	get_tree().root.close_requested.connect(_on_close_requested)
 
 
 ## Changes to a registered scene. 
@@ -116,7 +119,7 @@ func reload_current_scene(fade: bool = true) -> bool:
 func push_popup(key: StringName, popup_params: Dictionary = {}) -> Node:
 	# Repair panels carry generation tokens; explicit replacement sessions may
 	# coexist briefly while an older panel exits. Menus/settings stay unique.
-	if _transitioning or (has_popup(key) and key != &"Repair"):
+	if _transitioning or (key == &"Developer" and not developer_tools) or (has_popup(key) and key != &"Repair"):
 		return null
 	if not POPUPS.has(key):
 		push_error("SceneManager: unknown popup key '%s'" % key)
@@ -226,6 +229,75 @@ func get_param(param_name: StringName, default: Variant = null) -> Variant:
 const ResourceSteps = preload("res://scenes/loading_r/resource_steps.gd")
 
 
+static func developer_opt_in(user_args: PackedStringArray, web: bool) -> bool:
+	return not web and user_args.has("--developer")
+
+
+# Speech terminal signals are synchronous, even on disabled nodes. Pause only
+# the outgoing scene/popup receivers; global audio lifetime observers stay live.
+func _suspend_scene_speech(scene: Node) -> Array[Dictionary]:
+	var suspended: Array[Dictionary] = []
+	if scene == null: return suspended
+	for connection: Dictionary in AudioManager.get_signal_connection_list(&"speech_finished"):
+		var callback: Callable = connection.callable
+		var receiver := callback.get_object()
+		if not receiver is Node: continue
+		var owned: bool = receiver == scene or scene.is_ancestor_of(receiver)
+		for holder in _popups:
+			owned = owned or holder == receiver or holder.is_ancestor_of(receiver)
+		if owned:
+			AudioManager.disconnect(&"speech_finished", callback)
+			suspended.append(connection)
+	return suspended
+
+
+func _suspend_scope_processing(scene: Node) -> Array[Dictionary]:
+	var saved: Array[Dictionary] = []
+	var pending: Array[Node] = []
+	if scene != null: pending.append(scene)
+	pending.append_array(_popups)
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		pending.append_array(node.get_children())
+		# Explicit ALWAYS children otherwise keep processing under a disabled root.
+		if node == scene or node.process_mode != Node.PROCESS_MODE_INHERIT:
+			saved.append({"node": weakref(node), "mode": node.process_mode})
+			node.process_mode = Node.PROCESS_MODE_DISABLED
+	return saved
+
+
+func _resume_scope_processing(saved: Array[Dictionary]) -> void:
+	for entry in saved:
+		var node: Node = entry.node.get_ref()
+		if is_instance_valid(node): node.process_mode = int(entry.mode)
+
+
+func _resume_scene_speech(suspended: Array[Dictionary]) -> void:
+	for connection in suspended:
+		var callback: Callable = connection.callable
+		if callback.is_valid() and not AudioManager.is_connected(&"speech_finished", callback):
+			AudioManager.connect(&"speech_finished", callback, int(connection.flags))
+
+
+func _prepare_scene_exit(scene: Node, destination: StringName) -> void:
+	if scene == null: return
+	scene_leaving.emit(scene, destination)
+	# Existing campaign hook cancels ordinary and forced-rewind teaching without
+	# awarding completion. Owners may also cancel through scene_leaving.
+	if scene.has_method(&"_cancel_active_teaching_controllers"):
+		scene.call(&"_cancel_active_teaching_controllers")
+	AudioManager.stop_dialogue()
+
+
+func _on_close_requested() -> void:
+	_closing = true
+	cancel_transition()
+	var scene := get_tree().current_scene
+	_suspend_scene_speech(scene)
+	_suspend_scope_processing(scene)
+	_prepare_scene_exit(scene, &"")
+
+
 func _on_tree_ready() -> void:
 	_swap_ready = true
 	_swap_ready_at_usec = Time.get_ticks_usec()
@@ -282,14 +354,14 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 	var next_params := new_params.duplicate(true)
 	var previous_params := params
 	var old_scene := get_tree().current_scene
-	var old_process := old_scene.process_mode if old_scene else Node.PROCESS_MODE_INHERIT
+	var suspended_speech := _suspend_scene_speech(old_scene)
 	var old_state: int = GameState.state
 	var focused := get_viewport().gui_get_focus_owner()
 	var previous_focus: WeakRef = weakref(focused) if focused != null else null
 	var was_disabled: bool = focused.disabled if focused is BaseButton else false
+	var suspended_processing := _suspend_scope_processing(old_scene)
 	var profile := {"key": String(key), "path": path, "fade": fade}
 	var started := Time.get_ticks_usec()
-	if old_scene: old_scene.process_mode = Node.PROCESS_MODE_DISABLED
 	if fade: await _fade_to(1.0)
 	if _exiting: return
 	profile.fade_out_usec = Time.get_ticks_usec() - started
@@ -310,7 +382,13 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 	var packed: PackedScene
 	if not _cancel_requested:
 		_loading_path = path
-		var steps: Array = ResourceSteps.STEPS if key in [&"Campaign", &"Prototype"] or path == SCENES[&"Campaign"] or path == SCENES[&"Prototype"] else []
+		# A live cached root already owns its dependency graph. Do not sweep stale
+		# hints again (including assets removed from that graph).
+		packed = ResourceLoader.get_cached_ref(path) as PackedScene
+		profile.cached_root = packed != null
+		var steps: Array = []
+		if packed == null and (key in [&"Campaign", &"Prototype"] or path == SCENES[&"Campaign"] or path == SCENES[&"Prototype"]):
+			steps = ResourceSteps.STEPS
 		# Keep weak-cache dependencies alive until the root scene owns its graph.
 		var retained: Array[Resource] = []
 		var slice_started := Time.get_ticks_usec()
@@ -335,7 +413,7 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 		profile.resource_steps = loaded_steps
 		profile.largest_resource_step_usec = largest_step
 		profile.largest_resource_path = largest_path
-		if not _cancel_requested:
+		if not _cancel_requested and packed == null:
 			var root_started := Time.get_ticks_usec()
 			packed = ResourceLoader.load(path) as PackedScene
 			profile.root_resource_usec = Time.get_ticks_usec() - root_started
@@ -364,6 +442,7 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 		else:
 			var next_process := instance.process_mode
 			instance.process_mode = Node.PROCESS_MODE_DISABLED
+			_prepare_scene_exit(old_scene, key)
 			clear_popups()
 			mark = Time.get_ticks_usec()
 			_swap_ready = false
@@ -389,8 +468,6 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 				if is_instance_valid(instance): instance.process_mode = next_process
 	if _cancel_requested or not failure.is_empty():
 		params = previous_params
-		if is_instance_valid(old_scene) and get_tree().current_scene == old_scene:
-			old_scene.process_mode = old_process
 		GameState.change_state(old_state)
 		_loading.hide()
 		if fade: await _fade_to(0.0)
@@ -411,6 +488,9 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 	profile.total_usec = Time.get_ticks_usec() - started
 	last_transition_profile = profile
 	_transitioning = false
+	if (_cancel_requested or not failure.is_empty()) and not _closing and is_instance_valid(old_scene) and get_tree().current_scene == old_scene:
+		_resume_scene_speech(suspended_speech)
+		_resume_scope_processing(suspended_processing)
 	if _cancel_requested: transition_cancelled.emit(key)
 	if not failure.is_empty(): transition_failed.emit(key, failure)
 

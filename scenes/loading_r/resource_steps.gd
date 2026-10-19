@@ -101,7 +101,6 @@ const STEPS: Array[String] = [
 	"res://scenes/prototype/flow.gd",
 	"res://scripts/audio/combat_audio_cue.gd",
 	"res://scripts/audio/combat_audio_library.gd",
-	"res://audio/music/glow.ogg",
 	"res://audio/combat/boss_attack.wav",
 	"res://audio/combat/boss_death.wav",
 	"res://audio/combat/boss_hurt.wav",

@@ -65,6 +65,10 @@ func run() -> void:
 	expect(arena.specimens.is_empty(), "Restoring a pending arrival does not create a target early")
 	arena._physics_process(.3)
 	expect(arena.specimens.size() == 1 and arena.director.enemies.size() == 1, "Restored pending arrival spawns exactly once")
+	arena._queue_practice_spawn()
+	arena.tutorial.learned[&"slow"] = true
+	arena._physics_process(.01)
+	expect(arena.mode != &"practice" and arena._practice_spawn_delay == 0.0, "Already learned lessons skip immediately even when a restored target was pending")
 	arena.feedback.reset_state()
 	root.get_node("AudioManager").set_music_context(&"intro")
 	arena.queue_free()

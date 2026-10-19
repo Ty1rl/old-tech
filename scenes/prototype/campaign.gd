@@ -909,13 +909,6 @@ func _physics_process(delta: float) -> void:
 	if mode == &"pickup":
 		_step_pickup_mode(delta)
 	elif mode == &"practice":
-		if _practice_spawn_delay > 0.0:
-			_practice_spawn_delay = maxf(0.0, _practice_spawn_delay - delta)
-			if _practice_spawn_delay == 0.0:
-				_spawn_practice()
-				_sync_practice_tutorial_prompt()
-				_seed_room_checkpoint()
-			return
 		if tutorial.is_learned(lesson):
 			if lesson == &"time_meter":
 				_finish_time_meter_lesson(true)
@@ -936,6 +929,13 @@ func _physics_process(delta: float) -> void:
 				_apply_time_capabilities()
 			_practice_stage = &""
 			_start_pressure()
+			return
+		if _practice_spawn_delay > 0.0:
+			_practice_spawn_delay = maxf(0.0, _practice_spawn_delay - delta)
+			if _practice_spawn_delay == 0.0:
+				_spawn_practice()
+				_sync_practice_tutorial_prompt()
+				_seed_room_checkpoint()
 			return
 		_practice_age += delta
 		_slow_used = _slow_used or (time_controller != null and time_controller.slow_active) or world_scale < 0.99 or player.world_scale < 0.99

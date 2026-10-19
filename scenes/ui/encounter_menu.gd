@@ -32,7 +32,7 @@ func _ready() -> void:
 	apply_action.disabled = scene == null or not scene.has_method("run_developer_action")
 	readout_picker.select(int(GameState.preferences().hud))
 	UI.wire_focus(self)
-	UI.focus_on_open(self, room_picker)
+	UI.focus_on_open(self, difficulty_picker)
 
 func _difficulty() -> StringName:
 	return DIFFICULTIES[difficulty_picker.selected]

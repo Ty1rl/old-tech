@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CombatAudioLibrary" load_steps=149 format=3]
+[gd_resource type="Resource" script_class="CombatAudioLibrary" load_steps=159 format=3]
 
 [ext_resource type="Script" path="res://scripts/audio/combat_audio_library.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/audio/combat_audio_cue.gd" id="2"]
@@ -8,57 +8,62 @@
 [ext_resource type="AudioStream" path="res://audio/combat/boss_hurt.wav" id="s2"]
 [ext_resource type="AudioStream" path="res://audio/combat/boss_warning.wav" id="s3"]
 [ext_resource type="AudioStream" path="res://audio/combat/cable_attack.wav" id="s4"]
-[ext_resource type="AudioStream" path="res://audio/combat/cable_cut.wav" id="s5"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/cable_cut.mp3" id="s5"]
 [ext_resource type="AudioStream" path="res://audio/combat/cable_death.wav" id="s6"]
 [ext_resource type="AudioStream" path="res://audio/combat/cable_hurt.wav" id="s7"]
 [ext_resource type="AudioStream" path="res://audio/combat/cable_warning.wav" id="s8"]
-[ext_resource type="AudioStream" path="res://audio/combat/charge_loop.wav" id="s9"]
-[ext_resource type="AudioStream" path="res://audio/combat/clock_loop.wav" id="s10"]
-[ext_resource type="AudioStream" path="res://audio/combat/cone_loop.wav" id="s11"]
-[ext_resource type="AudioStream" path="res://audio/combat/cone_pulse.wav" id="s12"]
-[ext_resource type="AudioStream" path="res://audio/combat/core_break.wav" id="s13"]
-[ext_resource type="AudioStream" path="res://audio/combat/flash_charged.wav" id="s14"]
-[ext_resource type="AudioStream" path="res://audio/combat/flash_fire.wav" id="s15"]
-[ext_resource type="AudioStream" path="res://audio/combat/flash_ready.wav" id="s16"]
-[ext_resource type="AudioStream" path="res://audio/combat/glass_attack.wav" id="s17"]
-[ext_resource type="AudioStream" path="res://audio/combat/glass_death.wav" id="s18"]
-[ext_resource type="AudioStream" path="res://audio/combat/glass_hurt.wav" id="s19"]
-[ext_resource type="AudioStream" path="res://audio/combat/glass_warning.wav" id="s20"]
-[ext_resource type="AudioStream" path="res://audio/combat/hit.wav" id="s21"]
-[ext_resource type="AudioStream" path="res://audio/combat/pack_attack.wav" id="s22"]
-[ext_resource type="AudioStream" path="res://audio/combat/pack_death.wav" id="s23"]
-[ext_resource type="AudioStream" path="res://audio/combat/pack_hurt.wav" id="s24"]
-[ext_resource type="AudioStream" path="res://audio/combat/pack_warning.wav" id="s25"]
-[ext_resource type="AudioStream" path="res://audio/combat/pierce_hit.wav" id="s26"]
-[ext_resource type="AudioStream" path="res://audio/combat/player_hurt.wav" id="s27"]
-[ext_resource type="AudioStream" path="res://audio/combat/recovery_confirm.wav" id="s28"]
-[ext_resource type="AudioStream" path="res://audio/combat/relay_attack.wav" id="s29"]
-[ext_resource type="AudioStream" path="res://audio/combat/relay_death.wav" id="s30"]
-[ext_resource type="AudioStream" path="res://audio/combat/relay_hurt.wav" id="s31"]
-[ext_resource type="AudioStream" path="res://audio/combat/relay_warning.wav" id="s32"]
-[ext_resource type="AudioStream" path="res://audio/combat/repair_full.wav" id="s33"]
-[ext_resource type="AudioStream" path="res://audio/combat/repair_step.wav" id="s34"]
-[ext_resource type="AudioStream" path="res://audio/combat/ring_launch.wav" id="s35"]
-[ext_resource type="AudioStream" path="res://audio/combat/ring_loop.wav" id="s36"]
-[ext_resource type="AudioStream" path="res://audio/combat/ring_return.wav" id="s37"]
-[ext_resource type="AudioStream" path="res://audio/combat/room_open.wav" id="s38"]
-[ext_resource type="AudioStream" path="res://audio/combat/scrub_newer.wav" id="s39"]
-[ext_resource type="AudioStream" path="res://audio/combat/scrub_older.wav" id="s40"]
-[ext_resource type="AudioStream" path="res://audio/combat/shield_attack.wav" id="s41"]
-[ext_resource type="AudioStream" path="res://audio/combat/shield_death.wav" id="s42"]
-[ext_resource type="AudioStream" path="res://audio/combat/shield_hurt.wav" id="s43"]
-[ext_resource type="AudioStream" path="res://audio/combat/shield_warning.wav" id="s44"]
-[ext_resource type="AudioStream" path="res://audio/combat/steam_attack.wav" id="s45"]
-[ext_resource type="AudioStream" path="res://audio/combat/steam_death.wav" id="s46"]
-[ext_resource type="AudioStream" path="res://audio/combat/steam_hurt.wav" id="s47"]
-[ext_resource type="AudioStream" path="res://audio/combat/steam_warning.wav" id="s48"]
-[ext_resource type="AudioStream" path="res://audio/combat/ui_click.wav" id="s49"]
-[ext_resource type="AudioStream" path="res://audio/combat/vent.wav" id="s50"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/charge_loop.mp3" id="s9"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/clock_loop.mp3" id="s10"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/cone_loop.mp3" id="s11"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/cone_pulse.mp3" id="s12"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/core_break.mp3" id="s13"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/emergency_start.mp3" id="s14"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/flash_charged.mp3" id="s15"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/flash_fire.mp3" id="s16"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/flash_ready.mp3" id="s17"]
+[ext_resource type="AudioStream" path="res://audio/combat/glass_attack.wav" id="s18"]
+[ext_resource type="AudioStream" path="res://audio/combat/glass_death.wav" id="s19"]
+[ext_resource type="AudioStream" path="res://audio/combat/glass_hurt.wav" id="s20"]
+[ext_resource type="AudioStream" path="res://audio/combat/glass_warning.wav" id="s21"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/hit.mp3" id="s22"]
+[ext_resource type="AudioStream" path="res://audio/combat/pack_attack.wav" id="s23"]
+[ext_resource type="AudioStream" path="res://audio/combat/pack_death.wav" id="s24"]
+[ext_resource type="AudioStream" path="res://audio/combat/pack_hurt.wav" id="s25"]
+[ext_resource type="AudioStream" path="res://audio/combat/pack_warning.wav" id="s26"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/pierce_hit.mp3" id="s27"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/player_hurt.mp3" id="s28"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/recovery_confirm.mp3" id="s29"]
+[ext_resource type="AudioStream" path="res://audio/combat/relay_attack.wav" id="s30"]
+[ext_resource type="AudioStream" path="res://audio/combat/relay_death.wav" id="s31"]
+[ext_resource type="AudioStream" path="res://audio/combat/relay_hurt.wav" id="s32"]
+[ext_resource type="AudioStream" path="res://audio/combat/relay_warning.wav" id="s33"]
+[ext_resource type="AudioStream" path="res://audio/combat/repair_connect.wav" id="s34"]
+[ext_resource type="AudioStream" path="res://audio/combat/repair_full.wav" id="s35"]
+[ext_resource type="AudioStream" path="res://audio/combat/repair_spin.wav" id="s36"]
+[ext_resource type="AudioStream" path="res://audio/combat/repair_step.wav" id="s37"]
+[ext_resource type="AudioStream" path="res://audio/combat/repair_trace.wav" id="s38"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/ring_launch.mp3" id="s39"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/ring_loop.mp3" id="s40"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/ring_return.mp3" id="s41"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/room_open.mp3" id="s42"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/scrub_newer.mp3" id="s43"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/scrub_older.mp3" id="s44"]
+[ext_resource type="AudioStream" path="res://audio/combat/shield_attack.wav" id="s45"]
+[ext_resource type="AudioStream" path="res://audio/combat/shield_death.wav" id="s46"]
+[ext_resource type="AudioStream" path="res://audio/combat/shield_hurt.wav" id="s47"]
+[ext_resource type="AudioStream" path="res://audio/combat/shield_warning.wav" id="s48"]
+[ext_resource type="AudioStream" path="res://audio/combat/steam_attack.wav" id="s49"]
+[ext_resource type="AudioStream" path="res://audio/combat/steam_death.wav" id="s50"]
+[ext_resource type="AudioStream" path="res://audio/combat/steam_hurt.wav" id="s51"]
+[ext_resource type="AudioStream" path="res://audio/combat/steam_warning.wav" id="s52"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/time_low_loop.mp3" id="s53"]
+[ext_resource type="AudioStream" path="res://audio/combat/ui_click.wav" id="s54"]
+[ext_resource type="AudioStream" path="res://audio/combat/supplied/vent.mp3" id="s55"]
 
 [sub_resource type="Resource" id="Cue0"]
 script = ExtResource("2")
 id = &"ring_launch"
-stream = ExtResource("s35")
+stream = ExtResource("s39")
 volume_db = -15.0
 priority = 2
 responsive = false
@@ -70,7 +75,7 @@ effect = &"ring_launch"
 [sub_resource type="Resource" id="Cue1"]
 script = ExtResource("2")
 id = &"ring_return"
-stream = ExtResource("s37")
+stream = ExtResource("s41")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -82,7 +87,7 @@ effect = &"ring_return"
 [sub_resource type="Resource" id="Cue2"]
 script = ExtResource("2")
 id = &"flash_fire"
-stream = ExtResource("s15")
+stream = ExtResource("s16")
 volume_db = -16.0
 priority = 2
 responsive = false
@@ -94,7 +99,7 @@ effect = &"flash_fire"
 [sub_resource type="Resource" id="Cue3"]
 script = ExtResource("2")
 id = &"flash_charged"
-stream = ExtResource("s14")
+stream = ExtResource("s15")
 volume_db = -12.0
 priority = 4
 responsive = false
@@ -106,7 +111,7 @@ effect = &"flash_fire"
 [sub_resource type="Resource" id="Cue4"]
 script = ExtResource("2")
 id = &"flash_ready"
-stream = ExtResource("s16")
+stream = ExtResource("s17")
 volume_db = -16.0
 priority = 2
 responsive = false
@@ -118,7 +123,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue5"]
 script = ExtResource("2")
 id = &"pierce_hit"
-stream = ExtResource("s26")
+stream = ExtResource("s27")
 volume_db = -15.0
 priority = 2
 responsive = false
@@ -142,7 +147,7 @@ effect = &"cone_pulse"
 [sub_resource type="Resource" id="Cue7"]
 script = ExtResource("2")
 id = &"hit"
-stream = ExtResource("s21")
+stream = ExtResource("s22")
 volume_db = -19.0
 priority = 2
 responsive = false
@@ -166,7 +171,7 @@ effect = &"cable_cut"
 [sub_resource type="Resource" id="Cue9"]
 script = ExtResource("2")
 id = &"vent"
-stream = ExtResource("s50")
+stream = ExtResource("s55")
 volume_db = -17.0
 priority = 2
 responsive = false
@@ -190,7 +195,7 @@ effect = &"core_break"
 [sub_resource type="Resource" id="Cue11"]
 script = ExtResource("2")
 id = &"repair_step"
-stream = ExtResource("s34")
+stream = ExtResource("s37")
 volume_db = -14.0
 priority = 2
 responsive = true
@@ -202,7 +207,7 @@ effect = &"repair_step"
 [sub_resource type="Resource" id="Cue12"]
 script = ExtResource("2")
 id = &"repair_full"
-stream = ExtResource("s33")
+stream = ExtResource("s35")
 volume_db = -10.0
 priority = 5
 responsive = true
@@ -214,7 +219,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue13"]
 script = ExtResource("2")
 id = &"room_open"
-stream = ExtResource("s38")
+stream = ExtResource("s42")
 volume_db = -10.0
 priority = 4
 responsive = false
@@ -226,7 +231,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue14"]
 script = ExtResource("2")
 id = &"player_hurt"
-stream = ExtResource("s27")
+stream = ExtResource("s28")
 volume_db = -10.0
 priority = 5
 responsive = false
@@ -238,7 +243,7 @@ effect = &"player_hurt"
 [sub_resource type="Resource" id="Cue15"]
 script = ExtResource("2")
 id = &"recovery_confirm"
-stream = ExtResource("s28")
+stream = ExtResource("s29")
 volume_db = -10.0
 priority = 5
 responsive = true
@@ -250,7 +255,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue16"]
 script = ExtResource("2")
 id = &"ui_click"
-stream = ExtResource("s49")
+stream = ExtResource("s54")
 volume_db = -14.0
 priority = 2
 responsive = true
@@ -262,7 +267,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue17"]
 script = ExtResource("2")
 id = &"flash_pierce"
-stream = ExtResource("s14")
+stream = ExtResource("s15")
 volume_db = -12.0
 priority = 4
 responsive = false
@@ -274,7 +279,7 @@ effect = &"flash_fire"
 [sub_resource type="Resource" id="Cue18"]
 script = ExtResource("2")
 id = &"hostile_warning"
-stream = ExtResource("s32")
+stream = ExtResource("s33")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -286,7 +291,7 @@ effect = &"hostile_warning"
 [sub_resource type="Resource" id="Cue19"]
 script = ExtResource("2")
 id = &"hostile_fire"
-stream = ExtResource("s29")
+stream = ExtResource("s30")
 volume_db = -18.0
 priority = 3
 responsive = false
@@ -298,7 +303,7 @@ effect = &"hostile_fire"
 [sub_resource type="Resource" id="Cue20"]
 script = ExtResource("2")
 id = &"ring_loop"
-stream = ExtResource("s36")
+stream = ExtResource("s40")
 volume_db = -32.0
 priority = 2
 responsive = false
@@ -346,7 +351,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue24"]
 script = ExtResource("2")
 id = &"scrub_older"
-stream = ExtResource("s40")
+stream = ExtResource("s44")
 volume_db = -24.0
 priority = 2
 responsive = true
@@ -358,7 +363,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue25"]
 script = ExtResource("2")
 id = &"scrub_newer"
-stream = ExtResource("s39")
+stream = ExtResource("s43")
 volume_db = -24.0
 priority = 2
 responsive = true
@@ -370,7 +375,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue26"]
 script = ExtResource("2")
 id = &"enemy_target_warning"
-stream = ExtResource("s32")
+stream = ExtResource("s33")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -382,7 +387,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue27"]
 script = ExtResource("2")
 id = &"enemy_target_attack"
-stream = ExtResource("s29")
+stream = ExtResource("s30")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -394,7 +399,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue28"]
 script = ExtResource("2")
 id = &"enemy_target_hurt"
-stream = ExtResource("s31")
+stream = ExtResource("s32")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -406,7 +411,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue29"]
 script = ExtResource("2")
 id = &"enemy_target_death"
-stream = ExtResource("s30")
+stream = ExtResource("s31")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -418,7 +423,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue30"]
 script = ExtResource("2")
 id = &"enemy_swarmer_warning"
-stream = ExtResource("s25")
+stream = ExtResource("s26")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -430,7 +435,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue31"]
 script = ExtResource("2")
 id = &"enemy_swarmer_attack"
-stream = ExtResource("s22")
+stream = ExtResource("s23")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -442,7 +447,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue32"]
 script = ExtResource("2")
 id = &"enemy_swarmer_hurt"
-stream = ExtResource("s24")
+stream = ExtResource("s25")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -454,7 +459,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue33"]
 script = ExtResource("2")
 id = &"enemy_swarmer_death"
-stream = ExtResource("s23")
+stream = ExtResource("s24")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -466,7 +471,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue34"]
 script = ExtResource("2")
 id = &"enemy_brute_warning"
-stream = ExtResource("s44")
+stream = ExtResource("s48")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -478,7 +483,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue35"]
 script = ExtResource("2")
 id = &"enemy_brute_attack"
-stream = ExtResource("s41")
+stream = ExtResource("s45")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -490,7 +495,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue36"]
 script = ExtResource("2")
 id = &"enemy_brute_hurt"
-stream = ExtResource("s43")
+stream = ExtResource("s47")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -502,7 +507,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue37"]
 script = ExtResource("2")
 id = &"enemy_brute_death"
-stream = ExtResource("s42")
+stream = ExtResource("s46")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -514,7 +519,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue38"]
 script = ExtResource("2")
 id = &"enemy_skirmisher_warning"
-stream = ExtResource("s32")
+stream = ExtResource("s33")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -526,7 +531,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue39"]
 script = ExtResource("2")
 id = &"enemy_skirmisher_attack"
-stream = ExtResource("s29")
+stream = ExtResource("s30")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -538,7 +543,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue40"]
 script = ExtResource("2")
 id = &"enemy_skirmisher_hurt"
-stream = ExtResource("s31")
+stream = ExtResource("s32")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -550,7 +555,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue41"]
 script = ExtResource("2")
 id = &"enemy_skirmisher_death"
-stream = ExtResource("s30")
+stream = ExtResource("s31")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -562,7 +567,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue42"]
 script = ExtResource("2")
 id = &"enemy_warden_warning"
-stream = ExtResource("s44")
+stream = ExtResource("s48")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -574,7 +579,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue43"]
 script = ExtResource("2")
 id = &"enemy_warden_attack"
-stream = ExtResource("s41")
+stream = ExtResource("s45")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -586,7 +591,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue44"]
 script = ExtResource("2")
 id = &"enemy_warden_hurt"
-stream = ExtResource("s43")
+stream = ExtResource("s47")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -598,7 +603,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue45"]
 script = ExtResource("2")
 id = &"enemy_warden_death"
-stream = ExtResource("s42")
+stream = ExtResource("s46")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -610,7 +615,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue46"]
 script = ExtResource("2")
 id = &"enemy_ranged_warning"
-stream = ExtResource("s32")
+stream = ExtResource("s33")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -622,7 +627,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue47"]
 script = ExtResource("2")
 id = &"enemy_ranged_attack"
-stream = ExtResource("s29")
+stream = ExtResource("s30")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -634,7 +639,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue48"]
 script = ExtResource("2")
 id = &"enemy_ranged_hurt"
-stream = ExtResource("s31")
+stream = ExtResource("s32")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -646,7 +651,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue49"]
 script = ExtResource("2")
 id = &"enemy_ranged_death"
-stream = ExtResource("s30")
+stream = ExtResource("s31")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -706,7 +711,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue54"]
 script = ExtResource("2")
 id = &"enemy_yellow_warning"
-stream = ExtResource("s20")
+stream = ExtResource("s21")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -718,7 +723,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue55"]
 script = ExtResource("2")
 id = &"enemy_yellow_attack"
-stream = ExtResource("s17")
+stream = ExtResource("s18")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -730,7 +735,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue56"]
 script = ExtResource("2")
 id = &"enemy_yellow_hurt"
-stream = ExtResource("s19")
+stream = ExtResource("s20")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -742,7 +747,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue57"]
 script = ExtResource("2")
 id = &"enemy_yellow_death"
-stream = ExtResource("s18")
+stream = ExtResource("s19")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -754,7 +759,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue58"]
 script = ExtResource("2")
 id = &"enemy_orange_warning"
-stream = ExtResource("s48")
+stream = ExtResource("s52")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -766,7 +771,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue59"]
 script = ExtResource("2")
 id = &"enemy_orange_attack"
-stream = ExtResource("s45")
+stream = ExtResource("s49")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -778,7 +783,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue60"]
 script = ExtResource("2")
 id = &"enemy_orange_hurt"
-stream = ExtResource("s47")
+stream = ExtResource("s51")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -790,7 +795,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue61"]
 script = ExtResource("2")
 id = &"enemy_orange_death"
-stream = ExtResource("s46")
+stream = ExtResource("s50")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -802,7 +807,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue62"]
 script = ExtResource("2")
 id = &"enemy_side_guard_warning"
-stream = ExtResource("s44")
+stream = ExtResource("s48")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -814,7 +819,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue63"]
 script = ExtResource("2")
 id = &"enemy_side_guard_attack"
-stream = ExtResource("s41")
+stream = ExtResource("s45")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -826,7 +831,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue64"]
 script = ExtResource("2")
 id = &"enemy_side_guard_hurt"
-stream = ExtResource("s43")
+stream = ExtResource("s47")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -838,7 +843,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue65"]
 script = ExtResource("2")
 id = &"enemy_side_guard_death"
-stream = ExtResource("s42")
+stream = ExtResource("s46")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -850,7 +855,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue66"]
 script = ExtResource("2")
 id = &"enemy_front_guard_warning"
-stream = ExtResource("s44")
+stream = ExtResource("s48")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -862,7 +867,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue67"]
 script = ExtResource("2")
 id = &"enemy_front_guard_attack"
-stream = ExtResource("s41")
+stream = ExtResource("s45")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -874,7 +879,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue68"]
 script = ExtResource("2")
 id = &"enemy_front_guard_hurt"
-stream = ExtResource("s43")
+stream = ExtResource("s47")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -886,7 +891,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue69"]
 script = ExtResource("2")
 id = &"enemy_front_guard_death"
-stream = ExtResource("s42")
+stream = ExtResource("s46")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -994,7 +999,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue78"]
 script = ExtResource("2")
 id = &"enemy_pair_warning"
-stream = ExtResource("s20")
+stream = ExtResource("s21")
 volume_db = -15.0
 priority = 4
 responsive = false
@@ -1006,7 +1011,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue79"]
 script = ExtResource("2")
 id = &"enemy_pair_attack"
-stream = ExtResource("s17")
+stream = ExtResource("s18")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -1018,7 +1023,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue80"]
 script = ExtResource("2")
 id = &"enemy_pair_hurt"
-stream = ExtResource("s19")
+stream = ExtResource("s20")
 volume_db = -20.0
 priority = 2
 responsive = false
@@ -1030,7 +1035,7 @@ effect = &""
 [sub_resource type="Resource" id="Cue81"]
 script = ExtResource("2")
 id = &"enemy_pair_death"
-stream = ExtResource("s18")
+stream = ExtResource("s19")
 volume_db = -18.0
 priority = 2
 responsive = false
@@ -1183,9 +1188,69 @@ pitch = 1.22
 looping = false
 effect = &""
 
+[sub_resource type="Resource" id="Cue94"]
+script = ExtResource("2")
+id = &"emergency_start"
+stream = ExtResource("s14")
+volume_db = -12.0
+priority = 5
+responsive = true
+cooldown = 0.5
+pitch = 1.0
+looping = false
+effect = &""
+
+[sub_resource type="Resource" id="Cue95"]
+script = ExtResource("2")
+id = &"time_low_loop"
+stream = ExtResource("s53")
+volume_db = -28.0
+priority = 2
+responsive = true
+cooldown = 0.08
+pitch = 1.0
+looping = true
+effect = &""
+
+[sub_resource type="Resource" id="Cue96"]
+script = ExtResource("2")
+id = &"repair_spin"
+stream = ExtResource("s36")
+volume_db = -22.0
+priority = 2
+responsive = true
+cooldown = 0.2
+pitch = 1.0
+looping = false
+effect = &""
+
+[sub_resource type="Resource" id="Cue97"]
+script = ExtResource("2")
+id = &"repair_connect"
+stream = ExtResource("s34")
+volume_db = -22.0
+priority = 2
+responsive = true
+cooldown = 0.2
+pitch = 1.0
+looping = false
+effect = &""
+
+[sub_resource type="Resource" id="Cue98"]
+script = ExtResource("2")
+id = &"repair_trace"
+stream = ExtResource("s38")
+volume_db = -22.0
+priority = 2
+responsive = true
+cooldown = 0.2
+pitch = 1.0
+looping = false
+effect = &""
+
 [resource]
 script = ExtResource("1")
-cues = Array[ExtResource("2")]([SubResource("Cue0"), SubResource("Cue1"), SubResource("Cue2"), SubResource("Cue3"), SubResource("Cue4"), SubResource("Cue5"), SubResource("Cue6"), SubResource("Cue7"), SubResource("Cue8"), SubResource("Cue9"), SubResource("Cue10"), SubResource("Cue11"), SubResource("Cue12"), SubResource("Cue13"), SubResource("Cue14"), SubResource("Cue15"), SubResource("Cue16"), SubResource("Cue17"), SubResource("Cue18"), SubResource("Cue19"), SubResource("Cue20"), SubResource("Cue21"), SubResource("Cue22"), SubResource("Cue23"), SubResource("Cue24"), SubResource("Cue25"), SubResource("Cue26"), SubResource("Cue27"), SubResource("Cue28"), SubResource("Cue29"), SubResource("Cue30"), SubResource("Cue31"), SubResource("Cue32"), SubResource("Cue33"), SubResource("Cue34"), SubResource("Cue35"), SubResource("Cue36"), SubResource("Cue37"), SubResource("Cue38"), SubResource("Cue39"), SubResource("Cue40"), SubResource("Cue41"), SubResource("Cue42"), SubResource("Cue43"), SubResource("Cue44"), SubResource("Cue45"), SubResource("Cue46"), SubResource("Cue47"), SubResource("Cue48"), SubResource("Cue49"), SubResource("Cue50"), SubResource("Cue51"), SubResource("Cue52"), SubResource("Cue53"), SubResource("Cue54"), SubResource("Cue55"), SubResource("Cue56"), SubResource("Cue57"), SubResource("Cue58"), SubResource("Cue59"), SubResource("Cue60"), SubResource("Cue61"), SubResource("Cue62"), SubResource("Cue63"), SubResource("Cue64"), SubResource("Cue65"), SubResource("Cue66"), SubResource("Cue67"), SubResource("Cue68"), SubResource("Cue69"), SubResource("Cue70"), SubResource("Cue71"), SubResource("Cue72"), SubResource("Cue73"), SubResource("Cue74"), SubResource("Cue75"), SubResource("Cue76"), SubResource("Cue77"), SubResource("Cue78"), SubResource("Cue79"), SubResource("Cue80"), SubResource("Cue81"), SubResource("Cue82"), SubResource("Cue83"), SubResource("Cue84"), SubResource("Cue85"), SubResource("Cue86"), SubResource("Cue87"), SubResource("Cue88"), SubResource("Cue89"), SubResource("Cue90"), SubResource("Cue91"), SubResource("Cue92"), SubResource("Cue93")])
+cues = Array[ExtResource("2")]([SubResource("Cue0"), SubResource("Cue1"), SubResource("Cue2"), SubResource("Cue3"), SubResource("Cue4"), SubResource("Cue5"), SubResource("Cue6"), SubResource("Cue7"), SubResource("Cue8"), SubResource("Cue9"), SubResource("Cue10"), SubResource("Cue11"), SubResource("Cue12"), SubResource("Cue13"), SubResource("Cue14"), SubResource("Cue15"), SubResource("Cue16"), SubResource("Cue17"), SubResource("Cue18"), SubResource("Cue19"), SubResource("Cue20"), SubResource("Cue21"), SubResource("Cue22"), SubResource("Cue23"), SubResource("Cue24"), SubResource("Cue25"), SubResource("Cue26"), SubResource("Cue27"), SubResource("Cue28"), SubResource("Cue29"), SubResource("Cue30"), SubResource("Cue31"), SubResource("Cue32"), SubResource("Cue33"), SubResource("Cue34"), SubResource("Cue35"), SubResource("Cue36"), SubResource("Cue37"), SubResource("Cue38"), SubResource("Cue39"), SubResource("Cue40"), SubResource("Cue41"), SubResource("Cue42"), SubResource("Cue43"), SubResource("Cue44"), SubResource("Cue45"), SubResource("Cue46"), SubResource("Cue47"), SubResource("Cue48"), SubResource("Cue49"), SubResource("Cue50"), SubResource("Cue51"), SubResource("Cue52"), SubResource("Cue53"), SubResource("Cue54"), SubResource("Cue55"), SubResource("Cue56"), SubResource("Cue57"), SubResource("Cue58"), SubResource("Cue59"), SubResource("Cue60"), SubResource("Cue61"), SubResource("Cue62"), SubResource("Cue63"), SubResource("Cue64"), SubResource("Cue65"), SubResource("Cue66"), SubResource("Cue67"), SubResource("Cue68"), SubResource("Cue69"), SubResource("Cue70"), SubResource("Cue71"), SubResource("Cue72"), SubResource("Cue73"), SubResource("Cue74"), SubResource("Cue75"), SubResource("Cue76"), SubResource("Cue77"), SubResource("Cue78"), SubResource("Cue79"), SubResource("Cue80"), SubResource("Cue81"), SubResource("Cue82"), SubResource("Cue83"), SubResource("Cue84"), SubResource("Cue85"), SubResource("Cue86"), SubResource("Cue87"), SubResource("Cue88"), SubResource("Cue89"), SubResource("Cue90"), SubResource("Cue91"), SubResource("Cue92"), SubResource("Cue93"), SubResource("Cue94"), SubResource("Cue95"), SubResource("Cue96"), SubResource("Cue97"), SubResource("Cue98")])
 
 music = ExtResource("music")
 music_volume_db = -26.0

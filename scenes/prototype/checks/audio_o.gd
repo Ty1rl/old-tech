@@ -36,7 +36,7 @@ func run() -> void:
 	var immutable := {}
 	for entry in library.cues:
 		immutable[entry.id] = [entry.stream, entry.pitch, entry.volume_db, entry.priority, entry.responsive]
-	expect(feedback.samples.size() == 94 and feedback._cues.size() == 94, "94 inspector cues load without startup synthesis")
+	expect(feedback.samples.size() == library.cues.size() and feedback._cues.size() >= 94, "All inspector cues load without startup synthesis")
 	var native_players := 0
 	for child in feedback.get_children():
 		if child is AudioStreamPlayer or child is AudioStreamPlayer3D: native_players += 1

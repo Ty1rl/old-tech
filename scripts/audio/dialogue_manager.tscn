@@ -1,0 +1,21 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/autoloads/audio_manager.gd" id="script"]
+[node name="AudioManager" type="Node"]
+script = ExtResource("script")
+[node name="Voice" type="AudioStreamPlayer" parent="."]
+bus = &"Voice"
+volume_db = -3.0
+[node name="Overlay" type="CanvasLayer" parent="."]
+layer = 110
+[node name="SkipIntro" type="Button" parent="Overlay"]
+visible = false
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -190.0
+offset_top = -52.0
+offset_right = -18.0
+offset_bottom = -16.0
+text = "Skip narration"

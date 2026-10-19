@@ -212,8 +212,12 @@ func _run() -> void:
 	lesson.free()
 
 	root.size = old_size
+	root.get_node("AudioManager").stop_dialogue()
+	await create_timer(.1).timeout
+	arena.feedback.reset_state()
 	arena.free()
 	await process_frame
+	await create_timer(.3).timeout
 	print(JSON.stringify({
 		"status": "passed" if failures.is_empty() else "failed",
 		"checks": checks,

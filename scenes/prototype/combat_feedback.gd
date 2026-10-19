@@ -48,6 +48,7 @@ var _music: AudioStreamPlayer
 var _music_gain := 0.0
 
 func _ready() -> void:
+	add_to_group(&"world_audio")
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	var config := ConfigFile.new()
 	if config.load(SETTINGS_PATH) == OK:
@@ -213,6 +214,15 @@ func step(real_delta: float, world_delta: float, world_scale: float, inspecting:
 	_set_loop(&"charge_loop", (0.55 + charge * 0.45) * bed_gain if charge_active else 0.0, (0.72 + charge * 0.65) * world_pitch, dt)
 	_set_loop(&"cone_loop", 0.65 * bed_gain if cone_active else 0.0, world_pitch, dt)
 	var clock_gain := 0.45 if frozen or scale_target < 0.99 else 0.32 * clampf((1.0 - clock_pitch) / 0.10, 0.0, 1.0)
+	var low_time := false
+	if weapons != null and weapons.time_controller != null:
+		low_time = weapons.time_controller.meter < weapons.time_controller.capacity * .2 and not frozen
+	var clock_stream: AudioStream = _cues[&"time_low_loop"].stream if low_time and scale_target >= .99 else _cues[&"clock_loop"].stream
+	var clock_player: AudioStreamPlayer = _loops[&"clock_loop"].player
+	if clock_player.stream != clock_stream:
+		clock_player.stop()
+		clock_player.stream = clock_stream
+	if low_time: clock_gain = maxf(clock_gain, .22)
 	_set_loop(&"clock_loop", clock_gain, clock_pitch, dt)
 	var scrub_gain := clampf(absf(scrub_speed) * 0.3, 0, 0.7) if frozen else 0.0
 	_set_loop(&"scrub_older", scrub_gain if scrub_speed > 0 else 0.0, clock_pitch, dt)

@@ -126,6 +126,20 @@ custom_minimum_size = Vector2(0, 32)
 max_value = 100.0
 step = 1.0
 
+[node name="VoiceVolumeLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+layout_mode = 2
+text = "Voice volume"
+mouse_filter = 2
+theme_override_font_sizes/font_size = 17
+metadata/base_font_size = 17
+
+[node name="VoiceVolume" type="HSlider" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 32)
+max_value = 100.0
+step = 1.0
+
 [node name="HudLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true
 layout_mode = 2

@@ -40,11 +40,17 @@ func run() -> void:
 	var total_bytes := 0
 	var unique_streams := {}
 	for kind in feedback.samples:
-		var sample: AudioStreamWAV = feedback.samples[kind]
-		var data := sample.data
-		if not unique_streams.has(sample.resource_path):
-			unique_streams[sample.resource_path] = true
+		var stream: AudioStream = feedback.samples[kind]
+		var data: PackedByteArray = stream.get("data")
+		if not unique_streams.has(stream.resource_path):
+			unique_streams[stream.resource_path] = true
 			total_bytes += data.size()
+		if stream is AudioStreamMP3:
+			expect(data.size() > 100 and stream.get_length() > .05, "%s has decodable supplied MP3 content" % kind)
+			if kind in Feedback.LOOP_KINDS:
+				expect(stream.loop and stream.loop_offset == 0, "%s has native compressed loop metadata" % kind)
+			continue
+		var sample: AudioStreamWAV = stream as AudioStreamWAV
 		var peak := 0
 		for offset in range(0, data.size(), 2):
 			peak = maxi(peak, absi(data.decode_s16(offset)))
@@ -55,7 +61,7 @@ func run() -> void:
 			expect(sample.loop_mode == AudioStreamWAV.LOOP_FORWARD and sample.loop_end <= data.size() / 2 and sample.loop_end > sample.loop_begin, "%s has bounded looping region" % kind)
 		else:
 			expect(data.decode_s16(0) == 0 and absi(data.decode_s16(data.size() - 2)) <= 2, "%s has silent transient edges" % kind)
-	expect(total_bytes < 1200000 and unique_streams.size() == 51, "Baked PCM bank stays near 1 MB and aliases share native resources")
+	expect(total_bytes < 4000000 and unique_streams.size() >= 51 and unique_streams.size() <= 64, "Mixed supplied/fallback bank stays bounded and aliases share native resources")
 	var duplicate := Feedback.new()
 	root.add_child(duplicate)
 	expect(duplicate.samples[&"hit"].data == feedback.samples[&"hit"].data, "Instances share the same baked content without synthesizing samples")

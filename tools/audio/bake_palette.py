@@ -75,6 +75,11 @@ def build():
     bake('player_hurt',.48,lambda t: tone(t,48,9)+noise(t,11,12)*np.exp(-15*t)*1.2+modal(t,160,20)*.4)
     bake('recovery_confirm',.70,lambda t: sum(tone(np.maximum(0,t-d),f,8,a)*(t>=d) for d,f,a in [(0,220,.7),(.08,330,.5),(.16,440,.4)]))
     bake('ui_click',.09,lambda t: modal(t,610,70)+noise(t,12,2)*np.exp(-85*t)*.4)
+    bake('emergency_start',.55,lambda t: body(t,54,7)+noise(t,81,18)*np.exp(-18*t)+tone(t,310,15,.2))
+    bake('time_low_loop',1,lambda t: tone(np.mod(t,.5),85,24,.4)+air_loop(t,82,220)*.06,True)
+    bake('repair_spin',.22,lambda t: noise(t,83,12)*np.exp(-19*t)+body(t,210,30)*.4)
+    bake('repair_connect',.16,lambda t: body(t,480,42)+noise(t,84,3)*np.exp(-60*t)*.3)
+    bake('repair_trace',.3,lambda t: noise(t,85,18)*np.sin(np.pi*t/.3)**2*.5)
     bake('scrub_older',1,lambda t: .45*np.sin(TAU*96*t)+.24*np.sin(TAU*192*t+.8*np.sin(TAU*5*t))+.10*np.sin(TAU*1370*t)*(np.sin(TAU*12*t)**8),True)
     bake('scrub_newer',1,lambda t: .4*np.sin(TAU*144*t)+.21*np.sin(TAU*288*t+.6*np.sin(TAU*7*t))+.08*np.sin(TAU*2050*t)*(np.sin(TAU*9*t)**8),True)
     bake('ring_loop',1,lambda t: (np.sin(TAU*144*t)*.4+np.sin(TAU*288*t)*.06)*(1+.06*np.cos(TAU*3*t))+air_loop(t,31,700)*.08,True)
@@ -110,13 +115,21 @@ def build():
     for i,(kind,family) in enumerate(kinds.items()):
         for event in ['warning','attack','hurt','death']:
             cue(f'enemy_{kind}_{event}',f'{family}_{event}',gain={'warning':-15,'attack':-18,'hurt':-20,'death':-18}[event],priority=4 if event=='warning' else 2,cooldown={'warning':.70,'attack':.24,'hurt':.32,'death':.35}[event],pitch=round(.82+i*.025,3))
+    cue('emergency_start',priority=5,responsive=True,gain=-12,cooldown=.5)
+    cue('time_low_loop',responsive=True,gain=-28)
+    for gesture in ['spin','connect','trace']:
+        cue('repair_'+gesture,responsive=True,gain=-22,cooldown=.2)
     write_library()
     return kinds
 
 def write_library():
     assets=sorted(ASSETS);resources=['[gd_resource type="Resource" script_class="CombatAudioLibrary" load_steps=%d format=3]'%(len(assets)+len(CUES)+4),'','[ext_resource type="Script" path="res://scripts/audio/combat_audio_library.gd" id="1"]','[ext_resource type="Script" path="res://scripts/audio/combat_audio_cue.gd" id="2"]']
     resources.append('[ext_resource type="AudioStream" path="res://audio/music/glow.ogg" id="music"]')
-    for i,name in enumerate(assets): resources.append(f'[ext_resource type="AudioStream" path="res://audio/combat/{name}.wav" id="s{i}"]')
+    for i,name in enumerate(assets):
+        # User recordings win; rebuilding fallbacks must never discard their wiring.
+        supplied=BANK/'supplied'/(name+'.mp3')
+        path=supplied if supplied.is_file() else BANK/(name+'.wav')
+        resources.append(f'[ext_resource type="AudioStream" path="res://{path.relative_to(ROOT)}" id="s{i}"]')
     for i,c in enumerate(CUES):
         resources += ['',f'[sub_resource type="Resource" id="Cue{i}"]','script = ExtResource("2")',f'id = &"{c["id"]}"',f'stream = ExtResource("s{assets.index(c["asset"])}")',f'volume_db = {float(c["gain"])}',f'priority = {c["priority"]}',f'responsive = {str(c["responsive"]).lower()}',f'cooldown = {c["cooldown"]}',f'pitch = {float(c["pitch"])}',f'looping = {str(ASSETS[c["asset"]]["loop"]).lower()}',f'effect = &"{c["effect"]}"']
     resources += ['','[resource]','script = ExtResource("1")','cues = Array[ExtResource("2")](['+', '.join(f'SubResource("Cue{i}")' for i in range(len(CUES)))+'])','']

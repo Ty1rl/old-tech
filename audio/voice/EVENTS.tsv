@@ -35,4 +35,4 @@ protagonist.boss_defeated	protagonist/boss_defeated_leave_that_one_in_pieces.mp3
 boss.loop_boss.entrance	bosses/loop_curator_entrance.mp3	Loop Curator entrance in Connected Collections	bosses/loop-curator-voice.mp3
 boss.sequence_boss.entrance	bosses/sequence_warden_entrance.mp3	Sequence Warden entrance in Restoration Rooms	bosses/everything in its proper order.mp3
 boss.final_boss.entrance	bosses/burial_device_entrance.mp3	Burial Device entrance in Burial Exhibition	bosses/you restored the vessel now let it live.mp3
-narration.intro	narration/intro.mp3	Skippable opening narration for a new run	intro.mp3
+narration.intro	narration/intro.mp3	Skippable title-screen narration once per launch	intro.mp3

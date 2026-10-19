@@ -53,6 +53,7 @@ var time_cue: CanvasLayer
 var feedback: Node3D
 var scrub_view: RefCounted = ScrubView.new()
 var _scrub_speed := 0.0
+var _recent_kills: Array[int] = []
 
 
 func _ready() -> void:
@@ -81,6 +82,8 @@ func _ready() -> void:
 	weapons.combat_event.connect(feedback.cue)
 	weapons.resolved_hit.connect(_on_weapon_resolved_hit)
 	director.enemy_event.connect(feedback.enemy_cue)
+	director.enemy_event.connect(_on_enemy_dialogue)
+	weapons.combat_event.connect(_on_combat_dialogue)
 	feedback.set_music_playing(true)
 	equipment.repaired.connect(_on_repaired)
 	player.wounded.connect(_on_player_wounded)
@@ -563,6 +566,7 @@ func _close_repair() -> void:
 
 
 func _on_player_wounded(amount: float) -> void:
+	if _incidental_dialogue_allowed(): AudioManager.say(&"protagonist.under_pressure")
 	if is_instance_valid(feedback) and is_instance_valid(player):
 		feedback.cue(&"player_hurt", player.global_position, clampf(amount / 15.0, 0.5, 1.35))
 	if not _player_can_act() and SceneManager.has_popup(&"Repair"):
@@ -619,6 +623,7 @@ func _on_emergency_started(_choice_count: int) -> void:
 	player.reset_input()
 	feedback.clear_effects()
 	feedback.step(0.0, 0.0, 0.0, true, 0.0, weapons, equipment)
+	feedback.cue(&"emergency_start", player.global_position)
 	_scrub_speed = 0.0
 	_last_emergency_age = 0.0
 	time_feedback = ""
@@ -659,6 +664,7 @@ func _on_emergency_confirmed(age_seconds: float, state: Dictionary) -> void:
 
 
 func _on_emergency_ended() -> void:
+	_say_recovery.call_deferred()
 	scrub_view.finish()
 	weapons.preview_overlay.clear()
 	_last_emergency_age = 0.0
@@ -678,6 +684,8 @@ func _on_ui_clicked() -> void:
 
 
 func _on_popup_opened(_key: StringName, _popup: Node) -> void:
+	if _key == &"Repair" and _incidental_dialogue_allowed():
+		AudioManager.say(&"protagonist.repair_started")
 	for button: BaseButton in _popup.find_children("*", "BaseButton", true, false):
 		if not button.pressed.is_connected(_on_ui_clicked):
 			button.pressed.connect(_on_ui_clicked)
@@ -737,6 +745,8 @@ func _on_weapon_resolved_hit(tool: StringName, result: Dictionary, context: Dict
 
 
 func _on_repaired(tool: StringName, restored: float) -> void:
+	if equipment.is_full(tool) and _incidental_dialogue_allowed():
+		AudioManager.say(&"protagonist.repair_completed")
 	var cue: StringName = &"repair_full" if equipment.is_full(tool) else &"repair_step"
 	feedback.cue(cue, player.global_position, clampf(restored / 6.0, 0.3, 1.0))
 
@@ -779,3 +789,28 @@ func _update_hud() -> void:
 		slow_bar.position.y = hud.position.y + hud.get_minimum_size().y + 8
 	slow_bar.max_value = time_controller.capacity
 	slow_bar.value = time_controller.meter
+
+
+func _incidental_dialogue_allowed() -> bool:
+	return GameState.is_playing() and not time_controller.emergency_active
+
+func _on_combat_dialogue(kind: StringName, _point: Vector3, _strength: float) -> void:
+	if _incidental_dialogue_allowed() and kind in [&"link_cut", &"cable_cut", &"vent"]:
+		AudioManager.say(&"protagonist.enemy_exposed")
+
+func _on_enemy_dialogue(kind: StringName, event: StringName, _point: Vector3, _strength: float) -> void:
+	if event != &"death" or not _incidental_dialogue_allowed(): return
+	if String(kind).ends_with("_boss"):
+		AudioManager.say(&"protagonist.boss_defeated", 2)
+		return
+	var now := Time.get_ticks_msec()
+	_recent_kills = _recent_kills.filter(func(stamp): return now - stamp <= 1400)
+	_recent_kills.append(now)
+	if _recent_kills.size() >= 3:
+		AudioManager.say(&"protagonist.multi_kill")
+		_recent_kills.clear()
+
+func _say_recovery() -> void:
+	if _incidental_dialogue_allowed():
+		AudioManager.stop_dialogue()
+		AudioManager.say(&"protagonist.rewind_recovered")

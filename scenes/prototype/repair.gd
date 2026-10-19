@@ -897,6 +897,10 @@ func _on_board_input(event: InputEvent) -> void:
 			_handle_connect_button(point, event.pressed)
 		else:
 			_handle_trace_button(point, event.pressed)
+		if event.pressed and _dragging:
+			var arena := _find_arena()
+			if arena != null:
+				arena.feedback.cue(StringName("repair_" + String(active_kind)), arena.player.global_position)
 	elif event is InputEventMouseMotion and dragging:
 		if not (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
 			if active_kind == &"spin" and spin_stroke_accum >= 0.20 and not trace_bad:

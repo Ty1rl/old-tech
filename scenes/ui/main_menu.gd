@@ -11,6 +11,7 @@ var _layout_size := Vector2.ZERO
 var _layout_factor := 0.0
 
 func _ready() -> void:
+	AudioManager.play_intro.call_deferred()
 	developer_button.visible = SceneManager.developer_tools
 	for node in column.get_children():
 		if node is Button:
@@ -70,4 +71,4 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_play_button_pressed() -> void: SceneManager.push_popup(&"NewGame")
 func _on_settings_button_pressed() -> void: SceneManager.push_popup(&"Settings")
-func _on_exit_button_pressed() -> void: get_tree().quit()
+func _on_exit_button_pressed() -> void: AudioManager.request_quit()

@@ -13,7 +13,11 @@ Classification uses Matt's upload titles;spoken wording has not been transcribed
 or verified. The Loop Curator file is assigned to its entrance by its supplied
 boss title. No audio was trimmed,normalized,converted or given voice effects.
 
-These are assets only. No playback hooks or runtime dialogue controller added.
-For later wiring:keep dialogue independently adjustable,avoid overlapping lines,
-use cooldowns for incidental speech,and do not replay speech from restored world
-snapshots. Tutorial/recovery instructions should remain clear during time changes.
+Runtime library:audio/voice/library.tres;playback:scripts/autoloads/audio_manager.gd.
+Intro plays once on the title screen with Skip narration. Tutorials,repair gestures,
+boss entrances and occasional protagonist reactions use actual gameplay events.
+Only one voice plays at once;incidental speech has an 18-second cooldown.
+Voice volume is separate in Settings. World/music duck while speech plays.
+Voice stays at normal speed during time changes,with a lower boss register.
+Scene exit cancels speech;history preview never starts or restores dialogue.
+Menu/window quit drains native audio before closing.

@@ -96,6 +96,7 @@ func _cancel_active_teaching_controllers() -> void:
 
 
 func start_new_run(new_difficulty: Variant = null) -> void:
+	AudioManager.begin_run()
 	_cancel_active_teaching_controllers()
 	if new_difficulty != null:
 		set_difficulty(new_difficulty)
@@ -120,6 +121,7 @@ func start_new_run(new_difficulty: Variant = null) -> void:
 
 func _ready() -> void:
 	super._ready()
+	AudioManager.begin_run()
 	if not lesson_demo.ready_for_practice.is_connected(_on_lesson_demo_ready_for_practice):
 		lesson_demo.ready_for_practice.connect(_on_lesson_demo_ready_for_practice)
 	if not rewind_lesson.completed.is_connected(_on_rewind_lesson_completed):
@@ -541,6 +543,7 @@ func _sync_repair_lesson_guidance(repair: WeaponRepair = null) -> void:
 		repair.show_stage_hint("Press 2 or Tab to select Focused Flash.")
 		return
 	var part_label := String(repair.active_op.get("part_label", "Marked Part"))
+	AudioManager.say(StringName("tutorial.repair." + String(repair.current_operation_kind())), 4, true)
 	var prompt := String(repair.active_op.get("prompt", "Follow the highlighted guide."))
 	var stage_num := clampi(current_stage + 1, 1, total_stages)
 	repair.show_stage_hint("Stage %d / %d (%s): %s" % [stage_num, total_stages, part_label, prompt])
@@ -572,6 +575,7 @@ func _on_attempt_exhausted() -> void:
 
 
 func _finish_run(won: bool) -> void:
+	if won: AudioManager.say(&"protagonist.boss_defeated", 2)
 	_cancel_active_teaching_controllers()
 	if _result_shown:
 		return
@@ -593,6 +597,7 @@ func _begin_wave() -> void:
 			mode = &"exit"
 			museum.set_boss_ceremony_phase(&"inactive")
 			museum.set_exit_open(true)
+			AudioManager.say(&"protagonist.room_cleared")
 			_seed_room_checkpoint()
 			run_hint.text = "GALLERY CLEAR · press E to toggle repair at leisure, then walk through the green doorway."
 		return
@@ -617,6 +622,7 @@ func _begin_wave() -> void:
 			&"final_boss": "The Burial Device",
 		}.get(wave.enemies[0], "Exhibition Guardian")
 		museum.start_boss_entrance()
+		AudioManager.say(StringName("boss." + String(wave.enemies[0]) + ".entrance"), 3)
 	else:
 		_spawn_wave()
 
@@ -684,6 +690,7 @@ func _spawn_wave() -> void:
 	weapons.select_tool(_preferred_tool(_desired_tool_for_lesson(lesson)))
 	if lesson == &"repair":
 		_practice_stage = &"repair"
+		AudioManager.lesson(&"repair")
 		_spawn_practice()
 		tutorial.show_known_lesson(lesson, _targets())
 		var total_stages := maxi(1, equipment.repair_steps)
@@ -693,6 +700,7 @@ func _spawn_wave() -> void:
 		return
 	if lesson == &"rewind":
 		_practice_stage = &"rewind"
+		AudioManager.lesson(&"rewind")
 		_rewind_unlocked = true
 		_apply_time_capabilities()
 		tutorial.dismiss()
@@ -702,6 +710,7 @@ func _spawn_wave() -> void:
 		_update_run_hud()
 		return
 	_practice_stage = &"demo"
+	AudioManager.lesson(lesson)
 	run_hint.text = ""
 	if lesson_demo != null and lesson_demo.begin(self, lesson, tutorial):
 		_update_run_hud()
@@ -723,6 +732,7 @@ func _on_lesson_demo_ready_for_practice(id: StringName) -> void:
 
 
 func _start_stationary_practice() -> void:
+	AudioManager.say(&"tutorial.practice_ready", 2)
 	if lesson == &"slow":
 		_slow_unlocked = true
 		_apply_time_capabilities()
@@ -741,6 +751,8 @@ func _start_stationary_practice() -> void:
 
 
 func _on_rewind_lesson_completed() -> void:
+	AudioManager.stop_dialogue()
+	AudioManager.say(&"tutorial.rewind_charges", 3, true)
 	tutorial.learned[&"rewind"] = true
 	if lesson_demo != null:
 		lesson_demo.mark_learned(&"rewind")
@@ -1342,3 +1354,7 @@ func _on_emergency_confirmed(age_seconds: float, state: Dictionary) -> void:
 	_emergency_selected_index = 0
 	weapons.require_fresh_press = false
 	_update_run_hud()
+
+
+func _incidental_dialogue_allowed() -> bool:
+	return super._incidental_dialogue_allowed() and mode == &"pressure"

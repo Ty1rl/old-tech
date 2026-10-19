@@ -133,4 +133,11 @@ func run() -> void:
 	expect(not rewind.active and not emergency.visible and controller.charges_remaining==2,"Arena-owned Enter confirms recovery with one charge spent")
 	for setting in saved:state.set_setting(setting,saved[setting])
 	root.size=old_size;scenes.fade_duration=old_fade
+	root.get_node("AudioManager").stop_dialogue()
+	await create_timer(.1).timeout
+	if current_scene != null:
+		current_scene.feedback.reset_state()
+		current_scene.queue_free()
+	await settle()
+	await create_timer(.3).timeout
 	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures}));quit(0 if failures.is_empty() else 1)

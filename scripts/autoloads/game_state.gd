@@ -28,7 +28,7 @@ var _in_emergency := false
 const SETTINGS_PATH := "user://museum-settings.cfg"
 const AUDIO_PATH := "user://combat-audio.cfg"
 const HUD_PATH := "user://combat-hud.cfg"
-var _preferences := {"sound": true, "volume": 0.8, "fullscreen": false, "tutorial": true, "hud": 2}
+var _preferences := {"sound": true, "volume": 0.8, "voice_volume": 0.9, "fullscreen": false, "tutorial": true, "hud": 2}
 var _sync_time := 0.0
 var _applied_scene_id := 0
 
@@ -206,6 +206,7 @@ func reload_preferences() -> void:
 	var config := ConfigFile.new()
 	if config.load(SETTINGS_PATH) == OK:
 		_preferences.volume = clampf(float(config.get_value("settings", "volume", 0.8)), 0, 1)
+		_preferences.voice_volume = clampf(float(config.get_value("settings", "voice_volume", 0.9)), 0, 1)
 		_preferences.fullscreen = bool(config.get_value("settings", "fullscreen", false))
 		_preferences.tutorial = bool(config.get_value("settings", "tutorial", true))
 	config = ConfigFile.new()
@@ -219,7 +220,7 @@ func reload_preferences() -> void:
 func set_setting(key: String, value: Variant) -> bool:
 	if not _preferences.has(key):
 		return false
-	if key == "volume":
+	if key in ["volume", "voice_volume"]:
 		value = clampf(float(value), 0, 1)
 	elif key == "hud":
 		value = clampi(int(value), 0, 2)
@@ -258,6 +259,9 @@ func _component(name: StringName) -> Node:
 func apply_preferences(feedback: Node = null, hud: Node = null) -> void:
 	AudioServer.set_bus_mute(0, not _preferences.sound)
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(0.0001, _preferences.volume)))
+	var voice_bus := AudioServer.get_bus_index(&"Voice")
+	if voice_bus >= 0:
+		AudioServer.set_bus_volume_db(voice_bus, linear_to_db(maxf(.0001, _preferences.voice_volume)))
 	if DisplayServer.get_name() != "headless":
 		var desired := DisplayServer.WINDOW_MODE_FULLSCREEN if _preferences.fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 		if DisplayServer.window_get_mode() != desired:

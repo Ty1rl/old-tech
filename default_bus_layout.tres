@@ -22,3 +22,6 @@ bus/3/volume_db = 0.0
 bus/4/name = &"Music"
 bus/4/send = &"World"
 bus/4/volume_db = 0.0
+bus/5/name = &"Voice"
+bus/5/send = &"Master"
+bus/5/volume_db = 0.0

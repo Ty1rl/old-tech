@@ -68,3 +68,16 @@ Do not emit these from restore/preview/snapshots.
 Listen to state exports/round-p-a/weapon-AB.wav (before0..22s,after23..45s) and
 music-AB.wav (before0..8s,after9..17s); comparison-index.json lists actions;
 Dummy-driver checks validate content/routing/lifecycle, not subjective sound quality.
+
+ROUND Q — SUPPLIED RECORDINGS AND PLAYABLE DIALOGUE
+22 Matt-supplied MP3 effects in combat/supplied override matching generated WAVs.
+bake_palette.py preserves these overrides when rebuilding. Their source bytes are
+unchanged;native MP3 import metadata enables the seven repeating textures.
+Five new offline-generated fallbacks cover emergency lock,low-time motor and
+spin/connect/trace repair touches. Other missing creature/UI/repair confirmations
+retain the existing generated palette. No runtime synthesis or external service.
+Speech belongs to the existing AudioManager autoload;CombatFeedback still owns
+world effects/music. Voices map through voice/library.tres and voice/EVENTS.tsv.
+Low time shares the existing clock player,keeping 16 world native players bounded.
+Emergency activation is a responsive cue and survives world freeze.
+The Linux playtest preset excludes prototype checks and preview/sampler content.

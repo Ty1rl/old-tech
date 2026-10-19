@@ -35,7 +35,14 @@ func run() -> void:
 	tc.begin_attempt()
 	var panel: WeaponRepair = scenes.push_popup(&"Repair", {"arena": arena, "equipment": gear, "tool": &"cone", "time_controller": tc})
 	await frames(5)
+	var before_click := gui_pos(panel, panel.route[0])
+	var before_route := panel.route.duplicate()
+	var before_model := panel.viewport_container.get_global_rect()
 	mouse_button(panel, panel.route[0], true)
+	if gui_pos(panel, panel.route[0]).distance_to(before_click) >= .01:
+		print("click_route_before=", before_route, " after=", panel.route, " model_before=", before_model, " after=", panel.viewport_container.get_global_rect())
+	expect(gui_pos(panel, panel.route[0]).distance_to(before_click) < .01, "First mouse press does not move the trace target")
+	expect(panel.viewport_container.get_global_rect().is_equal_approx(before_model), "First mouse press does not move the weapon backdrop")
 	expect(panel.dragging, "Trace begins before layout stability check")
 	var target := gui_pos(panel, panel.route[0])
 	var model := panel.viewport_container.get_global_rect()
@@ -53,6 +60,30 @@ func run() -> void:
 	expect(gui_pos(panel, panel.route[0]).distance_to(target) < .01, "Shortening feedback does not move an active trace target")
 	mouse_button(panel, panel.route[0], false)
 	scenes.close_popup(&"Repair")
+	for view_size: Vector2i in [Vector2i(1280,800), Vector2i(960,600)]:
+		root.size = view_size
+		await frames(3)
+		for tool: StringName in [&"ring", &"beam", &"cone"]:
+			gear.reset_state()
+			var spec := Gestures.tool_spec(tool)
+			var trace_step := 0
+			for stage in 4:
+				if spec.operations[Gestures.operation_index_for_stage(stage)].kind == &"trace":
+					trace_step = stage
+					break
+			gear.spend(tool, gear.capacity(tool) * (1.0 - (float(trace_step) + .4) / 4.0))
+			panel = scenes.push_popup(&"Repair", {"arena":arena,"equipment":gear,"tool":tool,"time_controller":tc})
+			await frames(5)
+			panel._start_switch_transition()
+			var first_point := gui_pos(panel, panel.route[0])
+			var weapon_rect := panel.viewport_container.get_global_rect()
+			mouse_button(panel, panel.route[0], true)
+			expect(panel.dragging and gui_pos(panel,panel.route[0]).distance_to(first_point) < .01, "%s trace stays at the clicked point at %s" % [tool,view_size])
+			await frames(3)
+			expect(gui_pos(panel,panel.route[0]).distance_to(first_point) < .01 and panel.viewport_container.get_global_rect().is_equal_approx(weapon_rect), "%s model and trace stay fixed during tool fade at %s" % [tool,view_size])
+			mouse_button(panel,panel.route[0],false)
+			scenes.close_popup(&"Repair")
+			await frames(2)
 	root.get_node("AudioManager").stop_dialogue()
 	root.get_node("AudioManager").set_music_context(&"intro")
 	call_group(&"world_audio", &"reset_state")

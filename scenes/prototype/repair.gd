@@ -112,7 +112,6 @@ var _stage_hint_phase := 0.0
 var _stage_hint_passes := 0.0
 var _learned_gestures: Dictionary = {}
 var _switch_transition_alpha := 1.0
-var _switch_transition_offset := Vector2.ZERO
 var _last_emitted_tool: StringName = &""
 var _last_emitted_stage: int = -99
 
@@ -360,16 +359,13 @@ func _start_switch_transition() -> void:
 		_snap_switch_transition()
 		return
 	_switch_transition_alpha = 0.55
-	_switch_transition_offset = Vector2(12.0, 0.0)
 	set_process(true)
 
 
 func _snap_switch_transition() -> void:
 	_switch_transition_alpha = 1.0
-	_switch_transition_offset = Vector2.ZERO
 	if viewport_container != null:
 		viewport_container.modulate.a = 1.0
-		viewport_container.position = _board_offset()
 
 
 func _find_arena() -> Node:
@@ -458,6 +454,8 @@ func _ready() -> void:
 				sibling.color = Color.TRANSPARENT
 	if not board.resized.is_connected(_sync_tool_canvas):
 		board.resized.connect(_sync_tool_canvas)
+	if not sub_viewport.size_changed.is_connected(_on_preview_size_changed):
+		sub_viewport.size_changed.connect(_on_preview_size_changed)
 	if not board.gui_input.is_connected(_on_board_input):
 		board.gui_input.connect(_on_board_input)
 	if not overlay.draw.is_connected(_draw_overlay):
@@ -497,12 +495,10 @@ func _process(delta: float) -> void:
 		else:
 			_completion_flash_until_usec = 0
 			_completion_flash_op = {}
-	if not _dragging and (_switch_transition_alpha < 0.999 or _switch_transition_offset.length() > 0.2):
+	if not _dragging and _switch_transition_alpha < 0.999:
 		_switch_transition_alpha = move_toward(_switch_transition_alpha, 1.0, delta * 5.5)
-		_switch_transition_offset = _switch_transition_offset.move_toward(Vector2.ZERO, delta * 130.0)
 		if viewport_container != null:
 			viewport_container.modulate.a = _switch_transition_alpha
-			viewport_container.position = _board_offset() + _switch_transition_offset
 		keep_processing = true
 	_queue_redraws()
 	if not keep_processing:
@@ -702,10 +698,16 @@ func _sync_tool_canvas() -> void:
 	var b_offset := _board_offset()
 	var b_scale := _board_scale()
 	viewport_container.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	viewport_container.position = b_offset + _switch_transition_offset
+	viewport_container.position = b_offset
 	viewport_container.size = BOARD * b_scale
 	_sync_condition_view()
 	_queue_redraws()
+
+
+func _on_preview_size_changed() -> void:
+	# Container layout updates the camera viewport after the panel is opened
+	# or resized. Project the targets then, before a player starts a gesture.
+	_refresh.call_deferred()
 
 
 func path_length(points: Array[Vector2]) -> float:
@@ -931,7 +933,6 @@ func _handle_spin_button(point: Vector2, pressed: bool) -> void:
 	if pressed:
 		if dragging:
 			return
-		_refresh()
 		if not Gestures.spin_can_start(active_op, point):
 			feedback.text = "Grab the spin dial or drag around it. Nothing was lost."
 			return
@@ -1022,7 +1023,6 @@ func _handle_trace_button(point: Vector2, pressed: bool) -> void:
 	if pressed:
 		if dragging:
 			return
-		_refresh()
 		if route.is_empty() or point.distance_to(route[0]) > CONTACT:
 			feedback.text = "Begin inside contact 1. Nothing was lost."
 			return

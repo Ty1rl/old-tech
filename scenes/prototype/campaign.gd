@@ -1546,6 +1546,9 @@ func _spawn_practice() -> void:
 			kind = &"yellow"
 		elif lesson in [&"shot", &"charge"]:
 			kind = &"yellow"
+			# Prefer the upper entrance for shooting practice. The formation
+			# planner still finds another safe spot if that side is obstructed.
+			rep_seed -= posmod(rep_seed, 4)
 		elif lesson == &"heat":
 			kind = &"orange"
 		elif lesson in [&"pair", &"loop", &"zigzag"]:

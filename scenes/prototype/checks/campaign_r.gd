@@ -527,6 +527,22 @@ func _run() -> void:
 	)
 	_tick(0.5)
 	expect(arena.mode == &"practice" and arena.lesson == &"shot", "Wave 1 begins yellow shot lesson after time_meter")
+	# Shooting practice should be above the player, where the camera shows it.
+	arena.lesson_demo.cancel()
+	audio_mgr.stop_dialogue()
+	arena.tutorial.dismiss()
+	for shooting_lesson: StringName in [&"shot", &"charge"]:
+		arena.lesson = shooting_lesson
+		for rep in 2:
+			arena._practice_stage = &"stationary"
+			arena._stationary_done = rep
+			arena._spawn_practice()
+			var readable: bool = not arena.specimens.is_empty()
+			var player_pixel: Vector2 = arena.player.camera.unproject_position(arena.player.global_position)
+			for specimen: Node3D in arena.specimens:
+				var target_pixel: Vector2 = arena.player.camera.unproject_position(specimen.global_position + Vector3.UP * 1.5)
+				readable = readable and target_pixel.y < player_pixel.y and root.get_visible_rect().has_point(target_pixel)
+			expect(readable, "%s practice %d spawns in the visible upper part of the room" % [shooting_lesson,rep])
 
 	# Verify second acquired item (Tool 3 in Room 0 Wave 3) plays tutorial.tool_switch BEFORE heat explanation
 	arena.debug_start(0, 2)

@@ -155,7 +155,7 @@ func _draw() -> void:
 	if not repairing and not (is_instance_valid(time_controller) and time_controller.emergency_active):
 		_draw_centered(caption, center + Vector2(0, 125) * _scale, 12, Color("ece4d2", .8))
 	if charging:
-		var pointer := (get_viewport().get_mouse_position() + Vector2(0, -24 * _scale)).clamp(Vector2.ONE * 16 * _scale, size - Vector2.ONE * 16 * _scale)
+		var pointer := get_local_mouse_position()
 		draw_arc(pointer, 12 * _scale, -PI * .5, PI * 1.5, 32, Color(COLORS[1], .2), 3 * _scale, true)
 		draw_arc(pointer, 12 * _scale, -PI * .5, -PI * .5 + TAU * charge_fraction, 32, COLORS[1], 3 * _scale, true)
 

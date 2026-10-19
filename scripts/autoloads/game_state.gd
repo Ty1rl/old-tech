@@ -259,7 +259,9 @@ func _component(name: StringName) -> Node:
 # Optional explicit adapters let the campaign pass its real feedback/HUD nodes.
 func apply_preferences(feedback: Node = null, hud: Node = null) -> void:
 	AudioServer.set_bus_mute(0, not _preferences.sound)
-	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(0.0001, _preferences.volume)))
+	# Keep the quieter Web mix across both browser audio backends.
+	var headroom_db := -6.0 if OS.has_feature("web") else 0.0
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(0.0001, _preferences.volume)) + headroom_db)
 	var voice_bus := AudioServer.get_bus_index(&"Voice")
 	if voice_bus >= 0:
 		AudioServer.set_bus_volume_db(voice_bus, linear_to_db(maxf(.0001, _preferences.voice_volume)))

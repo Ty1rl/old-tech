@@ -60,6 +60,16 @@ var _exit_blocked_by_held_forward := false
 var _forward_held_at_wave_clear := false
 var _w_key_held := false
 var _last_music_context: StringName = &""
+var _time_meter_elapsed := 0.0
+var _time_meter_hit_applied := false
+var _time_meter_recharged := false
+var _time_meter_min_meter := 100.0
+var _time_meter_max_after_hit := 0.0
+var _time_meter_sync_steps := 0
+var _time_meter_last_frame := -1
+
+const PICKUP_WALK_LINE := "Walk towards the new item."
+const TIME_METER_LINE := "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge."
 
 
 static func practice_quotas_for(id: StringName) -> Vector2i:
@@ -109,7 +119,12 @@ func _is_instruction_speech_busy() -> bool:
 
 func _on_audio_speech_finished(_event: StringName, _interrupted: bool) -> void:
 	if mode == &"practice" and _practice_stage == &"await_speech" and not _is_instruction_speech_busy():
-		_start_stationary_practice()
+		if lesson == &"time_meter":
+			_finish_time_meter_lesson(false)
+		else:
+			_start_stationary_practice()
+	elif mode == &"practice" and _practice_stage == &"time_meter_demo" and _time_meter_recharged and not _is_instruction_speech_busy():
+		_finish_time_meter_lesson(false)
 
 
 func _is_forward_move_held() -> bool:
@@ -234,6 +249,8 @@ func _ready() -> void:
 	tutorial.setup(player.camera)
 	if not tutorial.blocking_changed.is_connected(_on_teaching_block):
 		tutorial.blocking_changed.connect(_on_teaching_block)
+	if tutorial.has_signal("skip_requested") and not tutorial.is_connected("skip_requested", _on_tutorial_skip_requested):
+		tutorial.connect("skip_requested", _on_tutorial_skip_requested)
 	if not player.wounded.is_connected(_on_wounded):
 		player.wounded.connect(_on_wounded)
 	if not weapons.combat_event.is_connected(_on_run_event):
@@ -281,6 +298,33 @@ func _preferred_tool(preferred: int = 2) -> int:
 	if not acquired.is_empty():
 		return acquired[0]
 	return 2
+
+
+func _pickup_spawn_position() -> Vector3:
+	var base_pos := Vector3(room.get("player_spawn", Vector3.ZERO)) + Vector3(0.0, 0.0, -3.0)
+	if not is_instance_valid(player):
+		return base_pos
+	var p2 := Vector2(player.position.x, player.position.z)
+	var b2 := Vector2(base_pos.x, base_pos.z)
+	if p2.distance_to(b2) >= 2.6:
+		return base_pos
+	var step_z := -3.2 if player.position.z > -9.5 else 3.2
+	return Vector3(
+		clampf(player.position.x, -8.0, 8.0),
+		base_pos.y,
+		clampf(player.position.z + step_z, -12.5, 11.5)
+	)
+
+
+func _enter_pickup_mode(tool: int, speak_cue: bool = true) -> void:
+	mode = &"pickup"
+	if tutorial != null:
+		tutorial.dismiss()
+	museum.show_tool_pickup(tool, _pickup_spawn_position())
+	run_hint.text = PICKUP_WALK_LINE
+	if speak_cue and AudioManager != null:
+		AudioManager.say(&"tutorial.pickup", 3, false)
+	_update_run_hud()
 
 
 func _reset_room_history() -> void:
@@ -351,7 +395,7 @@ func enter_room(index: int) -> void:
 	mode = &"title"
 	timer = 2.0
 	title.text = "%d / %d · %s" % [room_index + 1, definitions.size(), room.title]
-	run_hint.text = "WASD move · mouse aim · collect the lit equipment exhibit."
+	run_hint.text = PICKUP_WALK_LINE
 	_result_shown = false
 	_set_music_context(&"regular_combat")
 	_sync_training_protection()
@@ -458,6 +502,45 @@ func _is_slow_held() -> bool:
 	return super._is_slow_held() and not tutorial.blocking and mode in [&"pickup", &"practice", &"pressure", &"recovery", &"exit"]
 
 
+func _on_tutorial_skip_requested(id: StringName) -> void:
+	if mode != &"practice":
+		return
+	var target_id := id if not id.is_empty() else lesson
+	if target_id == &"time_meter" or lesson == &"time_meter":
+		if lesson_demo != null and lesson_demo.active:
+			lesson_demo.cancel()
+		_finish_time_meter_lesson(true)
+		return
+	if target_id == &"repair" or lesson == &"repair":
+		_skip_repair_lesson()
+		return
+
+
+func _skip_repair_lesson() -> void:
+	if _is_instruction_speech_busy() or (AudioManager != null and String(AudioManager.get("current_event")).begins_with("tutorial.repair")):
+		AudioManager.stop_dialogue()
+	tutorial.learned[&"repair"] = true
+	if lesson_demo != null:
+		lesson_demo.mark_learned(&"repair")
+	tutorial.dismiss()
+	lesson = &""
+	_practice_stage = &""
+	_sync_training_protection()
+	_apply_time_capabilities()
+	equipment.restore_tool(&"beam", 1.0)
+	equipment.restore_tool(&"cone", 1.0)
+	if SceneManager.has_popup(&"Repair"):
+		_close_repair()
+	weapons.cancel_input()
+	weapons.mouse_held = false
+	weapons.require_fresh_press = true
+	if _wave_has_post_lesson_pressure():
+		_seed_room_checkpoint()
+		_start_pressure()
+	else:
+		_complete_teaching_wave("Tools restored · next exhibit group approaching.")
+
+
 func _on_teaching_block(blocked: bool) -> void:
 	if lesson_demo != null and lesson_demo.active:
 		return
@@ -474,12 +557,16 @@ func _on_teaching_block(blocked: bool) -> void:
 		elif lesson == &"rewind":
 			_rewind_unlocked = true
 			_apply_time_capabilities()
+		elif lesson == &"time_meter":
+			AudioManager.stop_dialogue()
+			_finish_time_meter_lesson(true)
+			return
 		if _practice_stage == &"await_speech":
 			AudioManager.stop_dialogue()
 			_start_stationary_practice()
 			return
-		# The explanation's click has been consumed; the next attack needs no re-arm.
-		weapons.require_fresh_press = false
+		# The explanation's click has been consumed; the next attack needs no re-arm unless mouse is still held.
+		weapons.require_fresh_press = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 		time_controller.slow_requested = _is_slow_held()
 		aim = floor_aim(get_viewport().get_mouse_position())
 
@@ -553,9 +640,20 @@ func _physics_process(delta: float) -> void:
 		feedback.step(delta, delta * _world_scale(), _world_scale(), false, 0.0, weapons, equipment)
 		_update_run_hud()
 		return
+	if mode == &"practice" and _practice_stage == &"time_meter_demo":
+		if tutorial.is_learned(&"time_meter"):
+			_finish_time_meter_lesson(true)
+			return
+		_step_time_meter_demo(delta)
+		feedback.step(delta, delta * _world_scale(), _world_scale(), false, 0.0, weapons, equipment)
+		_update_run_hud()
+		return
 	if mode == &"practice" and _practice_stage == &"await_speech":
 		if not _is_instruction_speech_busy():
-			_start_stationary_practice()
+			if lesson == &"time_meter":
+				_finish_time_meter_lesson(false)
+			else:
+				_start_stationary_practice()
 		else:
 			feedback.step(delta, delta * _world_scale(), _world_scale(), false, 0.0, weapons, equipment)
 			_update_run_hud()
@@ -596,9 +694,14 @@ func _physics_process(delta: float) -> void:
 				acquired.append(tool)
 			weapons.set_loadout(acquired, _preferred_tool(tool))
 			museum.clear_tool_pickup()
+			if AudioManager != null and String(AudioManager.get("current_event")) == "tutorial.pickup":
+				AudioManager.stop_dialogue()
 			_spawn_wave()
 	elif mode == &"practice":
 		if tutorial.is_learned(lesson):
+			if lesson == &"time_meter":
+				_finish_time_meter_lesson(true)
+				return
 			tutorial.learned[lesson] = true
 			if lesson_demo != null:
 				lesson_demo.mark_learned(lesson)
@@ -815,10 +918,8 @@ func _begin_wave() -> void:
 		_set_music_context(&"regular_combat")
 	var tool := int(wave.get("acquire", 0))
 	if tool > 0 and tool <= 3 and not tool in acquired:
-		mode = &"pickup"
-		museum.show_tool_pickup(tool, Vector3(room.player_spawn) + Vector3(0, 0, -3.0))
+		_enter_pickup_mode(tool, true)
 		_seed_room_checkpoint()
-		run_hint.text = "New equipment exhibit · walk into its colored light to collect it."
 	elif bool(wave.get("boss", false)) and _debug_boss_phase < 0:
 		weapons.cancel_input()
 		weapons.mouse_held = false
@@ -838,6 +939,7 @@ func _begin_wave() -> void:
 
 func _desired_tool_for_lesson(id: StringName) -> int:
 	return int({
+		&"time_meter": 2,
 		&"shot": 2,
 		&"charge": 2,
 		&"heat": 3,
@@ -905,6 +1007,15 @@ func _spawn_wave() -> void:
 	_moving_done = 0
 	mode = &"practice"
 	weapons.select_tool(_preferred_tool(_desired_tool_for_lesson(lesson)))
+	if lesson == &"time_meter":
+		_practice_stage = &"demo"
+		AudioManager.lesson(&"time_meter")
+		run_hint.text = ""
+		if lesson_demo != null and lesson_demo.begin(self, &"time_meter", tutorial):
+			_update_run_hud()
+			return
+		_begin_builtin_time_meter_demo()
+		return
 	if lesson == &"repair":
 		_practice_stage = &"repair"
 		AudioManager.lesson(&"repair")
@@ -935,8 +1046,130 @@ func _spawn_wave() -> void:
 	_start_stationary_practice()
 
 
+func _begin_builtin_time_meter_demo() -> void:
+	_practice_stage = &"time_meter_demo"
+	_time_meter_elapsed = 0.0
+	_time_meter_hit_applied = false
+	_time_meter_recharged = false
+	_time_meter_sync_steps = 0
+	_time_meter_last_frame = Engine.get_process_frames()
+	director.clear()
+	specimens.clear()
+	_specimen_ids.clear()
+	if time_controller != null:
+		time_controller.slow_requested = false
+		time_controller.begin_attempt()
+		_time_meter_min_meter = time_controller.meter
+		_time_meter_max_after_hit = 0.0
+	var demo_pos := player.position + Vector3(0.0, 0.0, -2.5)
+	var demo_enemy: Node3D = director.spawn(&"yellow", demo_pos)
+	if is_instance_valid(demo_enemy):
+		specimens.append(demo_enemy)
+		_specimen_ids.append(demo_enemy.rewind_id)
+		_make_specimen_safe(demo_enemy)
+		_set_enemy_instruction_visible(demo_enemy, false)
+	if is_instance_valid(tutorial):
+		var target_pts: Array[Vector3] = _targets()
+		if not tutorial.show_known_lesson(&"time_meter", target_pts):
+			tutorial.show_lesson(
+				&"time_meter",
+				"Watch your time reserve",
+				TIME_METER_LINE,
+				target_pts
+			)
+			tutorial.set_phase_accent(ToolStyle.CLOCK, "TIME RESERVE · DRAIN & RECHARGE")
+		if tutorial.has_method("set_demo_busy"):
+			tutorial.call("set_demo_busy", true)
+	_update_run_hud()
+
+
+func _step_time_meter_demo(delta: float) -> void:
+	var dt := clampf(delta, 0.0, 0.05)
+	if dt <= 0.0:
+		return
+	var cur_frame := Engine.get_process_frames()
+	if cur_frame == _time_meter_last_frame:
+		_time_meter_sync_steps += 1
+	else:
+		_time_meter_last_frame = cur_frame
+		_time_meter_sync_steps = 0
+	_time_meter_elapsed += dt
+	if not specimens.is_empty() and is_instance_valid(specimens[0]):
+		var enemy: Node3D = specimens[0]
+		enemy.contact_damage = 0.0
+		enemy.move_speed = 0.0
+		if _time_meter_elapsed < 0.35:
+			var t := clampf(_time_meter_elapsed / 0.35, 0.0, 1.0)
+			enemy.position = player.position + Vector3(0.0, 0.0, lerpf(-2.5, -1.05, t))
+		else:
+			var t_back := clampf((_time_meter_elapsed - 0.35) / 0.45, 0.0, 1.0)
+			enemy.position = player.position + Vector3(0.0, 0.0, lerpf(-1.05, -2.8, t_back))
+	if not _time_meter_hit_applied and _time_meter_elapsed >= 0.35:
+		_time_meter_hit_applied = true
+		if time_controller != null:
+			time_controller.apply_hit(34.0)
+			_time_meter_min_meter = minf(_time_meter_min_meter, time_controller.meter)
+			_time_meter_max_after_hit = time_controller.meter
+		_damage_flash = 0.35
+	elif _time_meter_hit_applied and time_controller != null:
+		time_controller.slow_requested = false
+		time_controller.advance(dt * 2.4)
+		_time_meter_max_after_hit = maxf(_time_meter_max_after_hit, time_controller.meter)
+		if _time_meter_max_after_hit >= _time_meter_min_meter + 12.0 and _time_meter_elapsed >= 1.4:
+			_time_meter_recharged = true
+			if is_instance_valid(tutorial) and tutorial.has_method("set_demo_busy"):
+				tutorial.call("set_demo_busy", false)
+	if status_hud != null and is_instance_valid(player) and is_instance_valid(weapons) and is_instance_valid(equipment):
+		status_hud.update_status(player, weapons, equipment)
+	if _time_meter_recharged:
+		if _time_meter_sync_steps >= 90 and AudioManager != null and AudioManager.has_method("stop_dialogue"):
+			AudioManager.stop_dialogue()
+		if not _is_instruction_speech_busy():
+			_finish_time_meter_lesson(false)
+
+
+func _finish_time_meter_lesson(skipped: bool = false) -> void:
+	if skipped and AudioManager != null:
+		AudioManager.stop_dialogue()
+	if lesson_demo != null and lesson_demo.active:
+		lesson_demo.cancel()
+	director.clear()
+	specimens.clear()
+	_specimen_ids.clear()
+	if is_instance_valid(player) and "max_health" in player:
+		player.health = player.max_health
+	if time_controller != null:
+		time_controller.slow_requested = false
+		time_controller.begin_attempt()
+	if is_instance_valid(tutorial):
+		tutorial.learned[&"time_meter"] = true
+		if tutorial.active_id == &"time_meter":
+			if tutorial.blocking:
+				tutorial.request_practice()
+			tutorial.complete_lesson(&"time_meter")
+		else:
+			tutorial.dismiss()
+	if lesson_demo != null:
+		lesson_demo.mark_learned(&"time_meter")
+	weapons.cancel_input()
+	weapons.mouse_held = false
+	if skipped or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		weapons.require_fresh_press = true
+	lesson = &""
+	_practice_stage = &""
+	_complete_teaching_wave("Time reserve restored · next exhibit ready.")
+
+
 func _on_lesson_demo_ready_for_practice(id: StringName) -> void:
 	if mode != &"practice" or lesson != id:
+		return
+	if id == &"time_meter":
+		var skipped_tm := lesson_demo != null and bool(lesson_demo.last_summary.get("skipped", false))
+		if skipped_tm or not _is_instruction_speech_busy():
+			_finish_time_meter_lesson(skipped_tm)
+		else:
+			_practice_stage = &"await_speech"
+			_update_run_hud()
 		return
 	if tutorial.is_learned(id):
 		if id == &"slow":
@@ -1015,7 +1248,7 @@ func _spawn_practice() -> void:
 		equipment.spend(&"beam", equipment.capacity(&"beam"))
 		weapons.select_tool(2)
 		return
-	if lesson == &"rewind":
+	if lesson in [&"rewind", &"time_meter"]:
 		return
 	for slot in acquired:
 		var tool_name: StringName = TOOL_IDS[clampi(int(slot) - 1, 0, TOOL_IDS.size() - 1)]
@@ -1042,6 +1275,17 @@ func _spawn_practice() -> void:
 			kind = lesson
 		var count := 3 if lesson == &"charge" else 1
 		specimens.assign(director.spawn_formation(&"line" if lesson == &"charge" else &"curve", _repeat(kind, count), player, rep_seed))
+		if lesson == &"heat" and not specimens.is_empty() and is_instance_valid(specimens[0]):
+			var heat_enemy: Node3D = specimens[0]
+			var to_enemy := heat_enemy.position - player.position
+			to_enemy.y = 0.0
+			var dir := to_enemy.normalized() if to_enemy.length() > 0.05 else Vector3.FORWARD
+			var target_dist := 2.8 if _practice_stage == &"stationary" else 4.0
+			heat_enemy.position = Vector3(
+				clampf(player.position.x + dir.x * target_dist, -14.0, 14.0),
+				heat_enemy.position.y,
+				clampf(player.position.z + dir.z * target_dist, -14.0, 14.0)
+			)
 	for enemy in specimens:
 		_specimen_ids.append(enemy.rewind_id)
 		_make_specimen_safe(enemy)
@@ -1084,7 +1328,17 @@ func _maintain_practice_specimens(_world_delta: float) -> void:
 				continue
 			enemy.contact_damage = 0.0
 			enemy.move_speed = 0.0
-			if "knockback_vel" in enemy:
+			if lesson == &"heat":
+				var offset := enemy.position - player.position
+				offset.y = 0.0
+				if offset.length() > 4.65:
+					var dir := offset.normalized()
+					enemy.position = Vector3(
+						player.position.x + dir.x * 4.65,
+						enemy.position.y,
+						player.position.z + dir.z * 4.65
+					)
+			elif "knockback_vel" in enemy:
 				enemy.knockback_vel = Vector3.ZERO
 	elif _practice_stage == &"moving":
 		var line_dir := Vector3.FORWARD
@@ -1101,8 +1355,6 @@ func _maintain_practice_specimens(_world_delta: float) -> void:
 			var base_speed := float(Tuning.ENEMIES.get(String(enemy.kind), {}).get("speed", 2.2))
 			if enemy.move_speed < 1.2:
 				enemy.move_speed = maxf(1.5, base_speed * 0.72)
-			if lesson == &"heat" and "knockback_vel" in enemy:
-				enemy.knockback_vel = Vector3.ZERO
 			if lesson == &"charge":
 				var offset := enemy.position - player.position
 				offset.y = 0.0
@@ -1331,7 +1583,7 @@ func _step_pressure(world_delta: float) -> void:
 
 
 func _needs_combat_target() -> bool:
-	return lesson != &"repair" and lesson != &"rewind"
+	return not (lesson in [&"repair", &"rewind", &"time_meter"])
 
 
 func _alive_specimens() -> int:
@@ -1354,6 +1606,8 @@ func _observe_specimens() -> void:
 
 
 func _lesson_succeeded() -> bool:
+	if lesson == &"time_meter":
+		return _time_meter_recharged
 	if lesson == &"repair":
 		return _repaired and equipment.is_full(&"beam")
 	if lesson == &"rewind":
@@ -1556,8 +1810,7 @@ func _apply_campaign_snapshot(data: Dictionary, preview_only: bool = false) -> v
 				museum.set_exit_open(false)
 				var wave_tool := int(waves[wave_index].get("acquire", 0)) if wave_index >= 0 and wave_index < waves.size() else 0
 				if wave_tool > 0 and not (wave_tool in acquired):
-					mode = &"pickup"
-					museum.show_tool_pickup(wave_tool, Vector3(room.player_spawn) + Vector3(0, 0, -3.0))
+					_enter_pickup_mode(wave_tool, false)
 				else:
 					museum.clear_tool_pickup()
 					_spawn_wave()

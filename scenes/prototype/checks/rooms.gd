@@ -129,7 +129,7 @@ func run() -> void:
 
 	var expected_room_ids: Array[StringName] = [&"gallery", &"collections", &"restoration", &"burial"]
 	var expected_lessons: Array[StringName] = [
-		&"cut", &"heat", &"shot", &"slow", &"repair",
+		&"time_meter", &"cut", &"heat", &"shot", &"slow", &"repair",
 		&"charge", &"opening", &"pair", &"loop", &"zigzag", &"rewind"
 	]
 	var valid_enemies: Array[StringName] = [

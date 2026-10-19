@@ -30,6 +30,13 @@ func pattern(enemy: Node3D) -> void:
 	if enemy.health>0:shot(enemy)
 func practice() -> void:
 	var lesson:StringName=arena.lesson
+	if lesson==&"time_meter":
+		var tm_ticks:=0
+		while arena.mode==&"practice" and tm_ticks<240:
+			arena._physics_process(1.0/30.0)
+			tm_ticks+=1
+		expect(arena.tutorial.is_learned(&"time_meter") and is_equal_approx(arena.time_controller.meter,arena.time_controller.capacity) and arena.time_controller.charges_remaining==3,"Staged time_meter lesson completes and restores full reserve before shot")
+		return
 	if arena.lesson_demo!=null and arena.lesson_demo.active:
 		var demo_ticks:=0
 		while arena.lesson_demo.active and demo_ticks<240:

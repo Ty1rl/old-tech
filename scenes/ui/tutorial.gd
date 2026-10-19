@@ -32,6 +32,8 @@ const LESSONS := {
 
 var blocking := false
 var practicing := false
+var demo_busy := false
+var waiting_for_speech := false
 var active_id: StringName = &""
 var learned: Dictionary = {}
 var world_points: Array[Vector3] = []
@@ -47,9 +49,14 @@ var body_label: Label
 var state_label: Label
 var practice_button: Button
 var accent: Color = BLUE
+var audio_manager_override: Node = null
 var _subtitle_text := ""
 var _layout_size := Vector2(-1, -1)
 var _layout_dirty := true
+var _held_keys_while_blocked: Dictionary = {}
+var _held_lmb_while_blocked := false
+var _suppress_release_after_dismiss := false
+var _bound_audio: Node = null
 
 
 func _ready() -> void:
@@ -62,7 +69,110 @@ func _ready() -> void:
 		resized.connect(_on_resized)
 	if not GameState.settings_changed.is_connected(_on_settings_changed):
 		GameState.settings_changed.connect(_on_settings_changed)
+	_bind_audio_signals()
 	hide()
+
+
+func _exit_tree() -> void:
+	_unbind_audio_signals()
+
+
+func _get_audio_manager() -> Node:
+	if is_instance_valid(audio_manager_override):
+		return audio_manager_override
+	var tree := Engine.get_main_loop() as SceneTree
+	return tree.root.get_node_or_null("AudioManager") if tree != null and tree.root != null else null
+
+
+func _bind_audio_signals() -> void:
+	var am := _get_audio_manager()
+	if am == _bound_audio and is_instance_valid(_bound_audio):
+		return
+	_unbind_audio_signals()
+	_bound_audio = am
+	if is_instance_valid(_bound_audio):
+		if _bound_audio.has_signal("speech_finished") and not _bound_audio.is_connected("speech_finished", _on_audio_speech_finished):
+			_bound_audio.connect("speech_finished", _on_audio_speech_finished)
+		var voice_node := _bound_audio.get_node_or_null("Voice") as AudioStreamPlayer
+		if voice_node != null and not voice_node.finished.is_connected(_on_voice_player_finished):
+			voice_node.finished.connect(_on_voice_player_finished)
+
+
+func _unbind_audio_signals() -> void:
+	if is_instance_valid(_bound_audio):
+		if _bound_audio.has_signal("speech_finished") and _bound_audio.is_connected("speech_finished", _on_audio_speech_finished):
+			_bound_audio.disconnect("speech_finished", _on_audio_speech_finished)
+		var voice_node := _bound_audio.get_node_or_null("Voice") as AudioStreamPlayer
+		if voice_node != null and voice_node.finished.is_connected(_on_voice_player_finished):
+			voice_node.finished.disconnect(_on_voice_player_finished)
+	_bound_audio = null
+
+
+func _on_audio_speech_finished(_event: StringName, _interrupted: bool = false) -> void:
+	_update_practice_button_state()
+
+
+func _on_voice_player_finished() -> void:
+	_update_practice_button_state.call_deferred()
+
+
+func is_instruction_speech_busy() -> bool:
+	var am := _get_audio_manager()
+	if am == null or not is_instance_valid(am):
+		return false
+	if am.has_method("instruction_busy"):
+		return bool(am.call("instruction_busy"))
+	var prefs: Dictionary = GameState.preferences() if GameState != null and GameState.has_method("preferences") else {}
+	if not bool(prefs.get("sound", true)):
+		return false
+	if float(prefs.get("volume", 1.0)) <= 0.0001 or float(prefs.get("voice_volume", 1.0)) <= 0.0001:
+		return false
+	if AudioServer.get_bus_count() > 0 and AudioServer.is_bus_mute(0):
+		return false
+	var voice_bus := AudioServer.get_bus_index(&"Voice")
+	if voice_bus >= 0 and AudioServer.is_bus_mute(voice_bus):
+		return false
+	if am.get("library") == null:
+		return false
+	var voice_player := am.get_node_or_null("Voice") as AudioStreamPlayer
+	var cur_ev := String(am.get("current_event"))
+	if voice_player != null and voice_player.playing and voice_player.stream != null:
+		if cur_ev.begins_with("tutorial."):
+			return true
+		var q: Variant = am.get("_queue")
+		if q is Array:
+			for item in q:
+				if item is Dictionary and String(item.get("event", "")).begins_with("tutorial."):
+					return true
+	return false
+
+
+func set_demo_busy(value: bool) -> void:
+	if demo_busy == value and not waiting_for_speech:
+		return
+	demo_busy = value
+	if not value:
+		waiting_for_speech = false
+	_update_practice_button_state()
+	queue_redraw()
+
+
+func set_waiting_for_speech(value: bool) -> void:
+	if waiting_for_speech == value:
+		return
+	waiting_for_speech = value
+	_update_practice_button_state()
+	queue_redraw()
+
+
+func can_dismiss_normally() -> bool:
+	if not visible or active_id.is_empty() or not blocking:
+		return false
+	if SceneManager != null and SceneManager.has_popup():
+		return false
+	if GameState != null and GameState.is_paused():
+		return false
+	return not demo_busy and not is_instruction_speech_busy()
 
 
 func _ensure_authored_hierarchy() -> void:
@@ -82,8 +192,88 @@ func _ensure_authored_hierarchy() -> void:
 	practice_button = get_node_or_null("Card/Column/PracticeButton") as Button
 	if is_instance_valid(body_label):
 		body_label.modulate = UI.MUTED
-	if is_instance_valid(practice_button) and not practice_button.pressed.is_connected(request_practice):
-		practice_button.pressed.connect(request_practice)
+	if is_instance_valid(practice_button):
+		if practice_button.pressed.is_connected(request_practice):
+			practice_button.pressed.disconnect(request_practice)
+		if not practice_button.pressed.is_connected(_on_practice_button_pressed):
+			practice_button.pressed.connect(_on_practice_button_pressed)
+
+
+func _on_practice_button_pressed() -> void:
+	_try_user_dismiss(true)
+
+
+func _try_user_dismiss(from_mouse: bool = false) -> bool:
+	if not can_dismiss_normally():
+		return false
+	_suppress_release_after_dismiss = true
+	request_practice()
+	_apply_post_dismiss_carryover_guard(from_mouse)
+	return true
+
+
+func _apply_post_dismiss_carryover_guard(from_mouse: bool) -> void:
+	if not is_instance_valid(camera):
+		return
+	var player_node := camera.get_parent() as Node3D
+	if not is_instance_valid(player_node):
+		return
+	if player_node.has_method("reset_input"):
+		player_node.call("reset_input")
+	var arena_node := player_node.get_parent() as Node
+	if not is_instance_valid(arena_node):
+		return
+	arena_node.set("_space_action_held", false)
+	if from_mouse or _held_lmb_while_blocked or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		arena_node.set("_suppress_next_lmb_release", true)
+	var weapons_node := arena_node.get("weapons") as Node
+	if is_instance_valid(weapons_node):
+		if weapons_node.has_method("cancel_input"):
+			weapons_node.call("cancel_input")
+		weapons_node.set("mouse_held", false)
+		if from_mouse or _held_lmb_while_blocked or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			weapons_node.set("require_fresh_press", true)
+	var tc := arena_node.get("time_controller") as Node
+	if is_instance_valid(tc):
+		tc.set("slow_requested", false)
+
+
+func _update_practice_button_state() -> void:
+	if not is_instance_valid(practice_button):
+		return
+	if not blocking or practicing:
+		practice_button.release_focus()
+		practice_button.focus_mode = Control.FOCUS_NONE
+		practice_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		practice_button.disabled = true
+		practice_button.hide()
+		return
+	practice_button.show()
+	var speech_busy := is_instruction_speech_busy()
+	var busy := demo_busy or speech_busy
+	if busy:
+		practice_button.release_focus()
+		practice_button.disabled = true
+		practice_button.focus_mode = Control.FOCUS_NONE
+		practice_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		practice_button.text = "Listening..." if (waiting_for_speech or (not demo_busy and speech_busy)) else "Watch demo..."
+	else:
+		practice_button.disabled = false
+		practice_button.focus_mode = Control.FOCUS_ALL
+		practice_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		practice_button.text = "Try it"
+
+
+func _capture_initial_held_inputs() -> void:
+	_held_keys_while_blocked.clear()
+	_held_lmb_while_blocked = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	for code in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_E]:
+		if Input.is_physical_key_pressed(code):
+			_held_keys_while_blocked[code] = true
+	if InputMap.has_action(&"move_up") and Input.is_action_pressed(&"move_up"):
+		_held_keys_while_blocked[KEY_W] = true
+	if InputMap.has_action(&"slow_time") and Input.is_action_pressed(&"slow_time"):
+		_held_keys_while_blocked[KEY_SPACE] = true
 
 
 func _on_resized() -> void:
@@ -120,6 +310,11 @@ static func subtitle_for_lesson(id: StringName) -> String:
 
 func set_phase_accent(color: Color, subtitle: String = "") -> void:
 	accent = color
+	if color == BLUE and active_id in [&"cut", &"opening", &"loop", &"zigzag"]:
+		var g_id: StringName = &"cut" if active_id == &"opening" else active_id
+		ghost.assign(gesture_for(g_id))
+	elif color != BLUE and active_id in [&"cut", &"opening", &"loop", &"zigzag"]:
+		ghost.clear()
 	if is_instance_valid(state_label):
 		state_label.modulate = accent
 		if not subtitle.is_empty():
@@ -150,6 +345,7 @@ func show_known_lesson(id: StringName, targets: Array[Vector3]) -> bool:
 
 func show_lesson(id: StringName, title: String, text: String, targets: Array[Vector3], gesture: Array[Vector2] = []) -> void:
 	_ensure_authored_hierarchy()
+	_bind_audio_signals()
 	if is_learned(id) or id == active_id or not active_id.is_empty():
 		return
 	active_id = id
@@ -164,25 +360,22 @@ func show_lesson(id: StringName, title: String, text: String, targets: Array[Vec
 	_subtitle_text = subtitle_for_lesson(id)
 	state_label.modulate = accent
 	state_label.text = _subtitle_text
-	practice_button.focus_mode = Control.FOCUS_ALL
-	practice_button.mouse_filter = Control.MOUSE_FILTER_STOP
-	practice_button.show()
 	practicing = false
 	age = 0.0
+	_suppress_release_after_dismiss = false
+	_capture_initial_held_inputs()
 	_set_blocking(true)
+	_update_practice_button_state()
 	show()
 	_layout(true)
-	practice_button.grab_focus.call_deferred()
 
 
 func request_practice() -> void:
 	if active_id.is_empty() or not blocking or SceneManager.has_popup():
 		return
+	demo_busy = false
 	practicing = true
-	practice_button.release_focus()
-	practice_button.focus_mode = Control.FOCUS_NONE
-	practice_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	practice_button.hide()
+	_update_practice_button_state()
 	state_label.modulate = accent
 	state_label.text = _subtitle_text + " · YOUR TURN"
 	_set_blocking(false)
@@ -197,6 +390,9 @@ func complete_lesson(id: StringName) -> void:
 	learned[id] = true
 	active_id = &""
 	practicing = false
+	demo_busy = false
+	_held_keys_while_blocked.clear()
+	_held_lmb_while_blocked = false
 	_set_blocking(false)
 	world_points.clear()
 	projected.clear()
@@ -212,6 +408,10 @@ func is_learned(id: StringName) -> bool:
 func dismiss() -> void:
 	active_id = &""
 	practicing = false
+	demo_busy = false
+	_held_keys_while_blocked.clear()
+	_held_lmb_while_blocked = false
+	_suppress_release_after_dismiss = false
 	_set_blocking(false)
 	world_points.clear()
 	projected.clear()
@@ -223,6 +423,10 @@ func reset_run() -> void:
 	learned.clear()
 	active_id = &""
 	practicing = false
+	demo_busy = false
+	_held_keys_while_blocked.clear()
+	_held_lmb_while_blocked = false
+	_suppress_release_after_dismiss = false
 	_set_blocking(false)
 	world_points.clear()
 	projected.clear()
@@ -247,6 +451,8 @@ func _on_settings_changed(values: Dictionary) -> void:
 		reset_run()
 		learned = prior
 		resume_requested.emit(id)
+	else:
+		_update_practice_button_state()
 
 
 func _layout(force: bool = true) -> void:
@@ -288,6 +494,7 @@ func _layout(force: bool = true) -> void:
 func _process(delta: float) -> void:
 	if not visible:
 		return
+	_bind_audio_signals()
 	if is_inside_tree() and (size.x <= 1.0 or size.y <= 1.0):
 		size = get_viewport_rect().size
 	# Pause/settings cover this card and stop its practice controls; emergency mode stays uncovered.
@@ -299,6 +506,7 @@ func _process(delta: float) -> void:
 		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		queue_redraw()
 		return
+	_update_practice_button_state()
 	var filter := Control.MOUSE_FILTER_STOP if blocking else Control.MOUSE_FILTER_IGNORE
 	mouse_filter = filter
 	card.mouse_filter = filter
@@ -323,24 +531,134 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+func _input(event: InputEvent) -> void:
+	if _suppress_release_after_dismiss:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			_suppress_release_after_dismiss = false
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
+		if event is InputEventKey and not event.pressed:
+			var rel_code: int = event.physical_keycode if event.physical_keycode else event.keycode
+			if rel_code in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
+				_suppress_release_after_dismiss = false
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+
+	if not visible or not blocking:
+		return
+	if SceneManager != null and SceneManager.has_popup():
+		return
+	if GameState != null and GameState.is_paused():
+		return
+
+	if event is InputEventKey:
+		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if code in [KEY_ESCAPE, KEY_F10, KEY_M, KEY_F7]:
+			return
+		if code in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]:
+			if event.pressed:
+				_held_keys_while_blocked[code] = true
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+			else:
+				_held_keys_while_blocked.erase(code)
+			return
+		if code in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_E]:
+			if not event.pressed:
+				_held_keys_while_blocked.erase(code)
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+			if event.echo:
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+			if demo_busy or is_instruction_speech_busy():
+				_held_keys_while_blocked[code] = true
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+			if bool(_held_keys_while_blocked.get(code, false)):
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+			if code == KEY_E:
+				if active_id != &"repair" and is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+			_try_user_dismiss(false)
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
+
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if not event.pressed:
+			var was_held := _held_lmb_while_blocked
+			_held_lmb_while_blocked = false
+			if (demo_busy or is_instruction_speech_busy() or was_held) and is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
+		if demo_busy or is_instruction_speech_busy():
+			_held_lmb_while_blocked = true
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
+		if _held_lmb_while_blocked:
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
+		_try_user_dismiss(true)
+		if is_inside_tree() and get_viewport() != null:
+			get_viewport().set_input_as_handled()
+
+
 func _gui_input(event: InputEvent) -> void:
-	if blocking and event is InputEventMouse:
+	if not blocking:
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed and not demo_busy and not is_instruction_speech_busy() and not _held_lmb_while_blocked:
+			_try_user_dismiss(true)
+		accept_event()
+	elif event is InputEventMouse:
 		accept_event()
 
 
 func _draw() -> void:
 	if not visible or not card.visible:
 		return
-	if blocking:
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.015, 0.025, 0.035, 0.22))
 	var font := ThemeDB.fallback_font
 	var factor := UI.scale_for(self)
 	for i in range(projected.size()):
 		var p := projected[i]
-		draw_arc(p, 21 + 2.5 * sin(age * 4), 0, TAU, 36, accent, 2.5, true)
+		var r := 21.0 + 2.5 * sin(age * 4.0)
+		draw_arc(p, r, 0, TAU, 36, accent, 2.5, true)
 		draw_circle(p, 3.5, accent)
-		if projected.size() > 1 or offscreen[i]:
+
+		# Attack-accurate target gesture accents (never a cutter line for yellow shots).
+		if not offscreen[i]:
+			if active_id in [&"shot", &"pair"] or (active_id == &"opening" and accent == YELLOW):
+				for tick_idx in range(4):
+					var ang := float(tick_idx) * PI * 0.5
+					var dir := Vector2(cos(ang), sin(ang))
+					draw_line(p + dir * (r + 3.0), p + dir * (r + 10.0), YELLOW, 2.2, true)
+			elif active_id == &"charge" or (active_id in [&"loop", &"zigzag"] and accent == YELLOW):
+				var charge_prog := clampf(fmod(age * 0.95, 1.15), 0.0, 1.0)
+				draw_arc(p, r + 7.0, -PI * 0.5, -PI * 0.5 + TAU * charge_prog, 32, YELLOW, 3.2, true)
+				if charge_prog >= 0.92:
+					draw_arc(p, r + 11.0, 0, TAU, 32, Color(1.0, 0.98, 0.78, 0.85), 2.0, true)
+			elif active_id == &"heat":
+				var wave_t := fmod(age * 1.4, 1.0)
+				draw_arc(p, r + 6.0 + wave_t * 12.0, -PI * 0.82, -PI * 0.18, 24, Color(ORANGE, 0.75 * (1.0 - wave_t)), 3.0, true)
+			elif active_id == &"slow":
+				draw_arc(p, r + 7.0, 0, TAU, 32, Color(VIOLET, 0.7), 2.0, true)
+				draw_circle(p, 4.0, YELLOW)
+
+		if projected.size() > 1 or offscreen[i] or active_id == &"pair":
 			var caption := str(i + 1) + (" · offscreen" if offscreen[i] else "")
+			if active_id == &"pair" and not offscreen[i]:
+				caption = ("A" if i == 0 else "B")
 			var label_position := p + Vector2(26, 6)
 			label_position.x = clampf(label_position.x, 16, maxf(16, size.x - 160 * factor))
 			draw_string(font, label_position, caption, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(15 * factor), GUIDE)
@@ -348,8 +666,9 @@ func _draw() -> void:
 			var direction := (p - size * 0.5).normalized()
 			var side := direction.orthogonal()
 			draw_colored_polygon(PackedVector2Array([p + direction * 17, p - direction * 8 + side * 8, p - direction * 8 - side * 8]), accent)
+
 	# A blue line only teaches drawing; never draw a moving line for clicks, holds, Space, or rewind.
-	if ghost.size() >= 2 and (is_drawing_lesson(active_id) or not LESSONS.has(String(active_id))) and not projected.is_empty() and not offscreen.has(true):
+	if ghost.size() >= 2 and accent == BLUE and (is_drawing_lesson(active_id) or not LESSONS.has(String(active_id))) and not projected.is_empty() and not offscreen.has(true):
 		var area := Rect2(projected[0], Vector2.ZERO)
 		for p in projected:
 			area = area.expand(p)
@@ -361,12 +680,21 @@ func _draw() -> void:
 			path = PackedVector2Array(projected)
 			if active_id == &"loop":
 				path.append(projected[0])
-		draw_polyline(path, Color(BLUE, 0.5), 3.0, true)
+		draw_polyline(path, Color(BLUE, 0.55), 3.2, true)
 		var step := fmod(age * 0.65, 1.0) * (path.size() - 1)
 		var index := mini(int(step), path.size() - 2)
 		var cursor := path[index].lerp(path[index + 1], step - index)
 		draw_circle(cursor, 6.5, GUIDE)
 		draw_arc(cursor, 10.5, 0, TAU, 24, BLUE, 2.0, true)
+	elif active_id == &"opening" and accent == BLUE and not projected.is_empty() and not offscreen[0]:
+		var center := projected[0]
+		var cut_a := center + Vector2(-42.0, 22.0)
+		var cut_b := center + Vector2(42.0, -22.0)
+		draw_line(cut_a, cut_b, Color(BLUE, 0.55), 3.2, true)
+		var t_open := fmod(age * 0.85, 1.0)
+		var cur_open := cut_a.lerp(cut_b, t_open)
+		draw_circle(cur_open, 6.5, GUIDE)
+		draw_arc(cur_open, 10.5, 0, TAU, 24, BLUE, 2.0, true)
 
 
 # Ghost coordinates are normalized to the padded projected target bounds.

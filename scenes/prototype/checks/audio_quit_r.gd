@@ -18,6 +18,7 @@ func run() -> void:
 	feedback.step(.1, .1, 1, false, 0, null, null)
 	feedback._set_loop(&"scrub_older", .5, 1, .2)
 	manager.lesson(&"shot")
+	manager.say(&"tutorial.time_meter", 2) # Explicit lifecycle fixture, not automatic shot behavior.
 	manager.set_music_context(&"boss")
 	await create_timer(.25).timeout
 	var started: bool = manager.voice.playing and manager.music.playing

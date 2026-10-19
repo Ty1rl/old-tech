@@ -1,0 +1,57 @@
+{
+  "provenance": "Matt supplied Round S replacements/addition. Encoded once directly from archived originals: mono 32000 Hz 64k MP3; no gain normalization, trimming or voice effects. Shared drop originals are retained as well as archive copies.",
+  "transcript_source": "Matt supplied/confirmed intro and pickup text in this seat conversation; time reserve text is exact shared Round S brief.",
+  "tracks": [
+    {
+      "source": "/home/mattlongname/game-jams/projects/old-tech/new_audio/intro.mp3",
+      "game_asset": "audio/voice/narration/intro.mp3",
+      "source_sha256": "1cd40394f20970db9d873de2cf2fb9b5fae6905b78545db3aa2439d132bb2982",
+      "source_bytes": 163640,
+      "archive": "new_audio/archive/round-s/intro.mp3",
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "864094918421235c0be0d959db772a05a9b3007ce083e53211569fac164283ff",
+      "encoded_bytes": 74060
+    },
+    {
+      "source": "/home/mattlongname/game-jams/projects/old-tech/new_audio/time meter.mp3",
+      "game_asset": "audio/voice/tutorial/time_meter.mp3",
+      "source_sha256": "d8866ff7d29ed299fe076495b384115d6abb2c505d38b9befae356685ca37263",
+      "source_bytes": 133965,
+      "archive": "new_audio/archive/round-s/time meter.mp3",
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "4d35144557a3baa98a30d05069c8bc6fc42f8b1ac011f1bbe874f6eaabc10c9e",
+      "encoded_bytes": 59372
+    },
+    {
+      "source": "/home/mattlongname/game-jams/projects/old-tech/new_audio/walk towards the new item.mp3",
+      "game_asset": "audio/voice/tutorial/pickup.mp3",
+      "source_sha256": "136b2ffc9cd663a2b6171114c672698929d45300ddba852943e6795d68ac7113",
+      "source_bytes": 49537,
+      "archive": "new_audio/archive/round-s/walk towards the new item.mp3",
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "8fa6f21d15dd621018d978afd4043ec3a24d2e13bc57a7c754561023853eeb5b",
+      "encoded_bytes": 17036
+    }
+  ]
+}

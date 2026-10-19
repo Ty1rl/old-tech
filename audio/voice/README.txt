@@ -1,25 +1,40 @@
 SUPPLIED DIALOGUE — Some Assembly Required
-37 recordings supplied by Matt, 2026-10-19. Game MP3 copies compressed for distribution.
-Original upload hashes and encoding parameters:audio/encoding.json; originals remain
-in shared uploads and Git history. No loudness normalization.
+38 current recordings supplied by Matt. Game copies are compressed MP3s.
+Round S replaces intro/time_meter and adds tutorial.pickup. Original hashes,
+encoded hashes and encoding settings: audio/encoding.json and supplied-round-s.json.
+Original uploads remain in shared storage/Git history; new drop originals also
+have byte-identical copies in new_audio/archive/round-s. No gain normalization.
 
-EVENTS.tsv maps event IDs, relative filenames, suggested triggers and upload names.
-Tutorial lesson filenames match the actual lesson keys:shot,charge,heat,repair,
-slow,cut,opening,rewind,loop,pair,zigzag. Supplementary cues teach the meter,
-charge budget,repair gestures,and practice handoff.
-Protagonist filenames name both the event and the spoken variant. Rows sharing
-an event ID are alternatives,not instructions to play both recordings.
-Boss IDs use the actual enemy kinds:loop_boss,sequence_boss,final_boss.
+EVENTS.tsv maps each recording, event, intended trigger and upload filename.
+Its transcript column and library.tres transcripts dictionary contain exact words
+only for the three Round S uploads. Intro and pickup wording were confirmed by
+Matt; time-meter wording comes from the shared brief. Older titles are not
+verified transcripts. Rows with the same protagonist event are alternatives.
 
-Classification uses Matt's upload titles;spoken wording has not been transcribed
-or verified. The Loop Curator file is assigned to its entrance by its supplied
-boss title. No audio was trimmed,normalized,converted or given voice effects.
+Intro is explicitly presented after New Game/difficulty confirmation, never by
+AudioManager on menu entry. tutorial.time_meter belongs to its own staged damage
+lesson before shooting; lesson(shot) no longer queues it automatically.
+tutorial.pickup is the walk cue; campaign requests it without blocking movement.
+AudioManager only plays speech; it never freezes movement or constructs lessons.
 
-Runtime library:audio/voice/library.tres;playback:scripts/autoloads/audio_manager.gd.
-Intro plays once on the title screen with Skip narration. Tutorials,repair gestures,
-boss entrances and occasional protagonist reactions use actual gameplay events.
-Only one voice plays at once;incidental speech has an 18-second cooldown.
-Voice volume is separate in Settings. World/music duck while speech plays.
-Voice stays at normal speed during time changes,with a lower boss register.
-Scene exit cancels speech;history preview never starts or restores dialogue.
-Menu/window quit drains native audio before closing.
+One Voice player, original -3dB node gain and separate user Voice volume remain.
+World/music duck by8dB during speech. Menu music alone gets a6dB increase; other
+music contexts/effects/Voice levels are unchanged. Voice/Music stay Stream mode;
+Web pause assignments occur only at transitions, not every frame.
+
+Speech lifetime contract: say/play_intro return whether a request was accepted.
+Only accepted requests receive speech_finished(event, interrupted): false for
+natural completion; true for skip/stop/restart/scene exit/unavailable audio/quit.
+Queued accepted speech is included in is_speaking and instruction_busy; stop
+cancels the whole batch. Missing/muted requests return false and do not block.
+Pause holds speech until resume or explicit cancellation. Consumers distinguish
+completion from cancellation instead of treating every terminal as success.
+
+Protagonist: eight events, two recordings each, selected round-robin at playback
+start; rejection never advances a variant. Seven ordinary reactions use priority1
+and a shared18-second cooldown, do not queue, and never interrupt teaching.
+Boss defeat uses priority2 at its gameplay trigger and may queue behind teaching.
+Campaign allows incidental reactions only during pressure combat; acquire/demo/
+practice/exit and emergency/menu/pause suppress them. Room-clear is an explicit
+campaign milestone request; it still competes with the global bark cooldown.
+The focused Round S audit/verification lives in jam-6 state/exports/round-s.

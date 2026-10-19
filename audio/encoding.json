@@ -44,8 +44,8 @@
       "encoded_bytes": 25100
     },
     "audio/voice/narration/intro.mp3": {
-      "source_sha256": "451cb6d907abba0410805f92a47235e0906e06a76d75a1697435ede08538a8be",
-      "source_bytes": 240127,
+      "source_sha256": "1cd40394f20970db9d873de2cf2fb9b5fae6905b78545db3aa2439d132bb2982",
+      "source_bytes": 163640,
       "settings": [
         "-ac",
         "1",
@@ -54,8 +54,8 @@
         "-b:a",
         "64k"
       ],
-      "encoded_sha256": "eb8f3445860962c6e8efc2cee3796291b34b6429969b93d1b2bd8d529d072298",
-      "encoded_bytes": 112364
+      "encoded_sha256": "864094918421235c0be0d959db772a05a9b3007ce083e53211569fac164283ff",
+      "encoded_bytes": 74060
     },
     "audio/voice/protagonist/boss_defeated_leave_that_one_in_pieces.mp3": {
       "source_sha256": "540ccc956e0eb6b90dae5b01461765863a3fb50b6f4da0537beca6681f7006f8",
@@ -365,6 +365,20 @@
       "encoded_sha256": "592abd136728d1591a9f15382014eff519f5be01b35c129b75df3a91e74921a5",
       "encoded_bytes": 33164
     },
+    "audio/voice/tutorial/pickup.mp3": {
+      "source_sha256": "136b2ffc9cd663a2b6171114c672698929d45300ddba852943e6795d68ac7113",
+      "source_bytes": 49537,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "8fa6f21d15dd621018d978afd4043ec3a24d2e13bc57a7c754561023853eeb5b",
+      "encoded_bytes": 17036
+    },
     "audio/voice/tutorial/repair.mp3": {
       "source_sha256": "5e3512b0d38c7ec2c93a9f4541a06583101315d591dbdd19df34da8c093c1357",
       "source_bytes": 66256,
@@ -478,8 +492,8 @@
       "encoded_bytes": 33740
     },
     "audio/voice/tutorial/time_meter.mp3": {
-      "source_sha256": "810c452d69aec69501c210a90b688bb05eb9330655080b0cd9dee848ca1759b9",
-      "source_bytes": 131457,
+      "source_sha256": "d8866ff7d29ed299fe076495b384115d6abb2c505d38b9befae356685ca37263",
+      "source_bytes": 133965,
       "settings": [
         "-ac",
         "1",
@@ -488,8 +502,8 @@
         "-b:a",
         "64k"
       ],
-      "encoded_sha256": "c96a4e545e70763ff792dd26d3a4dde643a5bfdabb3a9a099adb7a47adcad046",
-      "encoded_bytes": 57932
+      "encoded_sha256": "4d35144557a3baa98a30d05069c8bc6fc42f8b1ac011f1bbe874f6eaabc10c9e",
+      "encoded_bytes": 59372
     },
     "audio/voice/tutorial/your_turn.mp3": {
       "source_sha256": "a5cb37e6cdfa7d1822881292d156e30d61e635e35f290625405f9b4be8deb1ae",

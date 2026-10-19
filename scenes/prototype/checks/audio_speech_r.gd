@@ -160,7 +160,7 @@ func run() -> void:
 		for clip: AudioStream in recorded.clips[event]:
 			count += 1
 			expect(clip is AudioStreamMP3 and clip.get_length() > .1, "Supplied speech decodes: " + String(event))
-	expect(count == 37 and manager.voice.volume_db == -3 and manager.voice.bus == &"Voice", "All 37 recordings and original Voice node gain/bus preserved")
+	expect(count == 38 and manager.voice.volume_db == -3 and manager.voice.bus == &"Voice", "All 38 current recordings and original Voice node gain/bus preserved")
 	var voice_bus := AudioServer.get_bus_index(&"Voice")
 	var effect := AudioEffectRecord.new()
 	AudioServer.add_bus_effect(voice_bus, effect)
@@ -169,7 +169,7 @@ func run() -> void:
 	await create_timer(.4).timeout
 	effect.set_recording_active(false)
 	var pcm := effect.get_recording()
-	expect(manager.is_speaking(&"tutorial.shot") and manager.is_speaking(&"tutorial.time_meter"), "Real lesson includes active and queued recordings")
+	expect(manager.is_speaking(&"tutorial.shot") and not manager.is_speaking(&"tutorial.time_meter"), "Shot no longer automatically queues reserve explanation")
 	expect(manager.voice.get_playback_position() > .1 and pcm != null and pcm.data.size() > 1000, "Actual supplied speech advances and produces native captured PCM")
 	expect(not manager.say(&"protagonist.under_pressure"), "Incidental bark cannot interrupt teaching")
 	manager.stop_dialogue()

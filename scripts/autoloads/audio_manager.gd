@@ -4,6 +4,7 @@ extends Node
 signal speech_finished(event: StringName, interrupted: bool)
 
 const MAX_QUEUE := 3
+const MENU_MUSIC_BOOST_DB := 6.0 # Menu cue only; preserve encounter/boss/victory and Voice.
 @export var music_library: CombatAudioLibrary = preload("res://audio/music/contexts.tres")
 @onready var voice: AudioStreamPlayer = $Voice
 @onready var music: AudioStreamPlayer = $Music
@@ -68,7 +69,6 @@ func begin_run() -> void:
 func lesson(id: StringName) -> void:
 	stop_dialogue()
 	say(StringName("tutorial." + String(id)), 3)
-	if id == &"shot": say(&"tutorial.time_meter", 2, true)
 
 func _bus_audible(name: StringName) -> bool:
 	var index := AudioServer.get_bus_index(name)
@@ -252,7 +252,8 @@ func _process(delta: float) -> void:
 	if not audible or (world_music and _world_frozen): gain_target = 0
 	_music_gain = lerpf(_music_gain, gain_target, 1 - exp(-maxf(0, delta) / .2))
 	music.pitch_scale = _world_pitch if world_music else 1.0
-	music.volume_db = -80 if _music_gain < .0001 else music_library.music_volume_db + linear_to_db(_music_gain)
+	var context_boost := MENU_MUSIC_BOOST_DB if _music_context == &"menu" else 0.0
+	music.volume_db = -80 if _music_gain < .0001 else music_library.music_volume_db + context_boost + linear_to_db(_music_gain)
 	if not audible or (world_music and _world_frozen and _music_gain < .001):
 		if music.playing: music.stop()
 	elif music.can_process() and not (world_music and _world_frozen) and not _music_completed and music.stream != null and not music.playing: _queue_music_start()

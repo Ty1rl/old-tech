@@ -1,3 +1,6 @@
+Historical Round R snapshot; current Round S changes are in audio/voice/README.txt
+and EVENTS.tsv (compressed38 recordings, independent reserve lesson, menu gain).
+
 CURRENT DISTRIBUTION:Game MP3 copies compressed;original uploads remain unchanged.
 See audio/encoding.json for original/encoded digests and exact parameters.
 The original Round R import record follows.

@@ -602,7 +602,8 @@ func _run() -> void:
 		"Slow practice in Room 0 spawns familiar yellow target with Tool 2 selected"
 	)
 
-	# Skip ends narration only; first repair remains mandatory and resumable.	arena.debug_start(0, 5)
+	# Skip ends narration only; first repair remains mandatory and resumable.
+	arena.debug_start(0, 5)
 	arena.tutorial.learned.erase(&"repair")
 	arena.director.clear()
 	arena.wave_index = 4

@@ -1739,15 +1739,15 @@ func _boss_phase_guidance(boss: Node3D) -> Dictionary:
 		var is_final_core := (bkind == &"final_boss" and phase_num == 4)
 		return {
 			"heading": "Hold, then release",
-			"body": "2 · Focused Flash — charge and fire into the exposed yellow core%s." % (" to finish the Guardian" if is_final_core else ""),
+			"body": "2 · Focused Flash - charge and fire into the exposed yellow core%s." % (" to finish the Guardian" if is_final_core else ""),
 			"subtitle": "%s · PHASE %d/%d EXPOSED CORE" % [btitle.to_upper(), phase_num, total_phases],
 			"color": ToolStyle.BEAM,
-			"hint": "%s (%d/%d) · yellow core exposed — charge 2 (Focused Flash) on the yellow core." % [btitle, phase_num, total_phases],
+			"hint": "%s (%d/%d) · yellow core exposed - charge 2 (Focused Flash) on the yellow core." % [btitle, phase_num, total_phases],
 		}
 	if pat == &"pair":
 		return {
 			"heading": "Click A, then B",
-			"body": "2 · Focused Flash — shoot valve A, then shoot valve B before its shutter closes.",
+			"body": "2 · Focused Flash - shoot valve A, then shoot valve B before its shutter closes.",
 			"subtitle": "%s · PHASE %d/%d PAIR VALVES" % [btitle.to_upper(), phase_num, total_phases],
 			"color": ToolStyle.BEAM,
 			"hint": "%s (%d/%d) · press 2 (Focused Flash) to shoot valve A, then valve B." % [btitle, phase_num, total_phases],
@@ -1755,14 +1755,14 @@ func _boss_phase_guidance(boss: Node3D) -> Dictionary:
 	if pat == &"zigzag":
 		return {
 			"heading": "Hold, draw, release",
-			"body": "1 · Ring Cutter — bend across all 3 blue zigzag spans in one stroke.",
+			"body": "1 · Ring Cutter - bend across all 3 blue zigzag spans in one stroke.",
 			"subtitle": "%s · PHASE %d/%d ZIGZAG LOCK" % [btitle.to_upper(), phase_num, total_phases],
 			"color": ToolStyle.RING,
 			"hint": "%s (%d/%d) · hold 1 (Ring Cutter) and bend across all 3 blue zigzag spans." % [btitle, phase_num, total_phases],
 		}
 	return {
 		"heading": "Hold, draw, release",
-		"body": "1 · Ring Cutter — draw a loop across all 4 blue supports in one stroke.",
+		"body": "1 · Ring Cutter - draw a loop across all 4 blue supports in one stroke.",
 		"subtitle": "%s · PHASE %d/%d LOOP LOCK" % [btitle.to_upper(), phase_num, total_phases],
 		"color": ToolStyle.RING,
 		"hint": "%s (%d/%d) · hold 1 (Ring Cutter) and draw a loop through all 4 blue supports." % [btitle, phase_num, total_phases],

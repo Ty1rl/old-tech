@@ -261,7 +261,7 @@ static func definitions(difficulty: Variant = &"easy") -> Array[Dictionary]:
 		{
 			"id": &"burial",
 			"title": "Burial Exhibition",
-			"story": "At the heart of the subterranean rotunda, the restored burial device pulses—drawing every mechanism into a single vessel.",
+			"story": "At the heart of the subterranean rotunda, the restored burial device pulses-drawing every mechanism into a single vessel.",
 			"layout_archetype": &"boss_court",
 			"layout_scene": burial_geom["layout_scene"],
 			"cover": burial_geom["cover"],

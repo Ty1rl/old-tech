@@ -124,7 +124,13 @@ func run() -> void:
 	expect(not arena.weapons.flash.pulses.is_empty(), "Releasing first click immediately launches quick-shot pulse")
 	arena.weapons.step(0.6, arena.player, shot_aim, arena.director.enemies, 0.6)
 	tick(0.02)
-	expect(arena.tutorial.is_learned(&"shot") and arena.mode == &"pressure", "First shot input immediately after explanation hits specimen and completes lesson")
+	while arena.mode == &"practice" and not arena.specimens.is_empty():
+		var next_spec: Node3D = arena.specimens[0]
+		next_spec.health = 0
+		arena._on_resolved_hit(&"beam", {"killed": true}, {}, next_spec.rewind_id)
+		arena.director._prune_dead_enemies()
+		tick(0.02)
+	expect(arena.tutorial.is_learned(&"shot") and arena.mode == &"pressure", "Completing stationary and moving shot practice quotas transitions into pressure")
 
 	# 5. Verify staged full-restoration repair lesson on actual WeaponRepair popup in Room 0 Wave 3
 	arena.debug_start(0, 2)
@@ -167,62 +173,53 @@ func run() -> void:
 	expect(arena.time_controller.slow_requested, "First Space press after explanation immediately requests slow on TimeController")
 	tick(0.1)
 	expect(arena.time_controller.slow_active and arena.time_controller.world_scale < 0.3 and arena.time_controller.meter < 100.0, "Frame-1 Space press after explanation slows world time and drains TimeController meter")
-	var slow_specimen: Node3D = arena.specimens[0]
-	var slow_pt: Vector3 = slow_specimen.core_world_position()
-	slow_specimen.receive_attack(&"beam", 100.0, slow_pt, {"segment_start": slow_pt - Vector3(0, 0, 4), "segment_end": slow_pt + Vector3(0, 0, 4), "radius": 0.35, "charge": 0.0})
-	tick(0.02)
+	for rep_idx in range(arena._stationary_quota + arena._moving_quota):
+		var slow_specimen: Node3D = arena.specimens[0]
+		var slow_pt: Vector3 = slow_specimen.core_world_position()
+		slow_specimen.receive_attack(&"beam", 100.0, slow_pt, {"segment_start": slow_pt - Vector3(0, 0, 4), "segment_end": slow_pt + Vector3(0, 0, 4), "radius": 0.35, "charge": 0.0})
+		tick(0.02)
 	var space_release := InputEventKey.new()
 	space_release.physical_keycode = KEY_SPACE
 	space_release.pressed = false
 	arena._input(space_release)
-	expect(arena.tutorial.is_learned(&"slow") and arena.mode == &"pressure" and not arena.director.enemies.is_empty(), "Shooting practice target while slowed completes early slow lesson and starts Wave 4 pressure")
+	expect(arena.tutorial.is_learned(&"slow") and arena.mode == &"pressure" and not arena.director.enemies.is_empty(), "Shooting practice targets across stationary and moving quotas while slowed completes early slow lesson and starts Wave 4 pressure")
 
-	# 7. Verify staged >= 6.0 world-second Rewind lesson in Room 1 Wave 3 (including world-time measurement under slow and Enter prompt visibility)
+	# 7. Verify forced staged RewindLesson in Room 1 Wave 3 (staging incoming hit, frozen scrub view, index 0 clamping, and 3-charge handoff)
 	arena.debug_start(1, 3)
 	arena.tutorial.learned.erase(&"rewind")
+	arena.rewind_lesson.reset_for_new_run()
 	arena._rewind_unlocked = false
 	arena._apply_time_capabilities()
 	arena.director.clear()
 	arena.wave_index = 2
 	arena._begin_wave()
-	expect(arena.lesson == &"rewind" and arena.tutorial.blocking and not arena.time_controller.rewind_unlocked, "Room 1 Wave 3 opens rewind explanation with rewind locked")
-	arena.tutorial.request_practice()
-	expect(arena.time_controller.rewind_unlocked, "Starting rewind practice unlocks rewind capability")
+	expect(arena.lesson == &"rewind" and arena.rewind_lesson.active and arena.rewind_lesson.phase == RewindLesson.Phase.STAGING, "Room 1 Wave 3 starts RewindLesson in STAGING phase")
+	expect(arena.time_controller.rewind_unlocked and not arena.tutorial.visible and not arena.run_hint.visible, "RewindLesson unlocks rewind capability and hides tutorial/hint bars so prompts never stack")
 
-	# Hold Space for 2.0 real seconds (~0.36 world seconds): verify it does NOT trigger depletion at 6 real seconds if world time < 6.0s
-	arena._input(space_press)
-	for i in range(40):
-		tick(0.05)
-	arena._input(space_release)
-	expect(not arena.is_emergency_active() and arena._rewind_world_age < 1.5, "Rewind lesson measures pre-depletion staging in world time, not real time while slowed")
-
-	# Advance remaining world time so movement, attack, and incoming shot occur across >= 6.0 world seconds
-	for i in range(130):
-		tick(0.05)
+	for i in range(60):
+		tick(0.04)
 		if arena.is_emergency_active():
 			break
 
-	expect(arena._rewind_moved and arena._rewind_attack_seen and arena._rewind_projectile_spawned, "Rewind lesson stages movement, an attack, and a visible incoming projectile before depletion")
-	expect(arena._injury_given and arena.is_emergency_active() and arena.history.age_of(0) >= 6.0, "Rewind lesson triggers forced emergency depletion only after >= 6.0 world seconds of history")
-	expect("Enter" in arena.run_hint.text and "ENTER" in arena.tutorial.state_label.text, "Enter prompt is visible immediately when emergency rewind starts")
+	expect(arena.is_emergency_active() and arena.rewind_lesson.phase == RewindLesson.Phase.SCRUB, "RewindLesson stages unavoidable hit and enters frozen SCRUB phase")
+	expect(arena.emergency_view.visible and "Scroll" in arena.emergency_view.instructions.text and "Enter" in arena.emergency_view.instructions.text, "EmergencyRewindView displays concise Scroll + Enter prompt at bottom of screen")
+	expect(not arena.tutorial.visible and not arena.run_hint.visible, "Tutorial card and run_hint stay hidden during emergency scrub")
 
-	# Pressing Enter at index 0 (NOW) must not complete the rewind lesson and must keep Enter prompt visible
+	# Selecting index 0 (NOW) during RewindLesson must clamp back to min_safe_index (>= 1)
+	arena.emergency_rewind.select(0)
+	expect(arena.is_emergency_active() and arena.rewind_lesson.active and arena.emergency_rewind.selected_index >= arena.rewind_lesson.min_safe_index, "Selecting index 0 (NOW) during RewindLesson clamps selection to a safe pre-hit moment")
+
+	arena.emergency_rewind.step_selection(1)
+	expect(arena.emergency_rewind.selected_index >= 1 and arena.emergency_rewind.choice_age(arena.emergency_rewind.selected_index) > 0.1, "Scrolling wheel selects a safe pre-hit snapshot")
 	var enter_key := InputEventKey.new()
 	enter_key.physical_keycode = KEY_ENTER
 	enter_key.pressed = true
 	arena._input(enter_key)
-	expect(arena.is_emergency_active() and "Enter" in arena.run_hint.text, "Pressing Enter at index 0 (NOW) requires selecting an earlier moment first and keeps Enter prompt visible")
 
-	arena.emergency_rewind.step_selection(8)
-	expect(arena.emergency_rewind.selected_index == 8 and arena.emergency_rewind.choice_age(8) > 0.5, "Scrolling wheel down selects an earlier safe snapshot")
-	expect("Enter" in arena.run_hint.text and "ENTER" in arena.tutorial.state_label.text, "Enter prompt remains visible throughout timeline selection")
-	arena._input(enter_key)
-
-	expect(not arena.is_emergency_active(), "Pressing Enter on an earlier snapshot confirms EmergencyRewind")
-	expect(arena.time_controller.charges_remaining == 2, "Confirming EmergencyRewind does not refund the spent charge")
-	expect(arena.time_controller.meter >= arena.time_controller.settings.recovery_floor and arena.time_controller.protected, "Confirming EmergencyRewind restores meter to recovery floor with grace protection")
+	expect(not arena.is_emergency_active() and not arena.rewind_lesson.active and arena.rewind_lesson.is_completed, "Confirming safe earlier snapshot completes RewindLesson")
+	expect(arena.time_controller.charges_remaining == 3 and is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity), "Completing RewindLesson restores all 3 emergency charges and 100% time meter for real play")
 	tick(0.02)
-	expect(arena.tutorial.is_learned(&"rewind") and arena.mode == &"pressure", "Confirming earlier moment completes rewind lesson permanently and starts pressure")
+	expect(arena.tutorial.is_learned(&"rewind") and arena.mode == &"pressure", "Completing RewindLesson marks rewind permanently learned and starts finite wave pressure")
 
 	# 8. Verify continuous within-room ReplayHistory across wave transitions and atomic cross-wave restore
 	arena.debug_start(2, 0)

@@ -40,12 +40,14 @@ func run() -> void:
 	arena.tutorial.request_practice()
 	var specimen: Node3D = arena.specimens[0]
 	expect(specimen.contact_damage == 0 and specimen.move_speed == 0, "Training specimen cannot chase or injure")
-	# Exercise observed resolution; campaign must not depend on a dead node surviving prune.
-	specimen.health = 0
-	arena._on_resolved_hit(&"beam", {"killed": true}, {}, specimen.rewind_id)
-	arena.director._prune_dead_enemies()
-	tick()
-	expect(arena.tutorial.is_learned(&"shot") and arena.mode == &"pressure", "Observed quick-shot kill starts sustained pressure")
+	# Exercise observed resolution across stationary and moving quotas.
+	for rep_idx in range(arena._stationary_quota + arena._moving_quota):
+		var rep_spec: Node3D = arena.specimens[0]
+		rep_spec.health = 0
+		arena._on_resolved_hit(&"beam", {"killed": true}, {}, rep_spec.rewind_id)
+		arena.director._prune_dead_enemies()
+		tick()
+	expect(arena.tutorial.is_learned(&"shot") and arena.mode == &"pressure", "Observed quick-shot kills across stationary and moving quotas start sustained pressure")
 	expect(arena.director.enemies.size() == 2 and arena._pending == 6, "First arrival is a bounded pair with finite reinforcement debt")
 	clear_roster()
 	tick(0.1)
@@ -63,18 +65,21 @@ func run() -> void:
 	expect(arena.acquired == [2] and arena.tutorial.is_learned(&"shot"), "Rewind preserves permanent tool and lesson progress")
 	arena.retry_room()
 	expect(arena.acquired == [2] and is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity) and arena.time_controller.charges_remaining == 3 and arena.history.snapshot_count == 0, "Retry preserves learned loadout, restores attempt budget, and clears old room rolling history")
-	# Fire the real charged traveling pulse through the authored teaching line.
+	# Fire the real charged traveling pulse through the authored teaching line across stationary and moving quotas.
 	arena.tutorial.learned.erase(&"charge")
 	arena.director.clear(); arena.wave_index = 0; arena._begin_wave()
 	arena.tutorial.request_practice()
-	var aim: Vector3 = arena.specimens[0].position
-	arena.weapons.handle_event(mouse(true), arena.player, aim)
-	arena.weapons.step(1, arena.player, aim, arena.director.enemies, 0)
-	arena.weapons.handle_event(mouse(false), arena.player, aim)
-	arena.weapons.step(0.7, arena.player, aim, arena.director.enemies, 0.7)
-	expect(arena._charged_kills.size() >= 2 and arena._pierced, "Actual full-charge pulse pierces the safe yellow teaching line")
-	tick()
-	expect(arena.tutorial.is_learned(&"charge") and arena.mode == &"pressure", "Real charge demonstration releases the sustained charge battle")
+	var total_charge_reps: int = arena._stationary_quota + arena._moving_quota
+	for rep_idx in range(total_charge_reps):
+		var aim: Vector3 = arena.specimens.back().position
+		arena.weapons.handle_event(mouse(true), arena.player, aim)
+		arena.weapons.step(1, arena.player, aim, arena.director.enemies, 0)
+		arena.weapons.handle_event(mouse(false), arena.player, aim)
+		arena.weapons.step(0.7, arena.player, aim, arena.director.enemies, 0.7)
+		if rep_idx == 0:
+			expect(arena._charged_kills.size() >= 2 and arena._pierced, "Actual full-charge pulse pierces the safe yellow teaching line")
+		tick()
+	expect(arena.tutorial.is_learned(&"charge") and arena.mode == &"pressure", "Real charge practice across stationary and moving quotas releases the sustained charge battle")
 	arena.debug_start(0, 2)
 	expect(arena.acquired == [2, 3] and arena.mode == &"pressure", "Debug orange checkpoint includes exact prerequisites")
 	arena.tutorial.learned.erase(&"repair")
@@ -97,17 +102,17 @@ func run() -> void:
 	arena.debug_start(1, 3)
 	expect(arena.acquired == [2, 3, 1], "Acquisition order across campaign is strictly yellow orange blue")
 	arena.tutorial.learned.erase(&"rewind")
+	arena.rewind_lesson.is_completed = false
 	arena.director.clear(); arena.wave_index = 2; arena._begin_wave()
-	arena.tutorial.request_practice()
-	for i in range(130):
-		tick(0.05)
+	for i in range(60):
+		tick(0.04)
 		if arena.is_emergency_active():
 			break
-	expect(arena.is_emergency_active() and arena._injury_given and arena.time_controller.charges_remaining == 2 and arena.history.age_of(0) >= 6.0, "Safe rewind practice stages >= 6s of world history before triggering forced depletion and spending one charge")
-	arena.emergency_rewind.step_selection(4)
+	expect(arena.is_emergency_active() and arena.rewind_lesson.active and arena.rewind_lesson.phase == RewindLesson.Phase.SCRUB and arena.time_controller.charges_remaining == 2, "Forced RewindLesson stages incoming hit, freezes in SCRUB phase, and spends one charge during lesson")
+	arena.emergency_rewind.step_selection(2)
 	arena.emergency_rewind.confirm()
 	tick()
-	expect(arena.tutorial.is_learned(&"rewind") and arena.time_controller.meter >= arena.time_controller.settings.recovery_floor and arena.time_controller.charges_remaining == 2, "Real emergency rewind recovers time to floor, preserves spent charge, and learns permanently")
+	expect(arena.tutorial.is_learned(&"rewind") and is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity) and arena.time_controller.charges_remaining == 3 and arena.mode == &"pressure", "Confirming RewindLesson restores full 3-charge attempt budget and transitions into pressure")
 	for index in range(4):
 		arena.enter_room(index)
 		expect(arena.cover.rectangles == arena.museum.active_cover_rectangles, "Room %d uses matching visible and gameplay cover" % index)

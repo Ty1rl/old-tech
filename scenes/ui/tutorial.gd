@@ -128,6 +128,15 @@ func set_phase_accent(color: Color, subtitle: String = "") -> void:
 	queue_redraw()
 
 
+func set_phase_prompt(title_text: String, body_text: String, color: Color, subtitle: String = "") -> void:
+	if is_instance_valid(heading) and not title_text.is_empty():
+		heading.text = title_text
+	if is_instance_valid(body_label) and not body_text.is_empty():
+		body_label.text = body_text
+	set_phase_accent(color, subtitle)
+	_layout(true)
+
+
 func show_known_lesson(id: StringName, targets: Array[Vector3]) -> bool:
 	if not LESSONS.has(String(id)):
 		return false

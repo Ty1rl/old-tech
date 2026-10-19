@@ -36,7 +36,7 @@ func run() -> void:
 	var gear := Equipment.new()
 	expect(is_equal_approx(gear.capacity(&"ring"), 24.0), "Ring capacity increased moderately to 24 launches")
 	expect(is_equal_approx(gear.capacity(&"beam"), 64.0), "Beam capacity increased moderately to 64 shots")
-	expect(is_equal_approx(gear.capacity(&"cone"), 24.0), "Cone capacity increased moderately to 24 seconds")
+	expect(is_equal_approx(gear.capacity(&"cone"), 36.0), "Cone capacity increased moderately to 36 seconds")
 	expect(gear.capacity(&"clock") == 0.0, "Time is not repairable weapon equipment")
 
 	# 2. Equipment.training_protection policy and anti-bypass guarantees
@@ -46,7 +46,7 @@ func run() -> void:
 	expect(gear.can_use(&"beam", 1.0) and is_equal_approx(gear.spend(&"beam", 1.0), 1.0), "Protected beam accepts positive quick-shot spend")
 	expect(gear.can_use(&"beam", 3.0) and is_equal_approx(gear.spend(&"beam", 3.0), 3.0), "Protected beam accepts positive charged-shot spend")
 	expect(is_equal_approx(gear.remaining(&"beam"), 64.0) and gear.is_full(&"beam"), "Protected beam spend does not reduce remaining capacity")
-	expect(is_equal_approx(gear.spend(&"cone", 4.0), 4.0) and is_equal_approx(gear.remaining(&"cone"), 20.0), "Unprotected cone spends and reduces remaining normally while beam is protected")
+	expect(is_equal_approx(gear.spend(&"cone", 4.0), 4.0) and is_equal_approx(gear.remaining(&"cone"), 32.0), "Unprotected cone spends and reduces remaining normally while beam is protected")
 
 	var repair_session: int = gear.begin_repair(&"beam")
 	expect(not gear.can_use(&"beam", 1.0) and is_equal_approx(gear.spend(&"beam", 1.0), 0.0), "Protected tool still respects active repair session lock")
@@ -65,7 +65,7 @@ func run() -> void:
 	var tutorial_script: Script = load("res://scenes/ui/tutorial.gd")
 	var repair_copy: String = String(tutorial_script.LESSONS["repair"][1])
 	var slow_copy: String = String(tutorial_script.LESSONS["slow"][1])
-	expect("press E to open" in repair_copy and all_words(repair_copy, ["spin", "connect", "trace", "closes"]) and "100%" in repair_copy, "Repair lesson copy teaches E, every gesture, full restoration and automatic close")
+	expect("Press E to open" in repair_copy and all_words(repair_copy, ["spin", "connect", "trace", "closes"]) and "100%" in repair_copy, "Repair lesson copy teaches E, every gesture, full restoration and automatic close")
 	expect(not ("hold E" in repair_copy), "Repair lesson copy no longer instructs holding E")
 	expect("Hold Space" in slow_copy, "Slow lesson copy teaches holding Space to slow the world")
 
@@ -100,14 +100,15 @@ func run() -> void:
 	tick(2.1)
 	arena.player.position = arena.museum.pickup_position + Vector3.UP * 0.55
 	tick()
-	expect(arena.lesson == &"shot" and arena.equipment.training_protection == [&"beam"], "Wave 0 shot lesson keeps yellow protected")
+	expect(arena.lesson == &"shot" and &"beam" in arena.equipment.training_protection, "Wave 0 shot lesson keeps yellow protected")
 	arena.tutorial.request_practice()
 	expect(is_equal_approx(arena.equipment.spend(&"beam", 12.0), 12.0) and is_equal_approx(arena.equipment.remaining(&"beam"), 64.0), "Wave 0 practice yellow shots are wear-free")
-	var spec0: Node3D = arena.specimens[0]
-	spec0.health = 0
-	arena._on_resolved_hit(&"beam", {"killed": true}, {}, spec0.rewind_id)
-	arena.director._prune_dead_enemies()
-	tick()
+	for rep_idx in range(arena._stationary_quota + arena._moving_quota):
+		var spec0: Node3D = arena.specimens[0]
+		spec0.health = 0
+		arena._on_resolved_hit(&"beam", {"killed": true}, {}, spec0.rewind_id)
+		arena.director._prune_dead_enemies()
+		tick()
 	expect(arena.mode == &"pressure" and arena.equipment.training_protection == [&"beam"], "Wave 0 pressure keeps yellow protected")
 	expect(is_equal_approx(arena.equipment.spend(&"beam", 20.0), 20.0) and is_equal_approx(arena.equipment.remaining(&"beam"), 64.0), "Wave 0 pressure combat yellow shots are wear-free")
 
@@ -133,7 +134,7 @@ func run() -> void:
 	expect(arena.equipment.training_protection == [&"beam"] and is_equal_approx(arena.equipment.remaining(&"beam"), 64.0), "Wave 2 heat checkpoint keeps yellow protected")
 	arena.equipment.spend(&"beam", 15.0)
 	arena.equipment.spend(&"cone", 5.0)
-	expect(is_equal_approx(arena.equipment.remaining(&"beam"), 64.0) and is_equal_approx(arena.equipment.remaining(&"cone"), 19.0), "Wave 2 protects yellow while allowing orange heat wear")
+	expect(is_equal_approx(arena.equipment.remaining(&"beam"), 64.0) and is_equal_approx(arena.equipment.remaining(&"cone"), 31.0), "Wave 2 protects yellow while allowing orange heat wear")
 
 	# Advance into Wave 3 deliberate repair lesson
 	arena.tutorial.learned.erase(&"repair")

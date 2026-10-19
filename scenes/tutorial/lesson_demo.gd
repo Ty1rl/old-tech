@@ -161,10 +161,10 @@ static func _scene_manager() -> Node:
 
 
 func is_demo_learned(id: StringName, overlay: Control = null) -> bool:
-	if bool(learned_demos.get(id, false)):
-		return true
 	var ui := overlay if overlay != null else tutorial_ui
-	if is_instance_valid(ui) and ui.has_method("is_learned") and bool(ui.call("is_learned", id)):
+	if is_instance_valid(ui) and ui.has_method("is_learned"):
+		return bool(ui.call("is_learned", id))
+	if bool(learned_demos.get(id, false)):
 		return true
 	var gs := _game_state()
 	if gs != null and gs.has_method("preferences") and not bool(gs.call("preferences").get("tutorial", true)):
@@ -331,12 +331,12 @@ func skip_to_practice() -> void:
 	_emit_practice_handoff(id)
 
 
-func cancel() -> void:
+func cancel(restore_world: bool = true) -> void:
 	if not active:
 		return
 	var id := lesson_id
 	last_summary["cancelled"] = true
-	_teardown_demo(true)
+	_teardown_demo(restore_world)
 	demo_cancelled.emit(id)
 
 
@@ -495,6 +495,13 @@ func _setup_demo_stage(id: StringName, spec: Dictionary) -> void:
 				_prepare_demo_enemy(single)
 				demo_enemies.append(single)
 
+	if arena.get("specimens") is Array and arena.get("_specimen_ids") is Array:
+		arena.specimens.assign(demo_enemies)
+		arena._specimen_ids.clear()
+		for de in demo_enemies:
+			if is_instance_valid(de):
+				arena._specimen_ids.append(int(de.get("rewind_id")))
+
 	_build_stroke_waypoints(id)
 	var init_targets := current_targets()
 	_current_aim = init_targets[0] if not init_targets.is_empty() else (_demo_origin + Vector3(0.0, 0.0, -5.4))
@@ -512,6 +519,12 @@ func _prepare_demo_enemy(enemy: Node3D) -> void:
 		enemy.set("projectile_damage", 0.0)
 	if "attack_timer" in enemy:
 		enemy.set("attack_timer", 99.0)
+	if enemy.has_method("set_instruction_visible"):
+		enemy.call("set_instruction_visible", true)
+	if "part_visual" in enemy and is_instance_valid(enemy.get("part_visual")) and enemy.part_visual.has_method("set_instruction_visible"):
+		enemy.part_visual.call("set_instruction_visible", true)
+	if "pattern_visual" in enemy and is_instance_valid(enemy.get("pattern_visual")) and enemy.pattern_visual.has_method("set_instruction_visible"):
+		enemy.pattern_visual.call("set_instruction_visible", true)
 
 
 func _build_stroke_waypoints(id: StringName) -> void:
@@ -977,6 +990,15 @@ func _teardown_demo(restore_world: bool) -> void:
 					tutorial_ui.world_points.assign(arena.call("_targets"))
 
 			last_summary["isolated_restore_verified"] = true
+		elif arena.is_inside_tree():
+			var cover_ref: RefCounted = arena.get("cover") as RefCounted
+			if cover_ref != null and cover_ref.rectangles.is_empty() and not _saved_cover_rects.is_empty():
+				cover_ref.rectangles.assign(_saved_cover_rects)
+			if is_instance_valid(weapons):
+				if _disconnected_campaign_hit and arena.has_method("_on_resolved_hit") and not weapons.resolved_hit.is_connected(Callable(arena, "_on_resolved_hit")):
+					weapons.resolved_hit.connect(Callable(arena, "_on_resolved_hit"))
+				if _disconnected_campaign_event and arena.has_method("_on_run_event") and not weapons.combat_event.is_connected(Callable(arena, "_on_run_event")):
+					weapons.combat_event.connect(Callable(arena, "_on_run_event"))
 
 	_disconnected_campaign_hit = false
 	_disconnected_campaign_event = false

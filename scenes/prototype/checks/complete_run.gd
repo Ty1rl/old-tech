@@ -30,8 +30,16 @@ func pattern(enemy: Node3D) -> void:
 	if enemy.health>0:shot(enemy)
 func practice() -> void:
 	var lesson:StringName=arena.lesson
+	if arena.lesson_demo!=null and arena.lesson_demo.active:
+		var demo_ticks:=0
+		while arena.lesson_demo.active and demo_ticks<240:
+			arena._physics_process(1.0/30.0)
+			demo_ticks+=1
+		expect(not arena.lesson_demo.active and bool(arena.lesson_demo.last_summary.get("completed",false)),"LessonDemo completed before practice for "+String(lesson))
 	if arena.tutorial.blocking:arena.tutorial.request_practice()
-	if lesson==&"move":arena.player.position+=Vector3(3,0,0)
+	if lesson==&"move":
+		arena.player.position+=Vector3(3,0,0)
+		arena._physics_process(.001)
 	elif lesson==&"repair":
 		arena._open_smart_repair()
 		var popup:Node=root.get_node("SceneManager").get_popup(&"Repair")
@@ -44,37 +52,48 @@ func practice() -> void:
 			while not arena.equipment.is_full(&"beam"):
 				arena.equipment.complete_step(&"beam",session)
 			arena.equipment.end_repair(session)
+		arena._physics_process(.001)
 	elif lesson==&"rewind":
-		for tick in range(130):
-			arena._physics_process(.05)
+		for tick in range(60):
+			arena._physics_process(.04)
 			if arena.is_emergency_active():break
-		expect(arena.is_emergency_active() and arena.time_controller.charges_remaining==2 and arena.history.age_of(0)>=6.0,"Rewind lesson triggers a safe emergency depletion after >= 6s of world history")
-		arena.emergency_rewind.step_selection(4)
+		expect(arena.is_emergency_active() and arena.rewind_lesson.phase==RewindLesson.Phase.SCRUB and arena.time_controller.charges_remaining==2,"RewindLesson stages incoming hit and enters frozen SCRUB phase")
+		arena.emergency_rewind.step_selection(2)
 		arena.emergency_rewind.confirm()
-		expect(not arena.is_emergency_active() and arena.time_controller.meter>=arena.time_controller.settings.recovery_floor,"Confirming emergency rewind restores time to recovery floor")
-	elif lesson==&"charge":
-		arena.weapons.select_tool(2)
-		var aim:Vector3=arena.specimens[0].position
-		arena.weapons.handle_event(mouse(true),arena.player,aim)
-		arena.weapons.step(1,arena.player,aim,arena.director.enemies,0)
-		arena.weapons.handle_event(mouse(false),arena.player,aim)
-		arena.weapons.step(.7,arena.player,aim,arena.director.enemies,.7)
-		expect(arena._charged_kills.size()>=2 and arena._pierced,"Real charged traveling pulse pierces yellow practice line")
+		arena._physics_process(.001)
+		expect(not arena.is_emergency_active() and arena.time_controller.charges_remaining==3 and is_equal_approx(arena.time_controller.meter,arena.time_controller.capacity),"Confirming RewindLesson restores full 3 charges and 100% meter")
 	else:
-		if lesson==&"slow":space(false);space(true);arena._physics_process(.01)
-		for enemy in arena.specimens:
-			if not is_instance_valid(enemy):continue
-			if lesson==&"cut" or (lesson==&"slow" and 1 in arena.acquired):cut(enemy)
-			elif lesson==&"slow":shot(enemy,0)
-			elif lesson==&"heat":
-				for tick in range(80):enemy.receive_attack(&"cone",.3,enemy.position,{"dt":1.0/60})
-			elif lesson==&"opening":cut(enemy);shot(enemy)
-			elif enemy.has_method("active_pattern"):
-				for phase in range(4):
-					if enemy.health>0:pattern(enemy)
-			else:shot(enemy,0)
-	arena._physics_process(.001)
-	space(false)
+		var total_reps:int=arena._stationary_quota+arena._moving_quota
+		expect(total_reps>=2,"Lesson %s defines stationary and moving practice quotas" % String(lesson))
+		for rep_idx in range(total_reps):
+			if lesson==&"charge":
+				arena.weapons.select_tool(2)
+				var aim:Vector3=arena.specimens.back().position
+				arena.weapons.handle_event(mouse(true),arena.player,aim)
+				arena.weapons.step(1,arena.player,aim,arena.director.enemies,0)
+				arena.weapons.handle_event(mouse(false),arena.player,aim)
+				arena.weapons.step(.7,arena.player,aim,arena.director.enemies,.7)
+				if rep_idx==0:
+					expect(arena._charged_kills.size()>=2 and arena._pierced,"Real charged traveling pulse pierces yellow practice line")
+			else:
+				if lesson==&"slow":space(false);space(true);arena._physics_process(.01)
+				for enemy in arena.specimens:
+					if not is_instance_valid(enemy):continue
+					if lesson==&"cut" or (lesson==&"slow" and 1 in arena.acquired):cut(enemy)
+					elif lesson==&"slow":shot(enemy,0)
+					elif lesson==&"heat":
+						for tick in range(80):enemy.receive_attack(&"cone",.3,enemy.position,{"dt":1.0/60})
+					elif lesson==&"opening":
+						if enemy.kind==&"side_guard":cut(enemy);shot(enemy)
+						else:
+							for tick in range(80):enemy.receive_attack(&"cone",.3,enemy.position,{"dt":1.0/60})
+							shot(enemy)
+					elif enemy.has_method("active_pattern"):
+						for phase in range(4):
+							if enemy.health>0:pattern(enemy)
+					else:shot(enemy,0)
+			arena._physics_process(.001)
+		space(false)
 	expect(arena.tutorial.is_learned(lesson),"Actual practice gate completed: "+String(lesson))
 func execute_full_run(diff: StringName) -> void:
 	root.get_node("SceneManager").params = {"difficulty": diff}

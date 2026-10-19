@@ -1,24 +1,22 @@
 class_name RepairConditionView
 extends Control
-## A read-only view of actual equipment condition, including rewound repairs.
+## Read-only, transparent HUD-sector overlay. Parent supplies the model region;
+## all active part targets remain inside that region, away from the outer arc.
 const Segments = preload("res://scenes/ui/condition_segments.gd")
-const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
-const COLORS := {&"ring": ToolStyle.RING, &"beam": ToolStyle.BEAM, &"cone": ToolStyle.CONE}
-const NAMES := {&"ring": "Cutter", &"beam": "Flash", &"cone": "Bellows"}
-@onready var gauge: Control = %Gauge
-@onready var condition_label: Label = %ConditionLabel
-@onready var progress: Label = %Progress
+const Style = preload("res://scenes/prototype/tool_style.gd")
+@export_range(.05, 1) var opacity := .55
+@export var stroke_width := 9.0
 var equipment: WeaponEquipment
 var tool: StringName = &""
 var _flash := 0.0
 var _display := ""
 
 func _ready() -> void:
-	gauge.draw.connect(_draw_gauge)
-	gauge.resized.connect(gauge.queue_redraw)
-	_refresh()
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	resized.connect(queue_redraw)
 
 func bind_equipment(value: WeaponEquipment, selected_tool: StringName) -> void:
+	if equipment == value and tool == selected_tool: return
 	if equipment != null and equipment.repaired.is_connected(_on_repaired):
 		equipment.repaired.disconnect(_on_repaired)
 	equipment = value
@@ -26,7 +24,7 @@ func bind_equipment(value: WeaponEquipment, selected_tool: StringName) -> void:
 	_flash = 0
 	_display = ""
 	if equipment != null: equipment.repaired.connect(_on_repaired)
-	if is_node_ready(): _refresh()
+	queue_redraw()
 
 func segment_count() -> int:
 	return equipment.repair_steps if equipment != null else 0
@@ -36,30 +34,34 @@ func filled_segments() -> int:
 	return clampi(floori(equipment.condition(tool) * segment_count() + .000001), 0, segment_count())
 
 func _on_repaired(repaired_tool: StringName, restored: float) -> void:
-	if repaired_tool != tool or restored <= 0: return
-	_flash = 1
-	_refresh()
+	if repaired_tool == tool and restored > 0:
+		_flash = .28
+		queue_redraw()
 
 func _process(delta: float) -> void:
 	var flashing := _flash > 0
-	_flash = maxf(0, _flash - delta * 2.5)
-	_refresh()
-	if flashing: gauge.queue_redraw()
+	_flash = maxf(0, _flash - delta)
+	var next := "%s:%s:%d" % [tool, equipment.condition(tool), segment_count()] if equipment != null else ""
+	if next != _display or flashing:
+		_display = next
+		queue_redraw()
 
-func _refresh() -> void:
-	var valid := equipment != null and tool in WeaponEquipment.TOOLS
-	var next := "%s:%s:%d" % [tool, str(equipment.condition(tool)), segment_count()] if valid else "Choose a weapon"
-	if next == _display: return
-	_display = next
-	condition_label.text = String(NAMES[tool]) + " condition" if valid else "Weapon condition"
-	progress.text = "%d / %d segments · %.0f%%" % [filled_segments(), segment_count(), equipment.condition(tool) * 100] if valid else "Choose a weapon"
-	gauge.queue_redraw()
+func arc_geometry() -> Dictionary:
+	# Same one-third upper-circle sector as TimeStatusHUD. The circle contains
+	# the entire supplied rectangle, so it never crosses an active part/label.
+	var index := WeaponEquipment.TOOLS.find(tool)
+	return {"center": size * .5, "radius": size.length() * .5 + 12,
+		"start": -PI + index * PI / 3 + .08, "end": -PI + (index + 1) * PI / 3 - .08}
 
-func _draw_gauge() -> void:
+func _draw() -> void:
 	if equipment == null or tool not in WeaponEquipment.TOOLS: return
-	var radius := minf(gauge.size.x * .38, gauge.size.y * .78)
-	var center := Vector2(gauge.size.x * .5, gauge.size.y * .87)
-	var color: Color = COLORS[tool]
-	Segments.draw(gauge, center, radius, -PI + .08, -.08, equipment.condition(tool),
-		segment_count(), color.lightened(_flash * .5), Color(color, .16), 8)
-	gauge.draw_arc(center, radius + 8, -PI + .08, -.08, 32, Color(color, .8), 1.5, true)
+	var arc := arc_geometry()
+	var color := Style.color_for(tool)
+	Segments.draw(self, arc.center, arc.radius, arc.start, arc.end,
+		equipment.condition(tool), segment_count(), Color(color, opacity),
+		Color(color, opacity * .2), stroke_width)
+	draw_arc(arc.center, arc.radius + 8, arc.start, arc.end, 32, Color(color, opacity * .8), 1.5, true)
+	if _flash > 0:
+		# Brief neutral confirmation; equipment identity never turns green.
+		draw_arc(arc.center, arc.radius + 11, arc.start, arc.end, 32,
+			Color(Style.REPAIR_GUIDE, _flash / .28 * .65), 2, true)

@@ -1,6 +1,10 @@
+class_name CombatPartVisual
 extends Node3D
 
 const Style = preload("res://scenes/prototype/tool_style.gd")
+var instruction_visible := false
+var instruction: Label3D
+
 var cable: MeshInstance3D
 var core: MeshInstance3D
 var plate: Node3D
@@ -58,6 +62,14 @@ func pipe(parent: Node3D, start: Vector3, finish: Vector3, radius: float, mat: M
 
 
 func build(mode: StringName, layout: StringName, radius: float, body: Material) -> void:
+	instruction = Label3D.new()
+	instruction.position = Vector3(0, 2.6, 0)
+	instruction.font_size = 32
+	instruction.pixel_size = .01
+	instruction.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	instruction.no_depth_test = true
+	instruction.visible = false
+	add_child(instruction)
 	var dark := material(Color("303c46"))
 	var metal := material(Color("9ba6ac"))
 	var blue := material(Style.RING, true)
@@ -110,4 +122,30 @@ func sync(cut: bool, exposed: bool, broken: bool, heat_ratio: float) -> void:
 	if is_instance_valid(cable): cable.visible = not cut
 	if is_instance_valid(core): core.visible = exposed and not broken
 	if is_instance_valid(plate): plate.visible = not exposed
+	_update_instruction(broken)
 	heat_material.albedo_color = Style.CONE.lerp(Color("fff0ad"), clampf(heat_ratio, 0.0, 1.0))
+
+func set_instruction_visible(value: bool) -> void:
+	instruction_visible = value
+	if is_instance_valid(instruction):
+		instruction.visible = value and not instruction.text.is_empty()
+
+func _update_instruction(broken: bool) -> void:
+	if not is_instance_valid(instruction): return
+	instruction.text = ""
+	if broken:
+		instruction.visible = false
+		return
+	if is_instance_valid(core) and core.visible:
+		instruction.text = "Charge yellow"
+		instruction.modulate = Style.BEAM
+	elif is_instance_valid(plate) and plate.visible:
+		instruction.text = "Heat orange"
+		instruction.modulate = Style.CONE
+		if is_instance_valid(cable) and cable.visible:
+			instruction.text = "Cut blue / Heat orange"
+			instruction.modulate = Style.REPAIR_GUIDE
+	elif is_instance_valid(cable) and cable.visible:
+		instruction.text = "Cut blue"
+		instruction.modulate = Style.RING
+	instruction.visible = instruction_visible and not instruction.text.is_empty()

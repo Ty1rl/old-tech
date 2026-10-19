@@ -1,9 +1,11 @@
 class_name CombatPatternVisual
 extends Node3D
 # All interactive geometry is built from these same local query anchors.
-const BLUE := Color("39b6ff")
-const ORANGE := Color("f58024")
-const YELLOW := Color("ffe538")
+const Style = preload("res://scenes/prototype/tool_style.gd")
+const BLUE := Style.RING
+const ORANGE := Style.CONE
+const YELLOW := Style.BEAM
+var instruction_visible := false
 const STONE := Color("92918b")
 # Built-in primitive resources are immutable after creation and shared between
 # instances/phases. Only the actor's transforms/visibility change during play.
@@ -159,7 +161,7 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 		letter.pixel_size = 0.012
 		letter.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		letter.no_depth_test = true
-		letter.visible = mode == &"pair"
+		letter.visible = false
 		add_child(letter)
 		valve_labels.append(letter)
 	for span: Array in spans(mode, stage if identity == &"loop_boss" else 0):
@@ -176,6 +178,7 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 		number.font_size = 34
 		number.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		add_child(number)
+		number.visible = false
 		link_labels.append(number)
 		var component := Node3D.new()
 		add_child(component)
@@ -218,6 +221,7 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 	countdown.font_size = 36
 	countdown.pixel_size = 0.012
 	countdown.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	countdown.visible = false
 	add_child(countdown)
 	warning = Node3D.new()
 	add_child(warning)
@@ -241,7 +245,7 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 func sync(mask: int, opened: bool, bare: bool, progress: int, timer: float, phase: int, attack: StringName, alive: bool) -> void:
 	for i in range(links.size()):
 		links[i].visible = not bool(mask & (1 << i)) and alive
-		link_labels[i].visible = links[i].visible
+		link_labels[i].visible = instruction_visible and links[i].visible
 		# Cutting a link leaves its stone support in place. Only the cable breaks;
 		# a timeout reconnects it once instead of repeatedly losing entire legs.
 		link_sections[i].visible = alive
@@ -251,16 +255,37 @@ func sync(mask: int, opened: bool, bare: bool, progress: int, timer: float, phas
 	for i in range(valves.size()):
 		valves[i].visible = pattern == &"pair" and alive and not opened
 		valves[i].material_override = lit_valve if i == progress else dim_valve
-		valve_labels[i].visible = valves[i].visible
+		valve_labels[i].visible = instruction_visible and valves[i].visible
 		valve_gates[i].visible = valves[i].visible
 		valve_gates[i].position.y = valve_anchor(i, boss).y + (.52 if i == progress else 0.0)
 	if pattern == &"pair" and opened: core.visible = alive
 	for i in range(sections.size()): sections[i].visible = i >= phase and alive
 	warning.visible = attack in [&"windup", &"commit"] and alive
 	warning.scale = Vector3.ONE
-	countdown.text = "CHARGE YELLOW CORE" if opened else ("A → B" if pattern == &"pair" else "CUT BLUE LINKS")
-	if timer > 0 and not opened: countdown.text = ("B " if pattern == &"pair" else "%d/%d " % [progress, links.size()]) + "%.1fs" % timer
-	if not alive: countdown.text = "DISMANTLED"
+	countdown.text = ""
+	if alive:
+		if opened:
+			countdown.text = "Charge yellow"
+			countdown.modulate = YELLOW
+		elif pattern == &"pair":
+			countdown.text = "A then B" if progress == 0 else "Then B"
+			countdown.modulate = YELLOW
+		else:
+			countdown.text = "Cut blue"
+			countdown.modulate = BLUE
+	_refresh_instruction_visibility()
+
+func set_instruction_visible(value: bool) -> void:
+	instruction_visible = value
+	_refresh_instruction_visibility()
+
+func _refresh_instruction_visibility() -> void:
+	if not is_instance_valid(countdown): return
+	countdown.visible = instruction_visible and not countdown.text.is_empty()
+	for i in range(link_labels.size()):
+		link_labels[i].visible = instruction_visible and links[i].visible and not core.visible
+	for i in range(valve_labels.size()):
+		valve_labels[i].visible = instruction_visible and valves[i].visible
 
 func pose(clock: float, speed: float, attack: StringName, timer: float) -> void:
 	# A gentle socket pulse marks the next quick shot; the exposed round core is

@@ -1,0 +1,69 @@
+ROUND P WAVE A — JAM-7 / base 1e8262c
+
+Public component: scenes/ui/repair_carousel.tscn, class RepairCarouselView.
+  bind_equipment(gear:WeaponEquipment, selected:StringName, owned_slots:Array[int])
+  set_model_region(rect:Rect2)  # viewport-space selected inspection envelope
+  signal tool_selected(tool:StringName)
+
+JAM-1 mounts this after JAM-3/JAM-7 Wave A land. Do not run Wave B automatically.
+Place it over the repair view with a full-viewport canvas Control and mouse ignore.
+Center is ONLY a transparent condition overlay: the existing selected 3D model,
+pose, active part projection and gesture inputs stay with WeaponRepair/JAM-3.
+Keep Board/ConditionSlot named nodes. Replace the old condition statistics and tiny
+selection chips at integration; this component provides neither statistics nor chips.
+
+Bind actual gear and the real owned slot order (1 ring, 2 flash, 3 cone) on opening
+and tool_switched. Connect tool_selected to the owner's switch_tool request and
+normal selection sync. It emits an optional neighbor click; it does not switch,
+spend, repair, move the player or handle Tab/1-3/WASD. Rebinding identical data is
+idempotent: no signal multiplication, model allocation or animation reset.
+
+Supply a stable selected MODEL/PART/LABEL envelope in viewport coordinates, not
+an entire Board with empty background/header/footer. The circle encloses this
+rectangle (half-diagonal +12 px) and reserves an additional 11 px outer confirmation
+stroke. Leave that annulus and side margins in the layout. Update on layout or
+selection change; do not move selected models/targets during an active gesture.
+The component never modifies the central model or any projected gesture anchor.
+set_model_region handles parent canvas transforms. Resize cancels an old side
+slide before fitting new margins. A region is required before views are shown.
+
+Normal HUD and RepairConditionView share ConditionSegments and ToolStyle: the
+selected item's same upper one-third sector, actual condition and repair_steps,
+scaled around its model. There is no green full-condition recolor. The real repaired
+signal adds a short ivory outer flash. Wear and restored/rewound equipment update
+segments without owning any balance state. segment_count()/filled_segments() remain
+available; prior ConditionLabel/Progress statistics controls were deliberately removed.
+
+One owned tool: center only. Two: center and one distinct neighbor. Three: previous
+left and next right. No central model is created. Side previews have exactly TWO
+160-ish bounded viewports (container resolution follows their small on-screen size),
+render-once updates, and disabled hidden rendering. Each lazily caches at most
+three prop instances, six total, to avoid switch-time allocation. Shallow copied
+meshes/per-instance materials leave the GLB resources unchanged. No asset edits.
+Side changes slide 24px/rotate 0.045rad over 0.18s; repeated binding doesn't replay it.
+
+Optional teaching captions
+  CombatPartVisual (part_visual.gd) / CombatPatternVisual (pattern_visual.gd):
+  set_instruction_visible(bool), default false. Geometry/color remains in quiet play.
+  sync() derives the text from the actual current parts/pattern phase. Open core:
+  Charge yellow; cut link: Cut blue; plate: Heat orange; either opening route:
+  Cut blue / Heat orange. Pair: A then B, then Then B after the actual A hit.
+  No blue instruction remains after a yellow finisher becomes required. Removed
+  repeated DISMANTLED and countdown chatter. Damage/AI logic is not edited.
+  New phase visuals default quiet; JAM-4 B opts in again only for isolated new
+  practice. Turning the API off hides countdown/link/valve teaching labels.
+  IMPORTANT: ordinary base enemies currently instantiate CreatureVisual, not the
+  legacy PartVisual builder. Do not call the new method on that adapter blindly.
+  JAM-1 must connect the real creature visual teaching hook at integration; this
+  seat did not edit unowned creature_visual.gd/enemy.gd or add a fallback ladder.
+  PatternEnemy uses CombatPatternVisual directly; real cut/valve/phase checks pass.
+
+Evidence: check.py --seat jam-7 --suite ui_p (owned component/real phase checks),
+plus unchanged patterns suite for regression. render.py --seat jam-7 --script
+res://scenes/ui_preview_p/capture.gd --name round-p-carousel --timeout 60.
+All captures are PRIVATE. Logs/receipt in own state exports/round-p-a/.
+The isolated preview reuses the ACTUAL baseline repair scene's central viewport;
+it reparents that display Control in the disposable composition and hides legacy
+repair labels/chips to show the new component independently. No replacement
+central model, pose/camera/part logic, production fixture or repair source edits.
+This is not the merged JAM-3 gesture/layout or complete campaign proof.

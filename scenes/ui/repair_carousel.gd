@@ -87,11 +87,10 @@ func _layout() -> void:
 	condition.size = rect.size
 	# Selected inspection area never moves. Neighbors fit the remaining margins.
 	var bounds:Rect2 = transform * get_viewport_rect()
-	var radius := rect.size.length() * .5 + 24
 	var extent := minf(rect.position.x - bounds.position.x, bounds.end.x - rect.end.x)
 	var side := clampf(extent * .75, 70, 180)
 	var center := rect.get_center()
-	var gap := radius + side * .65
+	var gap := rect.size.x * .5 + side * .5 + 24
 	_fit_neighbor(left, center - Vector2(gap, 0), side, bounds)
 	_fit_neighbor(right, center + Vector2(gap, 0), side, bounds)
 

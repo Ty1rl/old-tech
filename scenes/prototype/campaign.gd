@@ -1536,6 +1536,9 @@ func _spawn_practice() -> void:
 			equipment.restore_tool(tool_name, 0.5)
 	weapons.select_tool(_preferred_tool(_desired_tool_for_lesson(lesson)))
 	var rep_seed := room_index * 37 + wave_index * 13 + _stationary_done * 5 + _moving_done * 11
+	# Keep tutorial arrivals away from the bottom entrance; retain top/side variety.
+	if posmod(rep_seed, 4) == 2:
+		rep_seed += 1
 	if lesson == &"opening":
 		var rep_idx := _stationary_done if _practice_stage == &"stationary" else _moving_done
 		var guard_kind: StringName = &"side_guard" if (rep_idx % 2) == 0 else &"front_guard"
@@ -1549,9 +1552,6 @@ func _spawn_practice() -> void:
 			kind = &"yellow"
 		elif lesson in [&"shot", &"charge"]:
 			kind = &"yellow"
-			# Prefer the upper entrance for shooting practice. The formation
-			# planner still finds another safe spot if that side is obstructed.
-			rep_seed -= posmod(rep_seed, 4)
 		elif lesson == &"heat":
 			kind = &"orange"
 		elif lesson in [&"pair", &"loop", &"zigzag"]:

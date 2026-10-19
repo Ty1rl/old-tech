@@ -9,7 +9,7 @@ func run() -> void:
 	for mode: StringName in [&"easy", &"hard"]:
 		var gear := WeaponEquipment.new()
 		gear.wear_scale = CampaignDifficulty.load_for(mode).weapon_wear_scale
-		var rate := 1.2 if mode == &"easy" else 1.5
+		var rate := 1.2 if mode == &"easy" else 2.0
 		for tool: StringName in gear.TOOLS:
 			gear.reset_state()
 			var cap := gear.capacity(tool)

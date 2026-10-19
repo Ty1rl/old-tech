@@ -527,22 +527,31 @@ func _run() -> void:
 	)
 	_tick(0.5)
 	expect(arena.mode == &"practice" and arena.lesson == &"shot", "Wave 1 begins yellow shot lesson after time_meter")
-	# Shooting practice should be above the player, where the camera shows it.
+	# Practice retains varied entrances, except the obscured bottom entrance.
 	arena.lesson_demo.cancel()
 	audio_mgr.stop_dialogue()
 	arena.tutorial.dismiss()
-	for shooting_lesson: StringName in [&"shot", &"charge"]:
-		arena.lesson = shooting_lesson
-		for rep in 2:
+	for practice_lesson: StringName in [&"shot", &"charge", &"cut", &"slow", &"opening", &"pair", &"loop", &"zigzag"]:
+		arena.lesson = practice_lesson
+		for rep in 4:
 			arena._practice_stage = &"stationary"
 			arena._stationary_done = rep
+			var seed: int = arena.room_index * 37 + arena.wave_index * 13 + rep * 5 + arena._moving_done * 11
+			var preferred_seed := seed + 1 if posmod(seed, 4) == 2 else seed
+			var kind: StringName = &"yellow"
+			if practice_lesson == &"cut": kind = &"blue"
+			elif practice_lesson == &"opening": kind = &"side_guard" if rep % 2 == 0 else &"front_guard"
+			elif practice_lesson in [&"pair", &"loop", &"zigzag"]: kind = practice_lesson
+			var count := 3 if practice_lesson == &"charge" else 1
+			var kinds: Array = []
+			kinds.resize(count)
+			kinds.fill(kind)
+			var expected := CombatFlow.new().layout(&"line" if practice_lesson == &"charge" else &"curve", kinds, arena.player.position, arena.cover, preferred_seed, [])
 			arena._spawn_practice()
-			var readable: bool = not arena.specimens.is_empty()
-			var player_pixel: Vector2 = arena.player.camera.unproject_position(arena.player.global_position)
-			for specimen: Node3D in arena.specimens:
-				var target_pixel: Vector2 = arena.player.camera.unproject_position(specimen.global_position + Vector3.UP * 1.5)
-				readable = readable and target_pixel.y < player_pixel.y and root.get_visible_rect().has_point(target_pixel)
-			expect(readable, "%s practice %d spawns in the visible upper part of the room" % [shooting_lesson,rep])
+			var matches: bool = not expected.is_empty() and arena.specimens.size() == expected.size()
+			for index in mini(arena.specimens.size(), expected.size()):
+				matches = matches and arena.specimens[index].position.is_equal_approx(expected[index].position)
+			expect(matches, "%s practice %d keeps normal placement with bottom entrance excluded" % [practice_lesson, rep])
 
 	# Verify second acquired item (Tool 3 in Room 0 Wave 3) plays tutorial.tool_switch BEFORE heat explanation
 	arena.debug_start(0, 2)
@@ -832,21 +841,21 @@ func _run() -> void:
 		"Easy difficulty resource configures 2.0x damage (+100%), 0.25s melee windup, 0.35 reach padding, and 1.6x aim turn"
 	)
 	expect(
-		is_equal_approx(hard_spec.enemy_damage_scale, 3.5)
+		is_equal_approx(hard_spec.enemy_damage_scale, 5.0)
 		and is_equal_approx(hard_spec.melee_windup_seconds, 0.20)
 		and is_equal_approx(hard_spec.melee_reach_padding, 0.55)
 		and is_equal_approx(hard_spec.aim_turn_scale, 2.2),
-		"Hard difficulty resource configures 3.5x damage (+250%), 0.20s melee windup, 0.55 reach padding, and 2.2x aim turn"
+		"Hard difficulty resource configures 5.0x damage (+400%), 0.20s melee windup, 0.55 reach padding, and 2.2x aim turn"
 	)
 
 	var base_yellow_dmg := float(arena.Tuning.ENEMIES["yellow"]["damage"])
 	var base_ranged_dmg := float(arena.Tuning.ENEMIES["ranged"]["damage"])
 	for diff_mode: StringName in [&"easy", &"hard"]:
-		var expected_scale := 2.0 if diff_mode == &"easy" else 3.5
+		var expected_scale := 2.0 if diff_mode == &"easy" else 5.0
 		var expected_windup := 0.25 if diff_mode == &"easy" else 0.20
 		arena.set_difficulty(diff_mode)
 		arena.enter_room(1)
-		expect(is_equal_approx(arena.equipment.wear_scale, 1.2 if diff_mode == &"easy" else 1.5), "%s weapon wear remains configured after room entry" % diff_mode)
+		expect(is_equal_approx(arena.equipment.wear_scale, 1.2 if diff_mode == &"easy" else 2.0), "%s weapon wear remains configured after room entry" % diff_mode)
 		arena.director.clear()
 		arena.mode = &"pressure"
 		arena._pending = 1

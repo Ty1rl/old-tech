@@ -28,7 +28,7 @@ var _in_emergency := false
 const SETTINGS_PATH := "user://museum-settings.cfg"
 const AUDIO_PATH := "user://combat-audio.cfg"
 const HUD_PATH := "user://combat-hud.cfg"
-var _preferences := {"sound": true, "volume": 0.8, "voice_volume": 0.9, "fullscreen": false, "tutorial": true, "hud": 2}
+var _preferences := {"sound": true, "volume": 0.8, "voice_volume": 0.9, "fullscreen": false, "tutorial": true, "skip_tutorials": false, "hud": 2}
 var _sync_time := 0.0
 var _applied_scene_id := 0
 
@@ -209,6 +209,7 @@ func reload_preferences() -> void:
 		_preferences.voice_volume = clampf(float(config.get_value("settings", "voice_volume", 0.9)), 0, 1)
 		_preferences.fullscreen = bool(config.get_value("settings", "fullscreen", false))
 		_preferences.tutorial = bool(config.get_value("settings", "tutorial", true))
+		_preferences.skip_tutorials = bool(config.get_value("settings", "skip_tutorials", false))
 	config = ConfigFile.new()
 	if config.load(AUDIO_PATH) == OK:
 		_preferences.sound = not bool(config.get_value("audio", "muted", false))

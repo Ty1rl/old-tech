@@ -11,7 +11,7 @@ var _layout_size := Vector2.ZERO
 var _layout_factor := 0.0
 
 func _ready() -> void:
-	AudioManager.play_intro.call_deferred()
+	AudioManager.set_music_context(&"menu")
 	developer_button.visible = SceneManager.developer_tools
 	for node in column.get_children():
 		if node is Button:
@@ -42,7 +42,7 @@ func _fit() -> void:
 		margin.add_theme_constant_override("margin_" + side, roundi((16 if compact else 32) * factor))
 	column.add_theme_constant_override("separation", roundi((4 if compact else 10) * factor))
 	for text: Label in column.find_children("*", "Label", true, false):
-		var font_size := (12 if compact else 14) if text == %Eyebrow or text == footer else (14 if compact else 19)
+		var font_size := (12 if compact else 14) if text == footer else (14 if compact else 19)
 		text.add_theme_font_size_override("font_size", roundi(font_size * factor))
 	var title_font := heading.get_theme_font("font")
 	var line_width := title_font.get_string_size("SOME ASSEMBLY", HORIZONTAL_ALIGNMENT_LEFT, -1, 100).x
@@ -50,7 +50,8 @@ func _fit() -> void:
 	heading.add_theme_font_size_override("font_size", roundi(clampf(title_size, 30 * factor, 108 * factor)))
 	heading.add_theme_constant_override("line_spacing", roundi(-title_size * .22))
 	for button in buttons:
-		var text_size := (13 if compact else 14) if button == developer_button else (18 if compact else 27)
+		var text_size := (13 if compact else 14) if button == developer_button else (18 if compact else 25)
+		if button == play: text_size = 23 if compact else 32
 		button.add_theme_font_size_override("font_size", roundi(text_size * factor))
 		button.queue_redraw()
 

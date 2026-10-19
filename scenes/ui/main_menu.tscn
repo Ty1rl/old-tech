@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://cb25v8pyc2pe1"]
+[gd_scene load_steps=10 format=3 uid="uid://cb25v8pyc2pe1"]
 [ext_resource type="Script" path="res://scenes/ui/main_menu.gd" id="1"]
 [ext_resource type="Theme" path="res://scenes/ui/museum_theme.tres" id="2"]
 [ext_resource type="Texture2D" path="res://assets/ui/menu_background.png" id="3"]
@@ -19,6 +19,35 @@ border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.945, 0.918, 0.859, 0.16)
+
+[sub_resource type="StyleBoxFlat" id="Primary"]
+bg_color = Color(0.914, 0.725, 0.329, 1)
+content_margin_left = 22.0
+content_margin_right = 22.0
+content_margin_top = 10.0
+content_margin_bottom = 10.0
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_left = 3
+corner_radius_bottom_right = 3
+[sub_resource type="StyleBoxFlat" id="PrimaryHover"]
+bg_color = Color(1, 0.84, 0.51, 1)
+content_margin_left = 22.0
+content_margin_right = 22.0
+content_margin_top = 10.0
+content_margin_bottom = 10.0
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_left = 3
+corner_radius_bottom_right = 3
+[sub_resource type="StyleBoxFlat" id="PrimaryFocus"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(0.98, 0.95, 0.86, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+
 [node name="MainMenu" type="Control"]
 layout_mode = 1
 anchors_preset = 15
@@ -84,16 +113,6 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 10
 
-[node name="Eyebrow" type="Label" parent="Margin/Scroll/Column"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "AFTER HOURS"
-autowrap_mode = 3
-mouse_filter = 2
-theme_override_font_sizes/font_size = 14
-metadata/base_font_size = 14
-modulate = Color(0.76, 0.75, 0.71, 1)
-
 [node name="TopSpace" type="Control" parent="Margin/Scroll/Column"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -111,7 +130,7 @@ metadata/base_font_size = 48
 [node name="Tagline" type="Label" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "A museum of unfinished things."
+text = "Old tech. Borrowed time."
 modulate = Color(0.7, 0.69, 0.65, 1)
 autowrap_mode = 3
 mouse_filter = 2
@@ -126,6 +145,15 @@ theme_type_variation = &"MuseumMenuButton"
 size_flags_horizontal = 0
 alignment = 0
 metadata/base_button_font = 24
+theme_override_colors/font_color = Color(0.09, 0.075, 0.045, 1)
+theme_override_colors/font_hover_color = Color(0.09, 0.075, 0.045, 1)
+theme_override_colors/font_focus_color = Color(0.09, 0.075, 0.045, 1)
+theme_override_colors/font_pressed_color = Color(0.09, 0.075, 0.045, 1)
+theme_override_styles/normal = SubResource("Primary")
+theme_override_styles/hover = SubResource("PrimaryHover")
+theme_override_styles/pressed = SubResource("PrimaryHover")
+theme_override_styles/focus = SubResource("PrimaryFocus")
+
 
 [node name="SettingsButton" type="Button" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true

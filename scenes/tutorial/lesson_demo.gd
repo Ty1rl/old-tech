@@ -793,8 +793,10 @@ func _setup_demo_stage(id: StringName, spec: Dictionary) -> void:
 
 	var p_tool := int(spec.get("primary_tool", 2))
 	if is_instance_valid(weapons) and weapons.is_inside_tree():
-		var all_tools: Array[int] = [1, 2, 3]
-		weapons.call("set_loadout", all_tools, p_tool)
+		# A demonstration must not advertise equipment the player has not found.
+		var demo_tools: Array[int] = _saved_available_tools.duplicate()
+		if p_tool not in demo_tools: demo_tools.append(p_tool)
+		weapons.call("set_loadout", demo_tools, p_tool)
 		weapons.call("select_tool", p_tool)
 		weapons.call("reset_state")
 		weapons.call("select_tool", p_tool)

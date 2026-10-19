@@ -634,15 +634,11 @@ func _process(delta: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if _suppress_release_after_dismiss:
-		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			_suppress_release_after_dismiss = false
-			if is_inside_tree() and get_viewport() != null:
-				get_viewport().set_input_as_handled()
-			return
-		if event is InputEventKey and not event.pressed:
-			var rel_code: int = event.physical_keycode if event.physical_keycode else event.keycode
-			if rel_code in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
-				_suppress_release_after_dismiss = false
+			# Only swallow the release belonging to the dismiss click.
+			# A fresh press starts a playable gesture and must keep its release.
+			if not event.pressed:
 				if is_inside_tree() and get_viewport() != null:
 					get_viewport().set_input_as_handled()
 				return

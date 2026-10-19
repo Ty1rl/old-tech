@@ -29,3 +29,12 @@ func _on_back() -> void:
 
 func _on_skip_tutorials(value: bool) -> void:
 	GameState.set_setting("skip_tutorials", value)
+
+func _fit() -> void:
+	super._fit()
+	if not is_node_ready(): return
+	var factor := UI.scale_for(self)
+	for column: Control in [%EasyColumn, %HardColumn]:
+		column.custom_minimum_size.x = 220 * factor
+	for button: Button in [easy, hard]:
+		button.add_theme_font_size_override("font_size", roundi(19 * factor))

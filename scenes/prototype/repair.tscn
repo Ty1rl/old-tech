@@ -155,6 +155,43 @@ theme_override_colors/font_outline_color = Color(0.015, 0.025, 0.035, 0.95)
 theme_override_constants/shadow_offset_y = 1
 theme_override_constants/outline_size = 5
 theme_override_font_sizes/font_size = 13
-text = "E / Esc close · Tab / 1–3 switch"
+text = ""
 autowrap_mode = 3
 max_lines_visible = 2
+
+[node name="ExitControls" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -82.0
+offset_right = -16.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="CloseHint" type="Label" parent="ExitControls"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.898039, 0.870588, 0.815686, 0.94)
+theme_override_colors/font_outline_color = Color(0.015, 0.025, 0.035, 0.95)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 30
+text = "PRESS E TO CLOSE"
+
+[node name="SwitchHint" type="Label" parent="ExitControls"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.898039, 0.870588, 0.815686, 0.6)
+theme_override_colors/font_outline_color = Color(0.015, 0.025, 0.035, 0.95)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 13
+text = "TAB - SWITCH TOOL"

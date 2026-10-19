@@ -375,10 +375,15 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
-	if _suppress_next_lmb_release and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		_suppress_next_lmb_release = false
-		get_viewport().set_input_as_handled()
-		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			# A new gesture owns its release, even if an old tutorial/rewind
+			# release was consumed by another control.
+			_suppress_next_lmb_release = false
+		elif _suppress_next_lmb_release:
+			_suppress_next_lmb_release = false
+			get_viewport().set_input_as_handled()
+			return
 
 	if emergency_rewind != null and emergency_rewind.active and not GameState.is_paused() and not _has_non_repair_popup():
 		if event is InputEventMouseButton and event.pressed:

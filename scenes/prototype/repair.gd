@@ -50,6 +50,8 @@ var _allow_full_preview := false
 @onready var instructions: Label = get_node_or_null("Panel/Margin/Column/Instructions") as Label
 @onready var progress: Label = get_node_or_null("Panel/Margin/Column/HeaderRow/Progress") as Label
 @onready var feedback: Label = get_node_or_null("Panel/Margin/Column/Feedback") as Label
+@onready var close_hint: Label = get_node_or_null("ExitControls/CloseHint") as Label
+@onready var switch_hint: Label = get_node_or_null("ExitControls/SwitchHint") as Label
 @onready var meter: ProgressBar = get_node_or_null("Panel/Margin/Column/Meter") as ProgressBar
 @onready var carousel: RepairCarouselView = $Carousel
 
@@ -347,9 +349,9 @@ func switch_tool(next_tool: StringName) -> void:
 		_refresh()
 		_maybe_auto_show_spin_demo()
 		if equipment != null and equipment.is_full(tool):
-			feedback.text = "Ready · Tab / 1–3 switch · E / Esc close"
+			feedback.text = "Ready"
 		else:
-			feedback.text = "E / Esc close · Tab / 1–3 switch · WASD move · Space slow"
+			feedback.text = ""
 	_emit_stage_if_changed()
 
 
@@ -666,6 +668,10 @@ func _animate_model_parts(holder: Node3D, spec: Dictionary) -> void:
 func _update_layout() -> void:
 	if panel == null or _dragging:
 		return
+	if close_hint != null:
+		close_hint.add_theme_font_size_override("font_size", 22 if size.y < 440 else 30)
+	if switch_hint != null:
+		switch_hint.add_theme_font_size_override("font_size", 12 if size.y < 440 else 13)
 	if preview_rect.size.x > 0.0 and preview_rect.size.y > 0.0:
 		panel.position = preview_rect.position
 		panel.size = preview_rect.size
@@ -675,7 +681,7 @@ func _update_layout() -> void:
 	if view_size.x <= 0.0 or view_size.y <= 0.0:
 		view_size = Vector2(960, 600)
 	var edge := Vector2(clampf(view_size.x * 0.025, 12.0, 40.0), clampf(view_size.y * 0.035, 12.0, 34.0))
-	var bottom_pad := clampf(view_size.y * 0.088, 56.0, 74.0)
+	var bottom_pad := clampf(view_size.y * 0.12, 76.0, 96.0)
 	panel.position = edge
 	panel.size = Vector2(view_size.x - edge.x * 2.0, view_size.y - edge.y - bottom_pad)
 	_sync_tool_canvas()
@@ -884,7 +890,7 @@ func _board_offset() -> Vector2:
 func _on_board_input(event: InputEvent) -> void:
 	if not _can_trace():
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and equipment != null and equipment.is_full(tool):
-			feedback.text = "Ready · Tab / 1–3 switch · E / Esc close"
+			feedback.text = "Ready"
 			_queue_redraws()
 		else:
 			_clear_trace()
@@ -1247,7 +1253,7 @@ func _commit_steps(step_count: int) -> int:
 			feedback.text = "All owned tools repaired!"
 			_request_close()
 		else:
-			feedback.text = "Ready · Tab / 1–3 switch · E / Esc close"
+			feedback.text = "Ready"
 	elif blocked_by_time:
 		feedback.text = "Checkpoint complete (+%.1f). Let time recharge for next checkpoint." % total_restored
 	else:

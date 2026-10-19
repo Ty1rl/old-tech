@@ -13,6 +13,8 @@ func terminal(event: StringName, interrupted: bool) -> void:
 	terminals.append([event, interrupted])
 func reset() -> void:
 	manager.begin_run()
+	# Individual event probes bypass startup silence; test the real delay below.
+	manager._bark_cooldown = 0
 	terminals.clear()
 func run() -> void:
 	manager = root.get_node("AudioManager")
@@ -29,6 +31,16 @@ func run() -> void:
 		var clip: AudioStreamMP3 = manager.library.clips[event][0]
 		expect(clip != null and clip.get_length() > 1 and not clip.loop, "New speech decodes without looping: " + String(event))
 	reset()
+	manager.begin_run()
+	expect(not manager.say(&"protagonist.repair_started"), "A new run starts with quiet protagonist audio")
+	manager._process(59.9)
+	expect(not manager.say(&"protagonist.under_pressure"), "Startup silence lasts 60 seconds")
+	manager._process(.2)
+	expect(manager.say(&"protagonist.under_pressure") and manager.voice.volume_db == -8, "After startup delay, protagonist plays 2 dB below other speech")
+	manager.stop_dialogue()
+	manager.lesson(&"shot")
+	expect(manager.voice.volume_db == -6, "Tutorial retains its original voice level after a protagonist line")
+	reset()
 	manager.lesson(&"shot")
 	expect(manager.is_speaking(&"tutorial.shot") and not manager.is_speaking(&"tutorial.time_meter") and manager._queue.is_empty(), "Shot has no obsolete automatic reserve explanation")
 	reset()
@@ -37,6 +49,7 @@ func run() -> void:
 	expect(manager.voice.get_playback_position() > .05 and manager.instruction_busy(), "Actual pickup recording advances")
 	await create_timer(manager.voice.stream.get_length() + .3).timeout
 	expect(terminals == [[&"tutorial.pickup", false]] and not manager.instruction_busy(), "Natural pickup completion is a single non-interrupted terminal")
+	expect(manager._bark_cooldown > 18 and not manager.say(&"protagonist.under_pressure"), "Natural tutorial completion leaves a quiet interval before chatter")
 	reset()
 	manager.say(&"tutorial.time_meter", 3)
 	manager.say(&"tutorial.pickup", 2)
@@ -104,16 +117,23 @@ func run() -> void:
 	reset()
 	manager.say(&"protagonist.repair_started")
 	manager.stop_dialogue()
-	manager._process(89.9)
-	expect(not manager.say(&"protagonist.under_pressure"), "Shared cooldown suppresses chatter for 90 seconds")
+	manager._process(149.9)
+	expect(not manager.say(&"protagonist.under_pressure"), "Shared cooldown suppresses chatter for 150 seconds")
 	manager._process(.2)
 	expect(manager.say(&"protagonist.under_pressure"), "Barks available after shared cooldown")
 	manager.stop_dialogue()
-	expect(not manager.say(&"protagonist.boss_defeated", 2), "Protagonist milestones respect the same 90-second limit")
+	expect(not manager.say(&"protagonist.boss_defeated", 2), "Protagonist milestones respect the same 150-second limit")
+	manager.begin_run()
+	expect(manager._bark_cooldown > 149, "Restarting cannot shorten the existing protagonist cooldown")
 	reset()
 	manager.say(&"tutorial.time_meter", 3)
 	expect(not manager.say(&"protagonist.multi_kill"), "Teaching suppresses incidental reactions")
 	expect(not manager.say(&"protagonist.boss_defeated", 2) and manager._queue.is_empty(), "Protagonist milestones cannot queue chatter behind teaching")
+	manager.stop_dialogue()
+	manager._process(19.9)
+	expect(not manager.say(&"protagonist.under_pressure"), "Skipping instruction speech also preserves 20 seconds of quiet")
+	manager._process(.2)
+	expect(manager.say(&"protagonist.under_pressure"), "Chatter becomes eligible after the tutorial grace period")
 	reset()
 	# Real campaign signal wiring, using controlled events rather than claiming a
 	# complete combat playthrough. No gameplay/UI source is changed by this check.

@@ -4,11 +4,15 @@ extends Node
 signal speech_finished(event: StringName, interrupted: bool)
 
 const MAX_QUEUE := 3
-const BARK_INTERVAL_SECONDS := 90.0
+const BARK_INTERVAL_SECONDS := 150.0
+const BARK_INITIAL_DELAY_SECONDS := 60.0
+const BARK_TUTORIAL_GRACE_SECONDS := 20.0
+const PROTAGONIST_GAIN_DB := -2.0
 const MENU_MUSIC_BOOST_DB := 6.0 # Menu cue only; preserve encounter/boss/victory and Voice.
 @export var music_library: CombatAudioLibrary = preload("res://audio/music/contexts.tres")
 @onready var voice: AudioStreamPlayer = $Voice
 @onready var music: AudioStreamPlayer = $Music
+@onready var _default_voice_volume_db: float = voice.volume_db
 var library: DialogueLibrary
 var current_event: StringName = &""
 var music_context: StringName:
@@ -103,7 +107,7 @@ func play_intro() -> bool:
 func begin_run() -> void:
 	stop_dialogue()
 	_once.clear()
-	_bark_cooldown = 0
+	_bark_cooldown = maxf(_bark_cooldown, BARK_INITIAL_DELAY_SECONDS)
 	_intro_played = false # Next explicit New Game may present its intro again.
 
 func lesson(id: StringName) -> void:
@@ -154,20 +158,27 @@ func stop_dialogue() -> void:
 	_priority = 0
 	_speech_elapsed = 0
 	_speech_serial += 1
-	if is_instance_valid(voice): voice.stop()
-	for event in cancelled: speech_finished.emit(event, true)
+	if is_instance_valid(voice):
+		voice.stop()
+		voice.volume_db = _default_voice_volume_db
+	for event in cancelled:
+		if String(event).begins_with("tutorial."):
+			_bark_cooldown = maxf(_bark_cooldown, BARK_TUTORIAL_GRACE_SECONDS)
+		speech_finished.emit(event, true)
 	_cancelling = false
 
 func _start(item: Dictionary) -> void:
 	_speech_serial += 1
+	var protagonist := String(item.event).begins_with("protagonist.")
 	voice.stream = item.stream
+	voice.volume_db = _default_voice_volume_db + (PROTAGONIST_GAIN_DB if protagonist else 0.0)
 	voice.pitch_scale = .86 if String(item.event).begins_with("boss.") else 1.0
 	current_event = item.event
 	_priority = item.priority
 	_speech_elapsed = 0
 	_variants[item.event] = int(_variants.get(item.event, 0)) + 1
 	if item.once: _once[item.event] = true
-	if _priority == 1 or String(item.event).begins_with("protagonist."):
+	if _priority == 1 or protagonist:
 		_bark_cooldown = BARK_INTERVAL_SECONDS
 	played_events.append(current_event)
 	if played_events.size() > 64: played_events.pop_front()
@@ -179,6 +190,9 @@ func _finish_current(interrupted: bool) -> void:
 	current_event = &""
 	_priority = 0
 	_speech_elapsed = 0
+	voice.volume_db = _default_voice_volume_db
+	if String(event).begins_with("tutorial."):
+		_bark_cooldown = maxf(_bark_cooldown, BARK_TUTORIAL_GRACE_SECONDS)
 	# Handoff before notification keeps instruction_busy true across a queued
 	# tutorial chain; consumers can proceed immediately after its final line.
 	if not _queue.is_empty() and _speech_available(): _start(_queue.pop_front())

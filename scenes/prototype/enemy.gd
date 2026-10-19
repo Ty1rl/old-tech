@@ -17,9 +17,14 @@ const MAX_KNOCKBACK_SPEED := 32.0
 const HOSTILE_RADIUS := 0.24
 const RANGED_WINDUP := 0.95
 const RANGED_RECOVERY := 1.8
+const RANGED_MIN_DIST := 4.4
+const RANGED_PREFERRED_DIST := 6.8
+const RANGED_APPROACH_DIST := 9.0
+const RANGED_TRIGGER_DIST := 11.5
 const WARNING_TURN_RATE := 2.4
 const HURT_CUE_INTERVAL := .35
 var hurt_cue_timer := 0.0
+var _ranged_retreating := false
 
 var cover: RefCounted
 
@@ -128,6 +133,7 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	contact_damage = float(cfg.get("damage", 0.0))
 	contact_cooldown = 0.0
 	hurt_cue_timer = 0.0
+	_ranged_retreating = false
 	cable_cut = false
 	plate_broken = false
 	attack_phase = &"approach"
@@ -160,6 +166,36 @@ func is_staggered() -> bool:
 	return stagger_timer > 0.0
 
 
+func mass_resistance() -> Dictionary:
+	var impulse_resist := float(Tuning.CONTROL.get("brute_resistance", 0.4)) if kind == &"brute" else 1.0
+	var stagger_resist := float(Tuning.CONTROL.get("brute_stagger_resistance", 0.8)) if kind == &"brute" else 1.0
+	if kind in [&"ranged", &"skirmisher"]:
+		impulse_resist = 1.05
+		stagger_resist = 1.1
+	elif kind == &"warden":
+		# A braced shield carrier can be heated without every pulse ejecting it
+		# from cone range. It still moves and visibly staggers.
+		impulse_resist = 0.4 if is_core_exposed() else _part("push_resistance", 0.25)
+		stagger_resist = _part("stagger_resistance", 0.8)
+	if mechanism() != &"":
+		var heavy_mech := mechanism() in [&"heat", &"open", &"pattern"]
+		impulse_resist = float(Tuning.MATCHUPS.push_heavy if heavy_mech else Tuning.MATCHUPS.push_light)
+		if mechanism() == &"open" and (cable_cut or plate_broken):
+			impulse_resist = maxf(impulse_resist, 0.42)
+		elif mechanism() == &"pattern" and plate_broken and not String(kind).ends_with("_boss"):
+			impulse_resist = maxf(impulse_resist, 0.28)
+		stagger_resist = float(Tuning.MATCHUPS.stagger_scale)
+	if String(kind).ends_with("_boss"):
+		impulse_resist *= .35
+		stagger_resist *= .35
+	var max_speed := MAX_KNOCKBACK_SPEED * clampf(impulse_resist, 0.12, 1.0)
+	return {
+		"impulse_scale": impulse_resist,
+		"stagger_scale": stagger_resist,
+		"max_speed": max_speed,
+	}
+
+
 func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -> void:
 	if health <= 0.0:
 		return
@@ -168,26 +204,17 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 		return
 	dir_xz = dir_xz.normalized()
 
-	var impulse_resist := float(Tuning.CONTROL.get("brute_resistance", 0.4)) if kind == &"brute" else 1.0
-	var stagger_resist := float(Tuning.CONTROL.get("brute_stagger_resistance", 0.8)) if kind == &"brute" else 1.0
-	if kind == &"warden":
-		# A braced shield carrier can be heated without every pulse ejecting it
-		# from cone range. It still moves and visibly staggers.
-		impulse_resist = _part("push_resistance", 0.25)
-		stagger_resist = _part("stagger_resistance", 0.8)
-	if mechanism() != &"":
-		impulse_resist = float(Tuning.MATCHUPS.push_heavy if mechanism() in [&"heat", &"open", &"pattern"] else Tuning.MATCHUPS.push_light)
-		stagger_resist = float(Tuning.MATCHUPS.stagger_scale)
-	if String(kind).ends_with("_boss"):
-		impulse_resist *= .35
-		stagger_resist *= .35
+	var profile := mass_resistance()
+	var impulse_resist := float(profile["impulse_scale"])
+	var stagger_resist := float(profile["stagger_scale"])
+	var max_speed := float(profile["max_speed"])
 	var eff_impulse := maxf(0.0, impulse) * impulse_resist
 	var eff_stagger := maxf(0.0, stagger_seconds) * stagger_resist
 
 	if eff_impulse > 0.0:
 		knockback_vel += dir_xz * eff_impulse
-		if knockback_vel.length() > MAX_KNOCKBACK_SPEED:
-			knockback_vel = knockback_vel.normalized() * MAX_KNOCKBACK_SPEED
+		if knockback_vel.length() > max_speed:
+			knockback_vel = knockback_vel.normalized() * max_speed
 
 	if eff_stagger > 0.0:
 		var base_max := maxf(float(Tuning.CONTROL.get("stagger", 0.85)) * 1.5, stagger_seconds)
@@ -837,14 +864,20 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array, cohesion:
 				intent = self_xz + raw_dir * 3.0
 				wants_move = true
 		&"ranged":
+			_ranged_retreating = false
 			if attack_phase == &"approach":
 				_track_approach_aim(dir_to_player, active_ai_delta)
-				if dist > 8.0:
+				var los_blocked: bool = cover != null and bool(cover.clip_segment(self_xz, player_xz, HOSTILE_RADIUS).blocked)
+				if los_blocked:
 					intent = player_xz
 					wants_move = true
-				elif dist < 4.0:
-					intent = self_xz - dir_to_player * 2
+				elif dist > RANGED_APPROACH_DIST:
+					intent = _ranged_standoff_intent(player_xz, self_xz, dir_to_player, neighbors)
 					wants_move = true
+				elif dist < RANGED_MIN_DIST:
+					intent = _ranged_standoff_intent(player_xz, self_xz, dir_to_player, neighbors)
+					wants_move = true
+					_ranged_retreating = true
 
 	if mechanism() != &"":
 		if attack_phase == &"approach":
@@ -861,7 +894,7 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array, cohesion:
 		wants_move = attack_phase == &"approach"
 
 	var stop_dist := radius + PLAYER_CONTACT_RADIUS - 0.04
-	if dist > stop_dist and wants_move:
+	if (dist > stop_dist or _ranged_retreating) and wants_move:
 		var route := navigation.next_direction(active_ai_delta, intent, movement_radius())
 		if route.length_squared() > .001:
 			# Local separation/cohesion can bend a valid route slightly; neither
@@ -884,6 +917,8 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array, cohesion:
 	# Recompute XZ distance for contact damage (suppressed while staggered)
 	var post_xz := Vector3(position.x, 0.0, position.z)
 	var post_dist := post_xz.distance_to(player_xz)
+	if _ranged_retreating and (post_dist >= RANGED_MIN_DIST or post_dist <= dist + 0.0005 * active_ai_delta):
+		_ranged_retreating = false
 	if kind == &"ranged":
 		_step_ranged(active_ai_delta, player, post_dist)
 		return
@@ -906,6 +941,30 @@ func _emit_enemy_event(event: StringName, point: Vector3, strength: float = 1.0)
 	# No events are emitted by visual sync, configure or restore. Hurt barks have
 	# a world-time cooldown; warning/release/death are actual state transitions.
 	enemy_event.emit(kind, event, point, strength)
+
+
+func _ranged_standoff_intent(player_xz: Vector3, self_xz: Vector3, dir_to_player: Vector3, neighbors: Array) -> Vector3:
+	var away := -dir_to_player if dir_to_player.length_squared() > 0.0001 else -facing
+	var ranged_peers := 0
+	for other in neighbors:
+		if other != self and is_instance_valid(other) and other.health > 0.0 and other.get("kind") == &"ranged":
+			if position.distance_to(other.position) <= 10.0:
+				ranged_peers += 1
+	var lane_angle := float(posmod(combat_id(), 3) - 1) * 0.34 if ranged_peers > 0 else 0.0
+	var base_away := away.rotated(Vector3.UP, lane_angle)
+	var candidate := _resolve_cover_overlap(_clamp_to_arena(player_xz + base_away * RANGED_PREFERRED_DIST))
+	if cover != null and (cover.clip_segment(self_xz, candidate, movement_radius()).blocked or candidate.distance_to(player_xz) < RANGED_MIN_DIST):
+		for extra_angle: float in [0.65 * skirmish_strafe_sign, -0.65 * skirmish_strafe_sign, 1.25 * skirmish_strafe_sign, -1.25 * skirmish_strafe_sign]:
+			var alt := _resolve_cover_overlap(_clamp_to_arena(player_xz + away.rotated(Vector3.UP, extra_angle) * RANGED_PREFERRED_DIST))
+			if alt.distance_to(player_xz) >= RANGED_MIN_DIST and not cover.clip_segment(self_xz, alt, movement_radius()).blocked:
+				candidate = alt
+				break
+	if navigation != null and not navigation._dirty and navigation._last_intent != Vector3.ZERO:
+		var last_dist := navigation._last_intent.distance_to(player_xz)
+		if last_dist >= RANGED_MIN_DIST and last_dist <= RANGED_APPROACH_DIST and navigation._last_intent.distance_to(candidate) <= 1.8:
+			if cover == null or not cover.clip_segment(self_xz, navigation._last_intent, movement_radius()).blocked:
+				return navigation._last_intent
+	return candidate
 
 
 func _track_approach_aim(direction: Vector3, dt: float) -> void:
@@ -994,7 +1053,9 @@ func _sync_ranged_visual() -> void:
 func _step_ranged(dt: float, player: Node3D, distance: float) -> void:
 	if health <= 0 or dt <= 0 or not is_instance_valid(player) or not player.can_act: return
 	if attack_phase == &"approach":
-		if distance <= 11.5:
+		var player_xz := Vector3(player.position.x, 0.0, player.position.z)
+		var los_clear: bool = cover == null or not bool(cover.clip_segment(position, player_xz, HOSTILE_RADIUS).blocked)
+		if distance <= RANGED_TRIGGER_DIST and los_clear and not _ranged_retreating:
 			_lock_warning_aim()
 			attack_phase = &"windup"
 			attack_timer = RANGED_WINDUP

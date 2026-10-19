@@ -14,6 +14,22 @@ var motion_clock := 0.0
 static func handles(value: StringName) -> bool:
 	return value in [&"pair", &"loop", &"zigzag", &"loop_boss", &"sequence_boss", &"final_boss"]
 
+static func recommended_boss_escorts(boss_kind: StringName, hard: bool = false) -> Array[StringName]:
+	var result: Array[StringName] = []
+	var raw: Array = []
+	match boss_kind:
+		&"sequence_boss":
+			raw = [&"yellow", &"ranged", &"blue", &"orange"] if hard else [&"yellow", &"ranged", &"blue"]
+		&"loop_boss":
+			raw = [&"blue", &"ranged", &"orange", &"yellow"] if hard else [&"blue", &"ranged", &"orange"]
+		&"final_boss":
+			raw = [&"blue", &"yellow", &"ranged", &"orange", &"side_guard"] if hard else [&"blue", &"yellow", &"ranged"]
+		_:
+			raw = [&"yellow", &"ranged", &"blue"]
+	for item in raw:
+		result.append(StringName(item))
+	return result
+
 func is_boss() -> bool:
 	return String(kind).ends_with("_boss")
 
@@ -34,6 +50,11 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	pattern_open = false
 	motion_clock = 0
 	super.configure(p_kind, spawn_pos, orbit_seed)
+
+func set_instruction_visible(value: bool) -> void:
+	super.set_instruction_visible(value)
+	if is_instance_valid(pattern_visual):
+		pattern_visual.set_instruction_visible(value)
 
 func active_pattern() -> StringName:
 	if kind == &"loop_boss": return &"loop"
@@ -95,21 +116,25 @@ func _build_visuals() -> void:
 	if is_instance_valid(status_root): status_root.queue_free()
 	part_visual = null
 	warden_visual = null
-	body_material = _make_mat(Color("92918b"))
-	base_body_color = Color("92918b")
+	var pal := PatternVisual.palette_for(kind, is_boss())
+	base_body_color = pal["body"]
+	body_material = _make_mat(base_body_color)
 	pattern_visual = PatternVisual.new()
 	visual_root = pattern_visual
 	add_child(visual_root)
 	pattern_visual.build(active_pattern(), is_boss(), kind, phase)
 	status_root = Node3D.new()
 	add_child(status_root)
-	hp_bar_fill = pattern_visual.box(status_root, Vector3(0, 4.3, 0), Vector3(radius * 2, 0.1, 0.1), Color("67d97e"))
+	var bar_y := 4.85 if is_boss() else 4.3
+	hp_bar_fill = pattern_visual.box(status_root, Vector3(0, bar_y, 0), Vector3(radius * 2, 0.12 if is_boss() else 0.1, 0.12 if is_boss() else 0.1), Color("67d97e"))
 	hp_bar_material = hp_bar_fill.material_override
 	feedback_label = Label3D.new()
-	feedback_label.position = Vector3(0, 4.8, 0)
+	feedback_label.position = Vector3(0, bar_y + 0.35, 0)
 	feedback_label.font_size = 28
 	feedback_label.pixel_size = 0.012
 	feedback_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	feedback_label.text = ""
+	feedback_label.visible = false
 	status_root.add_child(feedback_label)
 	_update_warden_visuals()
 
@@ -240,9 +265,10 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 			cue = &"phase_removed"
 	result["cue"] = cue
 	last_hit_result = result.duplicate()
-	if cue != &"" and is_instance_valid(feedback_label):
-		feedback_label.text = String(cue).replace("_", " ").to_upper()
-		feedback_timer = 0.9
+	if is_instance_valid(feedback_label):
+		feedback_label.text = ""
+		feedback_label.visible = false
+	feedback_timer = 0.0
 	_update_warden_visuals()
 	return result
 

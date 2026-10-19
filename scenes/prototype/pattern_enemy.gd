@@ -283,6 +283,11 @@ func step_enemy(world_delta: float, player: Node3D, neighbors: Array = [], cohes
 		if window_timer <= 0: _reset_partial()
 	# Base movement/cover/stagger integration is reused. Pattern attacks provide
 	# a longer warning, a committed beat, then a generous stationary recovery.
+	# Face the player between boss attacks; the visible warning and shot stay locked.
+	if is_boss() and attack_phase == &"recover" and stagger_timer <= 0.0 and is_instance_valid(player):
+		var toward := Vector3(player.position.x - position.x, 0.0, player.position.z - position.z)
+		if toward.length_squared() > 0.0001:
+			facing = _rotate_xz_toward(facing, toward.normalized(), aim_turn_rate(float(Tuning.PATTERNS.boss_recovery_turn_rate)) * world_delta)
 	var before := position
 	var locked_facing := facing
 	var locked := attack_phase != &"approach"
@@ -329,7 +334,7 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 		if distance <= trigger:
 			_lock_warning_aim()
 			attack_phase = &"windup"
-			attack_timer = 1.1 if is_boss() else float(Tuning.PATTERNS.windup)
+			attack_timer = attack_windup(1.1 if is_boss() else float(Tuning.PATTERNS.windup))
 			_emit_enemy_event(&"warning", position)
 		_sync_pattern_attack_warning()
 		return

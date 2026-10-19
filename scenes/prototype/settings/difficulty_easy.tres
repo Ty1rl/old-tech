@@ -16,3 +16,7 @@ refill_delay_scale = 1.0
 recovery_scale = 1.0
 boss_escort_count = 6
 mixed_reinforcements = false
+enemy_damage_scale = 1.25
+attack_windup_scale = 1.0
+melee_reach_padding = 0.35
+aim_turn_scale = 1.2

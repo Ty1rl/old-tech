@@ -488,18 +488,18 @@ func run() -> void:
 	expect(er.selected_index == 0 and player.position.distance_to(pos_at_present) < 0.05,
 		"EmergencyRewind starts at choice 0 (NOW) with recorded history choices available")
 
-	# Mouse wheel DOWN steps toward older snapshots (+1); mouse wheel UP steps toward newer snapshots (-1)
+	# Wheel notches step by world seconds while retaining the detailed snapshots.
 	raw_mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true)
 	raw_mouse_button(MOUSE_BUTTON_WHEEL_DOWN, false)
 	raw_mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true)
 	raw_mouse_button(MOUSE_BUTTON_WHEEL_DOWN, false)
 	arena.scrub_view.step(1.0)
-	expect(er.selected_index == 2 and player.position.x < pos_at_present.x - 0.1,
+	expect(absf(er.choice_age(er.selected_index) - 2.0) <= .12 and player.position.x < pos_at_present.x - 0.1,
 		"Mouse wheel down steps emergency selection into the past and previews older world state")
 	raw_mouse_button(MOUSE_BUTTON_WHEEL_UP, true)
 	raw_mouse_button(MOUSE_BUTTON_WHEEL_UP, false)
 	arena.scrub_view.step(1.0)
-	expect(er.selected_index == 1,
+	expect(absf(er.choice_age(er.selected_index) - 1.0) <= .12,
 		"Mouse wheel up steps emergency selection toward newer snapshot")
 
 	# Confirm emergency rewind with Left Mouse Button without leaking into weapon attack or refunding charge

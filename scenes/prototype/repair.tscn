@@ -69,6 +69,7 @@ layout_mode = 2
 show_percentage = false
 
 [node name="Instructions" type="Label" parent="Panel/Margin/Column"]
+custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.898039, 0.870588, 0.815686, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -147,7 +148,7 @@ grow_vertical = 2
 mouse_filter = 2
 
 [node name="Feedback" type="Label" parent="Panel/Margin/Column"]
-custom_minimum_size = Vector2(240, 18)
+custom_minimum_size = Vector2(240, 40)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.898039, 0.870588, 0.815686, 0.82)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)

@@ -10,6 +10,7 @@ const EnemyNode = preload("res://scenes/prototype/enemy.gd")
 const CoverScript = preload("res://scenes/prototype/cover.gd")
 const NavigationScene = preload("res://scenes/navigation/exhibit_navigation.tscn")
 var navigation: ExhibitNavigation
+var combat_difficulty: CampaignDifficulty
 var _movement_time: TimeController
 
 const Flow = preload("res://scenes/prototype/flow.gd")
@@ -211,6 +212,7 @@ func spawn(kind: StringName, spawn_position: Vector3) -> Node3D:
 	if cover == null:
 		cover = CoverScript.new()
 	var enemy: CombatEnemy = PatternEnemy.new() if PatternEnemy.handles(kind) else EnemyNode.new()
+	enemy.combat_difficulty = combat_difficulty
 	enemy.cover = cover
 	_spawn_counter += 1
 	enemy.rewind_id = _spawn_counter
@@ -436,6 +438,7 @@ func restore_state(data: Dictionary) -> void:
 			enemy.configure(entry_kind, entry_pos, eid)
 
 		_bind_enemy(enemy)
+		enemy.combat_difficulty = combat_difficulty
 		enemy.restore_state(entry)
 		restored_enemies.append(enemy)
 

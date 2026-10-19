@@ -1221,7 +1221,7 @@ func _commit_steps(step_count: int) -> int:
 			else:
 				_clear_trace()
 			trace_bad = true
-			feedback.text = "Not enough time for checkpoint - pause gesture to let time recharge."
+			feedback.text = "Not enough time. Release Space and the mouse to recharge." if tc.slow_requested else "Not enough time. Release the mouse to recharge."
 			_queue_redraws()
 		else:
 			_clear_trace()

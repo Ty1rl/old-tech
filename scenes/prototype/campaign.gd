@@ -216,6 +216,8 @@ func create_museum() -> Node3D:
 func set_difficulty(value: Variant) -> void:
 	difficulty_spec = Rooms.DifficultySpec.load_for(value)
 	difficulty_id = difficulty_spec.id
+	if is_instance_valid(director):
+		director.combat_difficulty = difficulty_spec
 
 
 func _room_definitions() -> Array[Dictionary]:

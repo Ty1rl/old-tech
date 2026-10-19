@@ -10,6 +10,7 @@ const WardenVisual = preload("res://scenes/prototype/warden_visual.gd")
 const PartVisual = preload("res://scenes/prototype/part_visual.gd")
 const NavigationScene = preload("res://scenes/navigation/enemy_navigation.tscn")
 var navigation: EnemyNavigation
+var combat_difficulty: CampaignDifficulty
 
 const CreatureVisual = preload("res://scenes/prototype/creature_visual.gd")
 const PLAYER_CONTACT_RADIUS := 0.5
@@ -130,7 +131,7 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 	health = max_health
 	move_speed = float(cfg.get("speed", 0.0))
 	radius = float(cfg.get("radius", 0.7))
-	contact_damage = float(cfg.get("damage", 0.0))
+	contact_damage = float(cfg.get("damage", 0.0)) * (combat_difficulty.enemy_damage_scale if combat_difficulty != null else 1.0)
 	contact_cooldown = 0.0
 	hurt_cue_timer = 0.0
 	_ranged_retreating = false
@@ -280,7 +281,7 @@ func restore_state(data: Dictionary) -> void:
 	max_health = _configured_max_health(kind, cfg)
 	move_speed = float(cfg.get("speed", 0.0))
 	radius = float(cfg.get("radius", 0.7))
-	contact_damage = float(cfg.get("damage", 0.0))
+	contact_damage = float(cfg.get("damage", 0.0)) * (combat_difficulty.enemy_damage_scale if combat_difficulty != null else 1.0)
 	if kind_changed:
 		_build_visuals()
 
@@ -865,8 +866,9 @@ func _step_enemy(world_delta: float, player: Node3D, neighbors: Array, cohesion:
 				wants_move = true
 		&"ranged":
 			_ranged_retreating = false
-			if attack_phase == &"approach":
+			if attack_phase == &"approach" or attack_phase == &"recover":
 				_track_approach_aim(dir_to_player, active_ai_delta)
+			if attack_phase == &"approach":
 				var los_blocked: bool = cover != null and bool(cover.clip_segment(self_xz, player_xz, HOSTILE_RADIUS).blocked)
 				if los_blocked:
 					intent = player_xz
@@ -968,7 +970,15 @@ func _ranged_standoff_intent(player_xz: Vector3, self_xz: Vector3, dir_to_player
 
 
 func _track_approach_aim(direction: Vector3, dt: float) -> void:
-	facing = _rotate_xz_toward(facing, direction, WARNING_TURN_RATE * maxf(0, dt))
+	facing = _rotate_xz_toward(facing, direction, aim_turn_rate(WARNING_TURN_RATE) * maxf(0, dt))
+
+
+func aim_turn_rate(base_rate: float) -> float:
+	return base_rate * (combat_difficulty.aim_turn_scale if combat_difficulty != null else 1.0)
+
+
+func attack_windup(base_seconds: float) -> float:
+	return base_seconds * (combat_difficulty.attack_windup_scale if combat_difficulty != null else 1.0)
 
 
 func _lock_warning_aim() -> void:
@@ -1047,7 +1057,7 @@ func _sync_ranged_visual() -> void:
 	if is_instance_valid(ranged_lens):
 		var winding := attack_phase == &"windup"
 		var released := attack_phase == &"recover" and attack_timer > RANGED_RECOVERY - .16
-		ranged_lens.scale = Vector3.ONE * (1.5 if released else (1.0 + .5 * clampf(1 - attack_timer / RANGED_WINDUP, 0, 1) if winding else 1.0))
+		ranged_lens.scale = Vector3.ONE * (1.5 if released else (1.0 + .5 * clampf(1 - attack_timer / attack_windup(RANGED_WINDUP), 0, 1) if winding else 1.0))
 
 
 func _step_ranged(dt: float, player: Node3D, distance: float) -> void:
@@ -1058,7 +1068,7 @@ func _step_ranged(dt: float, player: Node3D, distance: float) -> void:
 		if distance <= RANGED_TRIGGER_DIST and los_clear and not _ranged_retreating:
 			_lock_warning_aim()
 			attack_phase = &"windup"
-			attack_timer = RANGED_WINDUP
+			attack_timer = attack_windup(RANGED_WINDUP)
 			_emit_enemy_event(&"warning", position)
 			if is_instance_valid(feedback_label):
 				feedback_label.text = ""
@@ -1118,11 +1128,11 @@ func pack_target(player_position: Vector3, neighbors: Array) -> Vector3:
 
 func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> void:
 	if health <= 0 or world_delta <= 0 or not is_instance_valid(player) or not player.can_act: return
-	var reach := radius + PLAYER_CONTACT_RADIUS + 0.1
+	var reach := radius + PLAYER_CONTACT_RADIUS + (combat_difficulty.melee_reach_padding if combat_difficulty != null else float(Tuning.MATCHUPS.attack_reach_padding))
 	if attack_phase == &"approach":
 		if distance <= reach:
 			attack_phase = &"windup"
-			attack_timer = float(Tuning.MATCHUPS.attack_windup)
+			attack_timer = attack_windup(float(Tuning.MATCHUPS.attack_windup))
 			if is_instance_valid(feedback_label):
 				feedback_label.text = ""
 				feedback_label.visible = false

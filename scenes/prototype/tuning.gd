@@ -32,9 +32,9 @@ const ENEMIES = {
 # Partial links keep one fixed deadline across launches; repeated cuts cannot extend it.
 const PATTERNS = {"window": 6.5, "pair_window": 2.4, "core_charge": 0.85,
 	"body_armored": 0.12, "body_bare": 0.3, "windup": 0.8, "commit": 0.18,
-	"recovery": 1.9, "link_radius": 0.28, "target_radius": 0.40}
+	"recovery": 1.9, "boss_recovery_turn_rate": 1.5, "link_radius": 0.28, "target_radius": 0.40}
 const MATCHUPS = {"body_damage": 0.12, "heat_seconds": 0.9, "heat_decay": 0.15,
-	"cut_radius": 0.40, "core_radius": 0.38, "attack_windup": 0.5, "attack_recovery": 1.7,
+	"cut_radius": 0.40, "core_radius": 0.38, "attack_windup": 0.35, "attack_recovery": 1.7, "attack_reach_padding": 0.35,
 	"push_light": 1.25, "push_heavy": 0.15, "stagger_scale": 2.4}
 # Slots follow a shrinking arc around the player; 0 strength restores direct chase.
 const PACK = {"size": 5, "neighbor_range": 14.0, "spacing": 1.8,

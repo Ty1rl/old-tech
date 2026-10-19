@@ -17,6 +17,12 @@ const HARD_PATH := "res://scenes/prototype/settings/difficulty_hard.tres"
 @export var boss_escort_count: int = 6
 @export var mixed_reinforcements: bool = false
 
+@export_group("Enemy combat")
+@export var enemy_damage_scale := 1.0
+@export var attack_windup_scale := 1.0
+@export var melee_reach_padding := 0.35
+@export var aim_turn_scale := 1.0
+
 
 static func load_for(difficulty: Variant = &"easy") -> CampaignDifficulty:
 	if difficulty is CampaignDifficulty:

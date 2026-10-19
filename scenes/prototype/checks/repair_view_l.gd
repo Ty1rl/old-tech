@@ -72,7 +72,7 @@ func run() -> void:
 		expect(panel.panel.get_theme_stylebox("panel") is StyleBoxEmpty, "%s has no opaque panel" % tool)
 		expect(panel.sub_viewport.transparent_bg, "%s model viewport has alpha" % tool)
 		expect(panel.panel.size.x > panel.size.x * 0.9, "%s repair spans viewport width" % tool)
-		expect(panel.board.size.y > panel.size.y * 0.65, "%s tool uses most screen height" % tool)
+		expect(panel.board.size.y > panel.size.y * 0.60, "%s keeps a large repair canvas below fixed instruction rows" % tool)
 		for dims: Vector2i in [Vector2i(1280, 800), Vector2i(960, 600), Vector2i(640, 480), Vector2i(1440, 720)]:
 			root.size = dims
 			await frames()

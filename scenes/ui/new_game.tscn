@@ -159,7 +159,7 @@ theme_override_constants/separation = 6
 [node name="HardDescription" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body/Difficulties/HardColumn"]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "More enemies. Less breathing room."
+text = "More enemies. Faster, heavier attacks."
 autowrap_mode = 3
 mouse_filter = 2
 modulate = Color(0.898039, 0.870588, 0.815686, 0.6)

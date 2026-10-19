@@ -1,23 +1,21 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/prototype/campaign.gd" id="1"]
-[ext_resource type="Script" path="res://scenes/ui/tutorial.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/ui/tutorial.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/tutorial/lesson_demo.tscn" id="demo"]
+[ext_resource type="PackedScene" path="res://scenes/tutorial/rewind_lesson.tscn" id="rewind"]
 
 [node name="Campaign" type="Node3D"]
 script = ExtResource("1")
 
+[node name="LessonDemo" parent="." instance=ExtResource("demo")]
+
+[node name="RewindLesson" parent="." instance=ExtResource("rewind")]
+
 [node name="Overlay" type="CanvasLayer" parent="."]
 layer = 60
 
-[node name="Tutorial" type="Control" parent="Overlay"]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-script = ExtResource("2")
+[node name="Tutorial" parent="Overlay" instance=ExtResource("2")]
 
 [node name="TitleLabel" type="Label" parent="Overlay"]
 anchors_preset = 5

@@ -29,6 +29,7 @@ const MODEL_TRANSLUCENCY_ALPHA := 0.84
 const TOOL_ORDER: Array[StringName] = [&"ring", &"beam", &"cone"]
 const COMPLETION_FLASH_DURATION_SEC := 0.36
 const STAGE_HINT_MAX_PASSES := 2.0
+const SPIN_COMPLETION_TOLERANCE := 0.12 # Seven degrees of release forgiveness.
 
 var ROUTES: Array = []
 var equipment: WeaponEquipment
@@ -50,8 +51,9 @@ var _allow_full_preview := false
 @onready var progress: Label = get_node_or_null("Panel/Margin/Column/HeaderRow/Progress") as Label
 @onready var feedback: Label = get_node_or_null("Panel/Margin/Column/Feedback") as Label
 @onready var meter: ProgressBar = get_node_or_null("Panel/Margin/Column/Meter") as ProgressBar
+@onready var carousel: RepairCarouselView = $Carousel
 
-var condition_view: Control = null
+var condition_view: RepairConditionView = null
 var model_instances: Dictionary = {}
 var projected_operations: Array = []
 
@@ -98,6 +100,7 @@ var _drag_pair_pending: int = -1
 var _drag_completed_pairs: Array[int] = []
 var _overlays: Array[Node] = []
 var preview_rect := Rect2()
+var _model_region := Rect2()
 
 var _completion_flash_op: Dictionary = {}
 var _completion_flash_until_usec: int = 0
@@ -215,7 +218,28 @@ func current_operation_kind() -> StringName:
 func get_model_region() -> Rect2:
 	if board == null:
 		return Rect2(Vector2.ZERO, BOARD)
-	return Rect2(_board_offset(), BOARD * _board_scale())
+	if _dragging and _model_region.has_area():
+		return _model_region
+	var canvas := board.get_global_transform_with_canvas()
+	var region := Rect2()
+	var first := true
+	var holder: Node3D = model_instances.get(String(tool))
+	if holder != null and preview_cam != null:
+		# Frame the visible item, not the empty corners of its wide viewport.
+		for mesh: MeshInstance3D in holder.find_children("*", "MeshInstance3D", true, false):
+			if not mesh.is_visible_in_tree():
+				continue
+			var bounds := mesh.get_aabb()
+			for i in range(8):
+				var local := bounds.position + bounds.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1)
+				var pixel := preview_cam.unproject_position(mesh.global_transform * local)
+				var point := canvas * (_board_offset() + pixel / Vector2(sub_viewport.size) * BOARD * _board_scale())
+				region = Rect2(point, Vector2.ZERO) if first else region.expand(point)
+				first = false
+	if first:
+		region = canvas * Rect2(_board_offset(), BOARD * _board_scale())
+	_model_region = region.grow(24 * _board_scale())
+	return _model_region
 
 
 func show_stage_hint(custom_prompt: String = "") -> void:
@@ -406,16 +430,22 @@ func _cycle_acquired_tool(backward: bool = false) -> bool:
 
 
 func _ensure_condition_view() -> void:
-	if condition_slot == null or is_instance_valid(condition_view):
-		return
-	if condition_slot.get_child_count() > 0:
-		condition_view = condition_slot.get_child(0) as Control
+	if is_instance_valid(carousel):
+		condition_view = carousel.condition
 
 
 func _sync_condition_view() -> void:
 	_ensure_condition_view()
-	if is_instance_valid(condition_view):
-		condition_view.bind_equipment(equipment, tool)
+	if is_instance_valid(carousel):
+		var slots: Array[int] = []
+		for owned in _acquired_tools():
+			slots.append(TOOL_ORDER.find(owned) + 1)
+		carousel.bind_equipment(equipment, tool, slots)
+		carousel.set_model_region(get_model_region())
+
+
+func _on_carousel_selected(next_tool: StringName) -> void:
+	_select_acquired_tool_index(TOOL_ORDER.find(next_tool) + 1)
 
 
 func _ready() -> void:
@@ -431,6 +461,7 @@ func _ready() -> void:
 	if not overlay.draw.is_connected(_draw_overlay):
 		overlay.draw.connect(_draw_overlay)
 	_ensure_condition_view()
+	carousel.tool_selected.connect(_on_carousel_selected)
 	_populate_tool_models()
 	if not resized.is_connected(_update_layout):
 		resized.connect(_update_layout)
@@ -667,6 +698,7 @@ func _sync_tool_canvas() -> void:
 	viewport_container.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	viewport_container.position = b_offset + _switch_transition_offset
 	viewport_container.size = BOARD * b_scale
+	_sync_condition_view()
 	_queue_redraws()
 
 
@@ -836,7 +868,13 @@ func _request_close() -> void:
 
 
 func _board_scale() -> float:
-	return maxf(0.01, minf(board.size.x / BOARD.x, board.size.y / BOARD.y))
+	# Reserve space for side items and the outside condition arc. Keep the
+	# selected model and all gesture targets on this one stable transform.
+	var center := board.get_global_rect().get_center()
+	var viewport_size := get_viewport_rect().size
+	var radius_budget := maxf(40, minf(center.y, viewport_size.y - center.y) - 26)
+	var arc_scale := radius_budget / (BOARD.length() * .5 + 24)
+	return maxf(.01, minf(minf(board.size.x * .64 / BOARD.x, board.size.y / BOARD.y), arc_scale))
 
 
 func _board_offset() -> Vector2:
@@ -902,7 +940,7 @@ func _handle_spin_button(point: Vector2, pressed: bool) -> void:
 	elif dragging:
 		_extend_spin(point)
 		if dragging:
-			if spin_accum >= spin_required - 0.06:
+			if spin_accum >= spin_required - SPIN_COMPLETION_TOLERANCE:
 				_commit_steps(1)
 			else:
 				if spin_stroke_accum >= 0.20 and not trace_bad:
@@ -913,7 +951,7 @@ func _handle_spin_button(point: Vector2, pressed: bool) -> void:
 
 func _extend_spin(finish: Vector2) -> void:
 	var start := stroke[-1]
-	if spin_accum >= spin_required - 0.06:
+	if spin_accum >= spin_required - SPIN_COMPLETION_TOLERANCE:
 		spin_accum = maxf(spin_accum, spin_required)
 		spin_visual_angle = _completed_spin_angle + (spin_locked_dir if spin_locked_dir != 0.0 else 1.0) * spin_accum
 		_update_3d_backdrop()
@@ -960,7 +998,7 @@ func _extend_spin(finish: Vector2) -> void:
 	_update_3d_backdrop()
 	if stroke[-1].distance_to(finish) >= 3.0:
 		stroke.append(finish)
-	if spin_accum >= spin_required - 0.06:
+	if spin_accum >= spin_required - SPIN_COMPLETION_TOLERANCE:
 		spin_accum = maxf(spin_accum, spin_required)
 		feedback.text = "Spin target reached (100%). Release to lock."
 	else:

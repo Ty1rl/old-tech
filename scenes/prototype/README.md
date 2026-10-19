@@ -74,8 +74,8 @@ survive interruptions. Finishing a weapon advances to another damaged owned
 weapon; finishing all closes the screen automatically. Tab/1–3 also select
 manually. E/Escape closes. Mouse gestures cannot fire a weapon through the panel.
 
-Condition is consumed by use: cutter 24 launches; flash 64 shots; cone 24 seconds
-with extra wear for displacement pulses. Edit `scenes/weapons/settings/weapon_condition.tres`.
+Condition is consumed by use: cutter 24 launches; flash 64 shots; cone 36 seconds
+with 0.3 additional wear per displacement pulse (about 29 seconds of continuous normal-time use). Edit `scenes/weapons/settings/weapon_condition.tres`.
 Opening yellow lessons are protected until a deliberate repair lesson.
 
 ## Campaign and combat
@@ -122,6 +122,14 @@ projectile heads. Movement dodges them; cover blocks them; time slows them.
 - `combat_player.tscn`: authored player/camera/rig composition. `player.gd` handles
   movement and forwards damage to the shared time controller.
 - `repair.tscn`, `repair.gd`, `repair_gestures.gd`: repair layout and gestures.
+- `scenes/ui/repair_carousel.tscn`: actual owned-tool side previews and shared
+  condition arcs. Repair supplies the selected model's viewport-space bounds;
+  the carousel requests selection through the existing repair/equipment flow.
+- `scenes/navigation/`: native enemy routing and bounded crowd avoidance, using
+  the current museum room's authored region and full body clearance.
+- `scenes/tutorial/`: ordinary action demonstrations and the forced emergency
+  rewind lesson. Campaign scenes mount these components; progression owns when
+  they start and when safe practice gives way to combat.
 - `scenes/ui/*.tscn`, `museum_theme.tres`: editable menus; no rebuilding their child
   trees in `_ready`. Status arcs and attack paths remain procedural geometry.
 - `assets/ui/menu_background.png`: supplied menu artwork, with live title/buttons.

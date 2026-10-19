@@ -54,12 +54,15 @@ func run() -> void:
 	previous.fill(Vector3.ZERO)
 	var safe := true
 	var max_step := 0.0
+	var pressure_frames := 0
+	var peak_close := 0
 	for frame in range(600):
 		var before: Array[Vector3] = []
 		for actor in trial.director.enemies: before.append(actor.position)
 		var start := Time.get_ticks_usec()
 		trial.director.step(.05,trial.player)
 		times.append(Time.get_ticks_usec()-start)
+		var close_this_frame := 0
 		for i in range(32):
 			var actor: CombatEnemy = trial.director.enemies[i]
 			var step := actor.position-before[i]
@@ -67,6 +70,9 @@ func run() -> void:
 			if step.length()>.005 and previous[i].length()>.005 and step.dot(previous[i])<0: reversals+=1
 			previous[i]=step
 			safe=safe and not actor.overlaps_cover()
+			if actor.position.distance_to(trial.player.position)<5: close_this_frame+=1
+		peak_close=maxi(peak_close,close_this_frame)
+		if close_this_frame>=3: pressure_frames+=1
 		await physics_frame
 		nav_times.append(int(Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS)*1000000))
 	var nearest := 100.0
@@ -94,10 +100,13 @@ func run() -> void:
 	for i in range(angles.size()): escape_gap=maxf(escape_gap,fposmod(angles[(i+1)%angles.size()]-angles[i],TAU))
 	times.sort()
 	nav_times.sort()
-	metrics.crowd={"blocked":blocked,"agents":32,"frames":600,"world_seconds":30,"median_usec":times[300],"p95_usec":times[570],"max_usec":times[-1],"navigation_server_p95_usec":nav_times[570],"navigation_server_max_usec":nav_times[-1],"native_path_queries":queries,"progressed":progressed,"within_5m":close,"minimum_body_ratio":nearest,"max_step":max_step,"reverse_steps":reversals,"escape_gap_radians":escape_gap}
+	metrics.crowd={"blocked":blocked,"agents":32,"frames":600,"world_seconds":30,"median_usec":times[300],"p95_usec":times[570],"max_usec":times[-1],"navigation_server_p95_usec":nav_times[570],"navigation_server_max_usec":nav_times[-1],"native_path_queries":queries,"progressed":progressed,"within_5m":close,"peak_within_5m":peak_close,"pressure_frames":pressure_frames,"contact_hits":trial.player.hits,"minimum_body_ratio":nearest,"max_step":max_step,"reverse_steps":reversals,"escape_gap_radians":escape_gap}
 	expect(safe and max_step<.12,"32-agent movement stays collision-safe and bounded per step")
 	expect(nearest>=.96,"Crowd body clearance prevents overlapping piles")
-	expect(progressed>=28 and close>=8 and trial.player.hits>0,"Crowd detours reach genuine contact pressure, not an exhibit safe spot")
+	# Wide bodies cannot all occupy the front rank. Require a group within cone
+	# distance for >=1.5 world seconds and multiple actual contacts, rather than
+	# eight bodies within 5m on one arbitrary final frame of native RVO.
+	expect(progressed>=28 and pressure_frames>=30 and trial.player.hits>=3,"Crowd detours reach sustained genuine contact pressure, not an exhibit safe spot")
 	expect(escape_gap>.8,"A broad escape sector remains outside the approaching crowd")
 	expect(reversals<120,"No constant per-frame side flipping in the swarm")
 	expect(queries<3900,"Native path work is bounded; targets do not repath every tick")

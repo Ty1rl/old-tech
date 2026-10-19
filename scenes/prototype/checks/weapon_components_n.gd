@@ -111,7 +111,7 @@ func run() -> void:
 	w.ring.stroke_index = 0
 	w.ring.step(.02, harness.player.position, [])
 	expect(is_equal_approx(w.ring.head.x - w.ring.flight_points[0].x, .38), "Inspector ring stroke_speed changes real flight distance")
-	expect(second.weapons.ring.settings.stroke_speed == 38 and w.flash.settings.speed == 42, "Editing one weapon Resource leaves other behaviors/settings intact")
+	expect(second.weapons.ring.settings.stroke_speed == 38 and w.flash.settings == second.weapons.flash.settings, "Editing one weapon Resource leaves other behaviors/settings intact")
 	# A concrete component is independently usable; no controller dispatch required.
 	var independent: RingCutter = RingScene.instantiate()
 	root.add_child(independent)

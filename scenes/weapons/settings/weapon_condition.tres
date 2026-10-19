@@ -6,5 +6,5 @@
 script = ExtResource("1")
 ring_capacity = 24.0
 beam_capacity = 64.0
-cone_capacity = 24.0
+cone_capacity = 36.0
 repair_steps = 4

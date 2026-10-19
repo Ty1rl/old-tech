@@ -111,33 +111,12 @@ func complete_active_operation(panel: Control) -> void:
 		stroke_points(panel, panel.route)
 
 
-class MockRepairConditionView extends Control:
-	var bound_equipment: WeaponEquipment = null
-	var bound_tool: StringName = &""
-	var bind_calls: int = 0
-
-	func bind_equipment(next_equipment: WeaponEquipment, next_tool: StringName) -> void:
-		bound_equipment = next_equipment
-		bound_tool = next_tool
-		bind_calls += 1
-
-	func segment_count() -> int:
-		return bound_equipment.repair_steps if bound_equipment != null else 4
-
-	func filled_segments() -> int:
-		if bound_equipment == null:
-			return 0
-		return segment_count() if bound_equipment.is_full(bound_tool) else bound_equipment.stage(bound_tool)
-
-
 func run() -> void:
 	root.size = Vector2i(1280, 800)
 
 	# 1. Editable Repair Scene Hierarchy, RepairToolSpec 3D Part Alignment, Public API & ConditionSlot Check
 	var standalone_repair: WeaponRepair = RepairScene.instantiate() as WeaponRepair
 	standalone_repair._allow_full_preview = true
-	var mock_cond := MockRepairConditionView.new()
-	standalone_repair.get_node("Panel/Margin/Column/Board/ConditionSlot").add_child(mock_cond)
 	var test_gear := WeaponEquipment.new()
 	test_gear.spend(&"ring", test_gear.capacity(&"ring"))
 	test_gear.spend(&"beam", test_gear.capacity(&"beam") * 0.62) # partial wear within stage 1
@@ -167,8 +146,9 @@ func run() -> void:
 	standalone_repair.clear_stage_hint()
 	expect(not standalone_repair._stage_hint_active,
 		"WeaponRepair.clear_stage_hint restores standard stage prompt")
-	expect(mock_cond.bind_calls > 0 and mock_cond.bound_tool == &"ring" and mock_cond.segment_count() == 4 and mock_cond.filled_segments() == 0,
-		"ConditionSlot binds RepairConditionView to active equipment and tool with 4 segments")
+	var condition: RepairConditionView = standalone_repair.carousel.condition
+	expect(condition.equipment == test_gear and condition.tool == &"ring" and condition.segment_count() == 4 and condition.filled_segments() == 0,
+		"Mounted carousel binds RepairConditionView to active equipment and tool with 4 segments")
 
 	# Verify all 3 weapons resolve named 3D model parts, project inside the 520x260 board,
 	# and order stages, trace contacts (1->4), and connect pairs (a->b) strictly left-to-right.
@@ -470,11 +450,12 @@ func run() -> void:
 		mouse_button(panel, ccw_oval[0], true)
 		for pt_idx in range(1, ccw_oval.size()):
 			arena._physics_process(1.0 / 60.0)
+			await physics_frame
 			mouse_motion(panel, ccw_oval[pt_idx], true)
 		mouse_button(panel, ccw_oval[-1], false)
 		Input.action_release("move_right")
 		expect(gear.stage(tool_id) == 1 and player.position.x > 0.2 and not _weapons_attacking(weapons),
-			"%s completes forgiving CCW oval Spin while moving with WASD and without weapon leak" % String(tool_id))
+			"%s completes forgiving CCW oval Spin while moving with WASD and without weapon leak (stage=%d x=%.2f feedback=%s)" % [String(tool_id), gear.stage(tool_id), player.position.x, panel.feedback.text])
 		key(KEY_E, true)
 		key(KEY_E, false)
 		await frames()

@@ -2,6 +2,7 @@ extends Node3D
 
 # Art adapter only. Enemy owns health, part queries and the world-time tick.
 const FootPlant = preload("res://scenes/prototype/foot_plant.gd")
+const Style = preload("res://scenes/prototype/tool_style.gd")
 const MODELS := {
 	&"blue": preload("res://assets/enemies/conjoined.glb"),
 	&"yellow": preload("res://assets/enemies/patient.glb"),
@@ -67,6 +68,8 @@ var cadence_hz := 0.0
 var leg_cycling := false
 var attack_phase: StringName = &"approach"
 var height := 2.5
+var instruction_visible := false
+var instruction: Label3D
 var _meshes: Array[MeshInstance3D] = []
 var _flash: StandardMaterial3D
 var _body_groups: Array[Dictionary] = []
@@ -102,6 +105,14 @@ func build(p_kind: StringName) -> void:
 		if (kind == &"blue" and String(mesh.name).begins_with("B_")) or (kind == &"side_guard" and String(mesh.name) in ["Companion", "ConduitCouplings"]):
 			split_companion.append(mesh)
 	_build_readable_parts()
+	instruction = Label3D.new()
+	instruction.position = Vector3(0, height + .4, 0)
+	instruction.font_size = 28
+	instruction.pixel_size = .01
+	instruction.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	instruction.no_depth_test = true
+	instruction.visible = false
+	add_child(instruction)
 	set_process(false)
 	set_physics_process(false)
 
@@ -193,6 +204,26 @@ func sync(cut: bool, exposed: bool, broken: bool, _heat_ratio: float) -> void:
 	if plate: plate.visible = not exposed
 	if shield_rim: shield_rim.visible = not exposed
 	for companion in split_companion: companion.visible = not cut
+	if is_instance_valid(instruction):
+		if exposed:
+			instruction.text = "Click yellow" if kind == &"yellow" else "Charge yellow"
+			instruction.modulate = Style.BEAM
+		elif kind == &"orange":
+			instruction.text = "Heat orange"
+			instruction.modulate = Style.CONE
+		elif kind == &"blue":
+			instruction.text = "Cut blue"
+			instruction.modulate = Style.RING
+		else:
+			instruction.text = "Cut blue / Heat orange"
+			instruction.modulate = Style.REPAIR_GUIDE
+		instruction.visible = instruction_visible and not broken
+
+
+func set_instruction_visible(value: bool) -> void:
+	instruction_visible = value
+	if is_instance_valid(instruction):
+		instruction.visible = value and not instruction.text.is_empty()
 
 
 func _resolve_attack_phase(motion_state: Variant) -> StringName:

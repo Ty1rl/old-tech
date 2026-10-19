@@ -2,9 +2,15 @@ extends Control
 
 # Explanations freeze via the campaign's world/action guard, not SceneTree.pause.
 # Practice resumes actions but keeps crowd pressure gated until complete_lesson.
+# Round S: no "Try it" confirmation. A teaching segment hands off automatically once
+# its speech (and any LessonDemo visual pass) finishes. The only manual exit is a
+# click-only Skip button; keyboard keys never activate it.
 signal resume_requested(id: StringName)
 signal lesson_completed(id: StringName)
 signal blocking_changed(value: bool)
+## Emitted when the player clicks Skip. A LessonDemo owning the segment handles it;
+## otherwise the overlay stops the segment's speech and hands off itself.
+signal skip_requested(id: StringName)
 
 const UI = preload("res://scenes/ui/ui_style.gd")
 const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
@@ -13,9 +19,15 @@ const ORANGE: Color = ToolStyle.CONE
 const YELLOW: Color = ToolStyle.BEAM
 const VIOLET: Color = ToolStyle.CLOCK
 const GUIDE: Color = ToolStyle.REPAIR_GUIDE
+const SKIP_TEXT := "Skip"
+## Card-only lessons (no LessonDemo) with no audible speech hand off after this read time.
+const NO_SPEECH_READ_SECONDS := 2.6
+## Exact spoken line for tutorial.time_meter (new_audio/time meter.mp3).
+const TIME_METER_LINE := "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge."
 
 # Entry format: [imperative_heading, subtle_body, lesson_key, subtle_subtitle]
 const LESSONS := {
+	"time_meter": ["Watch your time reserve", TIME_METER_LINE, "time_meter", "TIME RESERVE"],
 	"cut": ["Hold, draw, release", "1 · Ring Cutter — draw across the blue link.", "cut", "1 · RING CUTTER"],
 	"heat": ["Aim and hold", "3 · Heat Bellows — strip orange armor and push threats back.", "heat", "3 · HEAT BELLOWS"],
 	"shot": ["Click to shoot", "2 · Focused Flash — aim at the yellow core.", "shot", "2 · FOCUSED FLASH"],
@@ -57,6 +69,16 @@ var _held_keys_while_blocked: Dictionary = {}
 var _held_lmb_while_blocked := false
 var _suppress_release_after_dismiss := false
 var _bound_audio: Node = null
+## True once this segment's instruction speech was observed playing.
+var _teaching_speech_seen := false
+## Seconds the current card has been blocking (only advances while uncovered).
+var _teaching_age := 0.0
+## Latched per segment so double clicks/handlers cannot finish twice.
+var _skip_latched := false
+## Id of the most recent segment ended by Skip (diagnostics/checks).
+var last_skipped_id: StringName = &""
+## Optional phase draw style set by LessonDemo (e.g. &"time" for the reserve demo).
+var draw_style: StringName = &""
 
 
 func _ready() -> void:
@@ -74,7 +96,18 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	var is_standalone_root_layer := get_parent() is CanvasLayer and is_inside_tree() and get_tree() != null and get_parent().get_parent() == get_tree().root
 	_unbind_audio_signals()
+	if GameState != null and GameState.settings_changed.is_connected(_on_settings_changed):
+		GameState.settings_changed.disconnect(_on_settings_changed)
+	if is_standalone_root_layer:
+		var am := _get_audio_manager()
+		if is_instance_valid(am):
+			if am.has_method("stop_dialogue"):
+				am.call("stop_dialogue")
+			if am.has_method("set_music_context"):
+				am.call("set_music_context", &"intro")
+		get_tree().call_group(&"world_audio", &"reset_state")
 
 
 func _get_audio_manager() -> Node:
@@ -108,8 +141,13 @@ func _unbind_audio_signals() -> void:
 	_bound_audio = null
 
 
-func _on_audio_speech_finished(_event: StringName, _interrupted: bool = false) -> void:
+func _on_audio_speech_finished(_event: StringName, interrupted: bool = false) -> void:
 	_update_practice_button_state()
+	if interrupted or not is_inside_tree():
+		return
+	if visible and blocking and not practicing and not demo_busy and not is_instruction_speech_busy():
+		_teaching_speech_seen = true
+		_auto_handoff_to_practice()
 
 
 func _on_voice_player_finished() -> void:
@@ -193,6 +231,10 @@ func _ensure_authored_hierarchy() -> void:
 	if is_instance_valid(body_label):
 		body_label.modulate = UI.MUTED
 	if is_instance_valid(practice_button):
+		practice_button.focus_mode = Control.FOCUS_NONE
+		practice_button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+		practice_button.shortcut = null
+		practice_button.text = SKIP_TEXT
 		if practice_button.pressed.is_connected(request_practice):
 			practice_button.pressed.disconnect(request_practice)
 		if not practice_button.pressed.is_connected(_on_practice_button_pressed):
@@ -200,16 +242,44 @@ func _ensure_authored_hierarchy() -> void:
 
 
 func _on_practice_button_pressed() -> void:
-	_try_user_dismiss(true)
+	skip_active_lesson(true)
+
+
+func skip_active_lesson(from_mouse: bool = true) -> bool:
+	if not visible or active_id.is_empty() or not blocking or practicing or _skip_latched:
+		return false
+	if SceneManager != null and SceneManager.has_popup():
+		return false
+	if GameState != null and GameState.is_paused():
+		return false
+	_skip_latched = true
+	var id := active_id
+	last_skipped_id = id
+	_suppress_release_after_dismiss = true
+	var am := _get_audio_manager()
+	if is_instance_valid(am) and am.has_method("stop_dialogue"):
+		am.call("stop_dialogue")
+	skip_requested.emit(id)
+	if blocking and active_id == id:
+		request_practice()
+	_apply_post_dismiss_carryover_guard(from_mouse)
+	return true
+
+
+func _auto_handoff_to_practice() -> bool:
+	if not can_dismiss_normally() or practicing:
+		return false
+	var lmb_down := _held_lmb_while_blocked or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	_suppress_release_after_dismiss = lmb_down
+	request_practice()
+	_apply_post_dismiss_carryover_guard(lmb_down)
+	return true
 
 
 func _try_user_dismiss(from_mouse: bool = false) -> bool:
-	if not can_dismiss_normally():
+	if not from_mouse:
 		return false
-	_suppress_release_after_dismiss = true
-	request_practice()
-	_apply_post_dismiss_carryover_guard(from_mouse)
-	return true
+	return skip_active_lesson(true)
 
 
 func _apply_post_dismiss_carryover_guard(from_mouse: bool) -> void:
@@ -224,18 +294,27 @@ func _apply_post_dismiss_carryover_guard(from_mouse: bool) -> void:
 	if not is_instance_valid(arena_node):
 		return
 	arena_node.set("_space_action_held", false)
-	if from_mouse or _held_lmb_while_blocked or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+	var lmb_down := from_mouse or _held_lmb_while_blocked or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	if lmb_down:
 		arena_node.set("_suppress_next_lmb_release", true)
 	var weapons_node := arena_node.get("weapons") as Node
 	if is_instance_valid(weapons_node):
 		if weapons_node.has_method("cancel_input"):
 			weapons_node.call("cancel_input")
 		weapons_node.set("mouse_held", false)
-		if from_mouse or _held_lmb_while_blocked or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		if lmb_down:
 			weapons_node.set("require_fresh_press", true)
 	var tc := arena_node.get("time_controller") as Node
 	if is_instance_valid(tc):
 		tc.set("slow_requested", false)
+
+
+func is_point_on_skip_button(screen_pos: Vector2) -> bool:
+	if not visible or not blocking or practicing:
+		return false
+	if not is_instance_valid(practice_button) or not practice_button.visible or practice_button.disabled:
+		return false
+	return practice_button.get_global_rect().has_point(screen_pos)
 
 
 func _update_practice_button_state() -> void:
@@ -249,19 +328,11 @@ func _update_practice_button_state() -> void:
 		practice_button.hide()
 		return
 	practice_button.show()
-	var speech_busy := is_instruction_speech_busy()
-	var busy := demo_busy or speech_busy
-	if busy:
-		practice_button.release_focus()
-		practice_button.disabled = true
-		practice_button.focus_mode = Control.FOCUS_NONE
-		practice_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		practice_button.text = "Listening..." if (waiting_for_speech or (not demo_busy and speech_busy)) else "Watch demo..."
-	else:
-		practice_button.disabled = false
-		practice_button.focus_mode = Control.FOCUS_ALL
-		practice_button.mouse_filter = Control.MOUSE_FILTER_STOP
-		practice_button.text = "Try it"
+	practice_button.release_focus()
+	practice_button.disabled = false
+	practice_button.focus_mode = Control.FOCUS_NONE
+	practice_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	practice_button.text = SKIP_TEXT
 
 
 func _capture_initial_held_inputs() -> void:
@@ -293,7 +364,7 @@ static func accent_for_lesson(id: StringName) -> Color:
 		return ORANGE
 	if id in [&"shot", &"charge", &"pair", &"final"]:
 		return YELLOW
-	if id in [&"slow", &"rewind"]:
+	if id in [&"slow", &"rewind", &"time_meter"]:
 		return VIOLET
 	if id == &"repair":
 		return GUIDE
@@ -350,6 +421,7 @@ func show_lesson(id: StringName, title: String, text: String, targets: Array[Vec
 		return
 	active_id = id
 	align_pattern = false
+	draw_style = &"time" if id == &"time_meter" else &""
 	world_points = targets.duplicate()
 	ghost.clear()
 	if is_drawing_lesson(id) or not LESSONS.has(String(id)):
@@ -361,7 +433,11 @@ func show_lesson(id: StringName, title: String, text: String, targets: Array[Vec
 	state_label.modulate = accent
 	state_label.text = _subtitle_text
 	practicing = false
+	waiting_for_speech = false
 	age = 0.0
+	_teaching_age = 0.0
+	_teaching_speech_seen = is_instruction_speech_busy()
+	_skip_latched = false
 	_suppress_release_after_dismiss = false
 	_capture_initial_held_inputs()
 	_set_blocking(true)
@@ -374,7 +450,9 @@ func request_practice() -> void:
 	if active_id.is_empty() or not blocking or SceneManager.has_popup():
 		return
 	demo_busy = false
+	waiting_for_speech = false
 	practicing = true
+	draw_style = &""
 	_update_practice_button_state()
 	state_label.modulate = accent
 	state_label.text = _subtitle_text + " · YOUR TURN"
@@ -391,6 +469,9 @@ func complete_lesson(id: StringName) -> void:
 	active_id = &""
 	practicing = false
 	demo_busy = false
+	waiting_for_speech = false
+	draw_style = &""
+	_skip_latched = false
 	_held_keys_while_blocked.clear()
 	_held_lmb_while_blocked = false
 	_set_blocking(false)
@@ -409,6 +490,9 @@ func dismiss() -> void:
 	active_id = &""
 	practicing = false
 	demo_busy = false
+	waiting_for_speech = false
+	draw_style = &""
+	_skip_latched = false
 	_held_keys_while_blocked.clear()
 	_held_lmb_while_blocked = false
 	_suppress_release_after_dismiss = false
@@ -424,6 +508,12 @@ func reset_run() -> void:
 	active_id = &""
 	practicing = false
 	demo_busy = false
+	waiting_for_speech = false
+	draw_style = &""
+	_skip_latched = false
+	last_skipped_id = &""
+	_teaching_speech_seen = false
+	_teaching_age = 0.0
 	_held_keys_while_blocked.clear()
 	_held_lmb_while_blocked = false
 	_suppress_release_after_dismiss = false
@@ -471,10 +561,14 @@ func _layout(force: bool = true) -> void:
 		if is_instance_valid(col):
 			col.custom_minimum_size.x = inner_w
 			col.size.x = inner_w
-		for ctrl: Control in [state_label, heading, body_label, practice_button]:
+		for ctrl: Control in [state_label, heading, body_label]:
 			if is_instance_valid(ctrl):
 				ctrl.custom_minimum_size.x = inner_w
 				ctrl.size.x = inner_w
+		if is_instance_valid(practice_button):
+			practice_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+			practice_button.custom_minimum_size = Vector2(roundi(84 * factor), roundi(28 * factor))
+			practice_button.add_theme_font_size_override("font_size", roundi(13 * factor))
 		card.custom_minimum_size.x = width
 		card.size = Vector2(width, 0.0)
 		heading.add_theme_font_size_override("font_size", roundi((22 if size.y < 480 else 26) * factor))
@@ -506,6 +600,13 @@ func _process(delta: float) -> void:
 		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		queue_redraw()
 		return
+	if blocking and not practicing:
+		if is_instruction_speech_busy():
+			_teaching_speech_seen = true
+		_teaching_age += maxf(0.0, delta)
+		if not demo_busy and not is_instruction_speech_busy():
+			if _teaching_speech_seen or _teaching_age >= NO_SPEECH_READ_SECONDS:
+				_auto_handoff_to_practice()
 	_update_practice_button_state()
 	var filter := Control.MOUSE_FILTER_STOP if blocking else Control.MOUSE_FILTER_IGNORE
 	mouse_filter = filter
@@ -575,33 +676,16 @@ func _input(event: InputEvent) -> void:
 				if is_inside_tree() and get_viewport() != null:
 					get_viewport().set_input_as_handled()
 				return
-			if demo_busy or is_instruction_speech_busy():
-				_held_keys_while_blocked[code] = true
-				if is_inside_tree() and get_viewport() != null:
-					get_viewport().set_input_as_handled()
+			if code == KEY_E and active_id == &"repair" and not demo_busy and not bool(_held_keys_while_blocked.get(code, false)):
 				return
-			if bool(_held_keys_while_blocked.get(code, false)):
-				if is_inside_tree() and get_viewport() != null:
-					get_viewport().set_input_as_handled()
-				return
-			if code == KEY_E:
-				if active_id != &"repair" and is_inside_tree() and get_viewport() != null:
-					get_viewport().set_input_as_handled()
-				return
-			_try_user_dismiss(false)
+			_held_keys_while_blocked[code] = true
 			if is_inside_tree() and get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			return
 
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if not event.pressed:
-			var was_held := _held_lmb_while_blocked
 			_held_lmb_while_blocked = false
-			if (demo_busy or is_instruction_speech_busy() or was_held) and is_inside_tree() and get_viewport() != null:
-				get_viewport().set_input_as_handled()
-			return
-		if demo_busy or is_instruction_speech_busy():
-			_held_lmb_while_blocked = true
 			if is_inside_tree() and get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			return
@@ -609,7 +693,9 @@ func _input(event: InputEvent) -> void:
 			if is_inside_tree() and get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			return
-		_try_user_dismiss(true)
+		_held_lmb_while_blocked = true
+		if is_point_on_skip_button(event.position):
+			skip_active_lesson(true)
 		if is_inside_tree() and get_viewport() != null:
 			get_viewport().set_input_as_handled()
 
@@ -617,11 +703,7 @@ func _input(event: InputEvent) -> void:
 func _gui_input(event: InputEvent) -> void:
 	if not blocking:
 		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed and not demo_busy and not is_instruction_speech_busy() and not _held_lmb_while_blocked:
-			_try_user_dismiss(true)
-		accept_event()
-	elif event is InputEventMouse:
+	if event is InputEventMouseButton or event is InputEventMouse:
 		accept_event()
 
 
@@ -638,7 +720,7 @@ func _draw() -> void:
 
 		# Attack-accurate target gesture accents (never a cutter line for yellow shots).
 		if not offscreen[i]:
-			if active_id in [&"shot", &"pair"] or (active_id == &"opening" and accent == YELLOW):
+			if (active_id in [&"shot", &"pair"] and draw_style != &"time") or (active_id == &"opening" and accent == YELLOW):
 				for tick_idx in range(4):
 					var ang := float(tick_idx) * PI * 0.5
 					var dir := Vector2(cos(ang), sin(ang))
@@ -651,9 +733,9 @@ func _draw() -> void:
 			elif active_id == &"heat":
 				var wave_t := fmod(age * 1.4, 1.0)
 				draw_arc(p, r + 6.0 + wave_t * 12.0, -PI * 0.82, -PI * 0.18, 24, Color(ORANGE, 0.75 * (1.0 - wave_t)), 3.0, true)
-			elif active_id == &"slow":
+			elif active_id == &"slow" or active_id == &"time_meter" or draw_style == &"time":
 				draw_arc(p, r + 7.0, 0, TAU, 32, Color(VIOLET, 0.7), 2.0, true)
-				draw_circle(p, 4.0, YELLOW)
+				draw_circle(p, 4.0, VIOLET if (active_id == &"time_meter" or draw_style == &"time") else YELLOW)
 
 		if projected.size() > 1 or offscreen[i] or active_id == &"pair":
 			var caption := str(i + 1) + (" · offscreen" if offscreen[i] else "")

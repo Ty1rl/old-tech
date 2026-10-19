@@ -13,6 +13,7 @@ signal demo_cancelled(lesson_id: StringName)
 
 const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 const Tuning = preload("res://scenes/prototype/tuning.gd")
+const TIME_METER_LINE := "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge."
 
 const SUPPORTED_LESSONS: Array[StringName] = [
 	&"shot",
@@ -27,6 +28,15 @@ const SUPPORTED_LESSONS: Array[StringName] = [
 ]
 
 const SPECS := {
+	"time_meter": {
+		"heading": "Watch your time reserve",
+		"subtitle": "TIME RESERVE",
+		"body": TIME_METER_LINE,
+		"primary_tool": 2,
+		"secondary_tool": 2,
+		"enemy_kind": &"yellow",
+		"drawing": false,
+	},
 	"shot": {
 		"heading": "Click to shoot",
 		"subtitle": "2 · FOCUSED FLASH",
@@ -112,6 +122,8 @@ const SPECS := {
 
 const DEMO_STAGE_ORIGIN := Vector3(0.0, 0.0, 3.2)
 const DEMO_CAMERA_OFFSET := Vector3(0.0, 13.5, 6.9)
+const HEAT_START_OFFSET_Z := -2.1
+const HEAT_MAX_PUSH_Z := -4.45
 
 var active := false
 var lesson_id: StringName = &""
@@ -124,7 +136,16 @@ var audio_manager_override: Node = null
 var demo_enemies: Array[Node3D] = []
 var learned_demos: Dictionary = {}
 var last_summary: Dictionary = {}
+## When true, starting `&"shot"` while `&"time_meter"` is unlearned runs the
+## staged multi-enemy `time_meter` damage demo before the yellow shot demo even
+## if `tutorial.time_meter` audio is not currently active.
+var prestage_time_meter_on_shot := false
+var substage: StringName:
+	get: return _substage
 
+var _substage: StringName = &""
+var _substage_pass_completed := false
+var _terminal_state: StringName = &""
 var _demo_origin := DEMO_STAGE_ORIGIN
 var _demo_player_y := 0.55
 var _current_aim := Vector3.ZERO
@@ -163,8 +184,14 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
+func _exit_tree() -> void:
+	_unbind_audio_signals()
+	if active:
+		cancel(false)
+
+
 static func handles(id: StringName) -> bool:
-	return id in SUPPORTED_LESSONS
+	return id == &"time_meter" or id in SUPPORTED_LESSONS
 
 
 static func spec_for(id: StringName) -> Dictionary:
@@ -181,11 +208,31 @@ static func _scene_manager() -> Node:
 	return tree.root.get_node_or_null("SceneManager") if tree != null and tree.root != null else null
 
 
+func _can_touch_world_transforms() -> bool:
+	if not is_inside_tree():
+		return false
+	if not is_instance_valid(arena) or not arena.is_inside_tree() or arena.is_queued_for_deletion():
+		return false
+	var player: Node3D = arena.get("player") as Node3D
+	if is_instance_valid(player) and not player.is_inside_tree():
+		return false
+	return true
+
+
 func _get_audio_manager() -> Node:
 	if is_instance_valid(audio_manager_override):
 		return audio_manager_override
 	var tree := Engine.get_main_loop() as SceneTree
 	return tree.root.get_node_or_null("AudioManager") if tree != null and tree.root != null else null
+
+
+func _current_speech_event_name() -> String:
+	var am := _get_audio_manager()
+	if am == null or not is_instance_valid(am):
+		return ""
+	if am.has_method("current_speech_event"):
+		return String(am.call("current_speech_event"))
+	return String(am.get("current_event"))
 
 
 func _bind_audio_signals() -> void:
@@ -206,9 +253,17 @@ func _unbind_audio_signals() -> void:
 	_bound_audio = null
 
 
-func _on_audio_speech_finished(_event: StringName, _interrupted: bool = false) -> void:
-	if not active:
+func _on_audio_speech_finished(event: StringName, interrupted: bool = false) -> void:
+	if not active or not _terminal_state.is_empty():
 		return
+	if interrupted or not _can_touch_world_transforms():
+		if not _can_touch_world_transforms():
+			cancel(false)
+		return
+	if lesson_id == &"shot" and _substage == &"time_meter" and _substage_pass_completed:
+		if String(event) == "tutorial.time_meter" or _current_speech_event_name() != "tutorial.time_meter":
+			_transition_prestage_to_shot()
+			return
 	if _pass_completed and not is_instruction_speech_busy():
 		_complete_and_handoff()
 
@@ -268,15 +323,24 @@ func _clean_demo_combat_speech() -> void:
 
 
 func is_demo_learned(id: StringName, overlay: Control = null) -> bool:
-	var ui := overlay if overlay != null else tutorial_ui
-	if is_instance_valid(ui) and ui.has_method("is_learned"):
-		return bool(ui.call("is_learned", id))
 	if bool(learned_demos.get(id, false)):
+		return true
+	var ui := overlay if overlay != null else tutorial_ui
+	if is_instance_valid(ui) and ui.has_method("is_learned") and bool(ui.call("is_learned", id)):
 		return true
 	var gs := _game_state()
 	if gs != null and gs.has_method("preferences") and not bool(gs.call("preferences").get("tutorial", true)):
 		return true
 	return false
+
+
+func _mark_time_meter_learned(complete_card: bool = false) -> void:
+	learned_demos[&"time_meter"] = true
+	if is_instance_valid(tutorial_ui):
+		if "learned" in tutorial_ui and tutorial_ui.get("learned") is Dictionary:
+			tutorial_ui.learned[&"time_meter"] = true
+		if complete_card and tutorial_ui.get("active_id") == &"time_meter" and tutorial_ui.has_method("complete_lesson"):
+			tutorial_ui.call("complete_lesson", &"time_meter")
 
 
 func mark_learned(id: StringName) -> void:
@@ -291,6 +355,35 @@ func reset_run() -> void:
 	last_summary.clear()
 
 
+func _is_time_meter_speech_active_or_queued() -> bool:
+	if _current_speech_event_name() == "tutorial.time_meter":
+		return true
+	var am := _get_audio_manager()
+	if am == null or not is_instance_valid(am):
+		return false
+	var q_real: Variant = am.get("_queue")
+	if q_real is Array:
+		for item in q_real:
+			if item is Dictionary and String(item.get("event", "")) == "tutorial.time_meter":
+				return true
+	var q_mock: Variant = am.get("queue")
+	if q_mock is Array:
+		for ev in q_mock:
+			if String(ev) == "tutorial.time_meter":
+				return true
+	return false
+
+
+func _should_prestage_time_meter(id: StringName, overlay: Control = null) -> bool:
+	if id != &"shot":
+		return false
+	if is_demo_learned(&"time_meter", overlay) or bool(learned_demos.get(&"time_meter", false)):
+		return false
+	if prestage_time_meter_on_shot:
+		return true
+	return _is_time_meter_speech_active_or_queued()
+
+
 func begin(target_arena: Node3D, id: StringName, overlay: Control = null) -> bool:
 	if target_arena == null or not is_instance_valid(target_arena) or not handles(id):
 		return false
@@ -302,6 +395,9 @@ func begin(target_arena: Node3D, id: StringName, overlay: Control = null) -> boo
 	arena = target_arena
 	tutorial_ui = overlay
 	lesson_id = id
+	_substage = &"time_meter" if _should_prestage_time_meter(id, overlay) else id
+	_substage_pass_completed = false
+	_terminal_state = &""
 	phase = 0
 	elapsed = 0.0
 	phase_elapsed = 0.0
@@ -314,8 +410,11 @@ func begin(target_arena: Node3D, id: StringName, overlay: Control = null) -> boo
 	_stroke_waypoints.clear()
 	_waypoint_index = 0
 
-	var spec := spec_for(id)
-	var p_tool := int(spec.get("primary_tool", 2))
+	var spec := spec_for(_substage)
+	var main_spec := spec_for(id)
+	var p_tool := int(main_spec.get("primary_tool", 2))
+	var tc_ref: TimeController = arena.get("time_controller") as TimeController
+	var start_meter := tc_ref.capacity if is_instance_valid(tc_ref) else 60.0
 	last_summary = {
 		"lesson_id": id,
 		"tools_used": [p_tool],
@@ -329,6 +428,9 @@ func begin(target_arena: Node3D, id: StringName, overlay: Control = null) -> boo
 		"cable_cut": false,
 		"cone_held": false,
 		"plate_broken": false,
+		"knocked_back": false,
+		"heat_knockback_seen": false,
+		"heat_knockback_distance": 0.0,
 		"slow_engaged": false,
 		"min_world_scale": 1.0,
 		"shot_during_slow": false,
@@ -336,6 +438,15 @@ func begin(target_arena: Node3D, id: StringName, overlay: Control = null) -> boo
 		"max_world_scale_after_slow": 0.0,
 		"opened_before_finish": false,
 		"yellow_finished_after_open": false,
+		"time_meter_drained": false,
+		"time_meter_restored": false,
+		"time_meter_prestage_completed": false,
+		"time_meter_restored_before_shot": false,
+		"enemies_attacked": 0,
+		"time_meter_hits": 0,
+		"initial_time_meter": start_meter,
+		"min_time_meter": start_meter,
+		"time_meter_min": start_meter,
 		"target_killed": false,
 		"completed": false,
 		"cancelled": false,
@@ -346,7 +457,7 @@ func begin(target_arena: Node3D, id: StringName, overlay: Control = null) -> boo
 	}
 
 	_capture_baseline()
-	_setup_demo_stage(id, spec)
+	_setup_demo_stage(_substage, spec)
 	active = true
 	_bind_audio_signals()
 
@@ -359,8 +470,13 @@ func begin(target_arena: Node3D, id: StringName, overlay: Control = null) -> boo
 			tutorial_ui.world_points.assign(current_targets())
 		if tutorial_ui.has_method("set_demo_busy"):
 			tutorial_ui.call("set_demo_busy", true)
-		if id == &"opening" and tutorial_ui.has_method("set_phase_accent"):
+		if _substage == &"time_meter" and tutorial_ui.has_method("set_phase_prompt"):
+			tutorial_ui.set("draw_style", &"time")
+			tutorial_ui.call("set_phase_prompt", String(spec.get("heading", "")), String(spec.get("body", "")), ToolStyle.CLOCK, String(spec.get("subtitle", "TIME RESERVE")))
+		elif id == &"opening" and tutorial_ui.has_method("set_phase_accent"):
 			tutorial_ui.call("set_phase_accent", ToolStyle.RING, "1 · RING CUTTER · OPEN BLUE LINK")
+		if tutorial_ui.has_signal("skip_requested") and not tutorial_ui.skip_requested.is_connected(_on_tutorial_skip_requested):
+			tutorial_ui.skip_requested.connect(_on_tutorial_skip_requested)
 		if tutorial_ui.has_signal("resume_requested") and not tutorial_ui.resume_requested.is_connected(_on_tutorial_resume_requested):
 			tutorial_ui.resume_requested.connect(_on_tutorial_resume_requested)
 		if tutorial_ui.has_signal("lesson_completed") and not tutorial_ui.lesson_completed.is_connected(_on_tutorial_lesson_completed):
@@ -380,6 +496,11 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_lmb_held_during_demo = event.pressed
+			if event.pressed and is_instance_valid(tutorial_ui) and tutorial_ui.has_method("is_point_on_skip_button") and bool(tutorial_ui.call("is_point_on_skip_button", event.position)):
+				if tutorial_ui.has_method("skip_active_lesson"):
+					tutorial_ui.call("skip_active_lesson", true)
+				else:
+					skip_to_practice()
 		if is_inside_tree() and get_viewport() != null:
 			get_viewport().set_input_as_handled()
 		return
@@ -399,8 +520,8 @@ func is_visual_pass_completed() -> bool:
 func step(real_delta: float) -> void:
 	if not active:
 		return
-	if not is_instance_valid(arena) or not arena.is_inside_tree():
-		cancel()
+	if not _can_touch_world_transforms():
+		cancel(false)
 		return
 	var gs := _game_state()
 	if gs != null and gs.has_method("preferences") and not bool(gs.call("preferences").get("tutorial", true)):
@@ -430,6 +551,10 @@ func step(real_delta: float) -> void:
 		if am != null and am == root_am and am.has_method("stop_dialogue"):
 			am.call("stop_dialogue")
 
+	if lesson_id == &"shot" and _substage == &"time_meter" and _substage_pass_completed:
+		if _current_speech_event_name() != "tutorial.time_meter" or not is_instruction_speech_busy() or _unawaited_sync_steps >= 55:
+			_transition_prestage_to_shot()
+
 	if _pass_completed and not is_instruction_speech_busy():
 		_complete_and_handoff()
 		return
@@ -438,13 +563,15 @@ func step(real_delta: float) -> void:
 	phase_elapsed += dt
 
 	var tc: TimeController = arena.get("time_controller") as TimeController
-	if lesson_id == &"slow" and is_instance_valid(tc):
+	if _substage == &"slow" and is_instance_valid(tc):
 		tc.advance(dt)
 		var ws := tc.world_scale
 		last_summary["min_world_scale"] = minf(float(last_summary["min_world_scale"]), ws)
 		if phase >= 4:
 			last_summary["max_world_scale_after_slow"] = maxf(float(last_summary["max_world_scale_after_slow"]), ws)
-	var world_scale := tc.world_scale if (lesson_id == &"slow" and is_instance_valid(tc)) else 1.0
+	elif _substage == &"time_meter" and is_instance_valid(tc) and phase >= 3:
+		tc.advance(dt)
+	var world_scale := tc.world_scale if (_substage == &"slow" and is_instance_valid(tc)) else 1.0
 	var world_dt := dt * world_scale
 
 	_step_lesson_choreography(dt, world_dt)
@@ -478,6 +605,10 @@ func step(real_delta: float) -> void:
 	_observe_demo_targets()
 
 	if is_instance_valid(tutorial_ui) and tutorial_ui.get("active_id") == lesson_id:
+		if lesson_id == &"shot" and (_substage == &"time_meter" or _current_speech_event_name() == "tutorial.time_meter") and tutorial_ui.has_method("set_phase_prompt"):
+			var tm_spec := spec_for(&"time_meter")
+			tutorial_ui.set("draw_style", &"time")
+			tutorial_ui.call("set_phase_prompt", String(tm_spec.get("heading", "")), String(tm_spec.get("body", "")), ToolStyle.CLOCK, String(tm_spec.get("subtitle", "TIME RESERVE")))
 		var pts := current_targets()
 		if not pts.is_empty():
 			tutorial_ui.world_points.assign(pts)
@@ -493,38 +624,46 @@ func step(real_delta: float) -> void:
 
 
 func skip_to_practice() -> void:
-	if not active:
+	if not active or not _terminal_state.is_empty():
 		return
+	_terminal_state = &"skipped"
 	var id := lesson_id
+	if _substage == &"time_meter" or id == &"time_meter":
+		_mark_time_meter_learned(id == &"time_meter")
 	last_summary["skipped"] = true
+	var am := _get_audio_manager()
+	if is_instance_valid(am) and am.has_method("stop_dialogue"):
+		am.call("stop_dialogue")
 	_teardown_demo(true)
 	_emit_practice_handoff(id)
 
 
 func cancel(restore_world: bool = true) -> void:
-	if not active:
+	if not active or not _terminal_state.is_empty():
 		return
+	_terminal_state = &"cancelled"
 	var id := lesson_id
 	last_summary["cancelled"] = true
-	_teardown_demo(restore_world)
+	_teardown_demo(restore_world and _can_touch_world_transforms())
 	demo_cancelled.emit(id)
 
 
 func current_targets() -> Array[Vector3]:
 	var pts: Array[Vector3] = []
+	var active_stage := _substage if not _substage.is_empty() else lesson_id
 	for enemy in demo_enemies:
 		if not is_instance_valid(enemy) or not enemy.is_inside_tree() or float(enemy.get("health")) <= 0.0:
 			continue
-		if lesson_id == &"pair" and enemy.has_method("valve_world_position"):
+		if active_stage == &"pair" and enemy.has_method("valve_world_position"):
 			var prog := int(enemy.get("pair_progress"))
 			if prog <= 0 and not bool(enemy.get("pattern_open")):
 				pts.append(enemy.call("valve_world_position", 0))
 				pts.append(enemy.call("valve_world_position", 1))
 			else:
 				pts.append(enemy.call("valve_world_position", clampi(prog, 0, 1)))
-		elif lesson_id == &"heat" and is_instance_valid(enemy.get("part_visual")) and is_instance_valid(enemy.part_visual.get("plate")) and enemy.part_visual.plate.is_inside_tree():
+		elif active_stage == &"heat" and is_instance_valid(enemy.get("part_visual")) and is_instance_valid(enemy.part_visual.get("plate")) and enemy.part_visual.plate.is_inside_tree():
 			pts.append(enemy.part_visual.plate.global_position + Vector3.UP * 0.5)
-		elif lesson_id in [&"cut", &"opening", &"loop", &"zigzag"] and enemy.has_method("has_cuttable_part") and bool(enemy.call("has_cuttable_part")):
+		elif active_stage in [&"cut", &"opening", &"loop", &"zigzag"] and enemy.has_method("has_cuttable_part") and bool(enemy.call("has_cuttable_part")):
 			var cable: Array = enemy.call("cable_world_points")
 			if enemy.has_method("lesson_state"):
 				for i in range(0, cable.size() - 1, 2):
@@ -621,11 +760,14 @@ func _capture_baseline() -> void:
 
 
 func _setup_demo_stage(id: StringName, spec: Dictionary) -> void:
+	if not _can_touch_world_transforms():
+		return
 	var player: Node3D = arena.get("player") as Node3D
 	var equipment: WeaponEquipment = arena.get("equipment") as WeaponEquipment
 	var weapons: Node3D = arena.get("weapons") as Node3D
 	var director: Node3D = arena.get("director") as Node3D
 	var cover: RefCounted = arena.get("cover") as RefCounted
+	var tc: TimeController = arena.get("time_controller") as TimeController
 
 	_clear_all_controls()
 	if cover != null:
@@ -640,28 +782,43 @@ func _setup_demo_stage(id: StringName, spec: Dictionary) -> void:
 	var raw_pos: Vector3 = _saved_player.get("position", Vector3(0.0, 0.55, 0.0))
 	_demo_player_y = raw_pos.y
 	_demo_origin = DEMO_STAGE_ORIGIN
-	if is_instance_valid(player):
+	if is_instance_valid(player) and player.is_inside_tree():
 		player.position = Vector3(_demo_origin.x, _demo_player_y, _demo_origin.z)
 		player.reset_physics_interpolation()
 		var cam: Camera3D = player.get("camera") as Camera3D
-		if is_instance_valid(cam):
+		if is_instance_valid(cam) and cam.is_inside_tree():
 			cam.position = DEMO_CAMERA_OFFSET
 			cam.reset_physics_interpolation()
 			cam.force_update_transform()
 
 	var p_tool := int(spec.get("primary_tool", 2))
-	if is_instance_valid(weapons):
+	if is_instance_valid(weapons) and weapons.is_inside_tree():
 		var all_tools: Array[int] = [1, 2, 3]
 		weapons.call("set_loadout", all_tools, p_tool)
 		weapons.call("select_tool", p_tool)
 		weapons.call("reset_state")
 		weapons.call("select_tool", p_tool)
-	if is_instance_valid(player) and player.has_method("set_visual_tool"):
+	if is_instance_valid(player) and player.is_inside_tree() and player.has_method("set_visual_tool"):
 		player.call("set_visual_tool", p_tool)
+
+	if id == &"time_meter" and is_instance_valid(tc):
+		tc.slow_requested = false
+		tc.set("_slow_active", false)
+		tc.set("_world_scale", 1.0)
+		tc.set("_meter", tc.capacity)
+		last_summary["initial_time_meter"] = tc.meter
+		last_summary["min_time_meter"] = tc.meter
 
 	demo_enemies.clear()
 	if is_instance_valid(director):
-		if id == &"charge":
+		if id == &"time_meter":
+			var left_attacker: Node3D = director.call("spawn", &"yellow", _demo_origin + Vector3(-1.35, 0.0, -2.0))
+			var right_attacker: Node3D = director.call("spawn", &"orange", _demo_origin + Vector3(1.35, 0.0, -2.2))
+			for enemy in [left_attacker, right_attacker]:
+				if is_instance_valid(enemy):
+					_prepare_demo_enemy(enemy)
+					demo_enemies.append(enemy)
+		elif id == &"charge":
 			var front: Node3D = director.call("spawn", &"yellow", _demo_origin + Vector3(0.0, 0.0, -4.2))
 			var back: Node3D = director.call("spawn", &"yellow", _demo_origin + Vector3(0.0, 0.0, -7.2))
 			for enemy in [front, back]:
@@ -669,7 +826,7 @@ func _setup_demo_stage(id: StringName, spec: Dictionary) -> void:
 					_prepare_demo_enemy(enemy)
 					demo_enemies.append(enemy)
 		elif id == &"heat":
-			var orange: Node3D = director.call("spawn", &"orange", _demo_origin + Vector3(0.0, 0.0, -3.5))
+			var orange: Node3D = director.call("spawn", &"orange", _demo_origin + Vector3(0.0, 0.0, HEAT_START_OFFSET_Z))
 			if is_instance_valid(orange):
 				_prepare_demo_enemy(orange)
 				demo_enemies.append(orange)
@@ -699,25 +856,68 @@ func _setup_demo_stage(id: StringName, spec: Dictionary) -> void:
 	_build_stroke_waypoints(id)
 	var init_targets := current_targets()
 	_current_aim = init_targets[0] if not init_targets.is_empty() else (_demo_origin + Vector3(0.0, 0.0, -4.8))
-	if is_instance_valid(player) and player.has_method("_face"):
+	if is_instance_valid(player) and player.is_inside_tree() and player.has_method("_face"):
 		player.call("_face", _current_aim)
-	if is_instance_valid(weapons):
+	if is_instance_valid(weapons) and weapons.is_inside_tree() and is_instance_valid(player) and player.is_inside_tree():
 		weapons.call("rebuild_visuals", player)
 
 
-func _restart_demo_pass() -> void:
-	if not active or not is_instance_valid(arena):
+func _transition_prestage_to_shot() -> void:
+	if not active or not _can_touch_world_transforms():
 		return
-	var spec := spec_for(lesson_id)
+	_mark_time_meter_learned(false)
+	last_summary["time_meter_prestage_completed"] = true
+	var tc: TimeController = arena.get("time_controller") as TimeController
+	if is_instance_valid(tc):
+		var restored_meter: float = float(_saved_time.get("meter", tc.capacity))
+		tc.slow_requested = false
+		tc.set("_slow_active", false)
+		tc.set("_world_scale", 1.0)
+		tc.set("_meter", restored_meter)
+		last_summary["time_meter_restored"] = true
+		last_summary["time_meter_restored_before_shot"] = is_equal_approx(tc.meter, restored_meter)
+	var player: Node3D = arena.get("player") as Node3D
+	if is_instance_valid(player) and not _saved_player.is_empty():
+		player.call("restore_state", _saved_player)
+	_substage = &"shot"
+	_substage_pass_completed = false
+	_pass_completed = false
+	phase = 0
+	phase_elapsed = 0.0
+	_repeat_cooldown = 0.0
+	_waypoint_index = 0
+	last_summary["target_killed"] = false
+	last_summary["shot_fired"] = false
+	var shot_spec := spec_for(&"shot")
+	_setup_demo_stage(&"shot", shot_spec)
+	if is_instance_valid(tutorial_ui):
+		tutorial_ui.set("draw_style", &"")
+		if tutorial_ui.has_method("set_waiting_for_speech"):
+			tutorial_ui.call("set_waiting_for_speech", false)
+		if tutorial_ui.has_method("set_phase_prompt"):
+			tutorial_ui.call("set_phase_prompt", String(shot_spec.get("heading", "")), String(shot_spec.get("body", "")), ToolStyle.BEAM, String(shot_spec.get("subtitle", "")))
+		tutorial_ui.world_points.assign(current_targets())
+	var status_hud: Node = arena.get("status_hud") as Node
+	var weapons: Node3D = arena.get("weapons") as Node3D
+	if is_instance_valid(status_hud) and is_instance_valid(player) and is_instance_valid(weapons):
+		status_hud.call("update_status", player, weapons, arena.get("equipment"))
+
+
+func _restart_demo_pass() -> void:
+	if not active or not _can_touch_world_transforms():
+		return
+	var stage_id := _substage if not _substage.is_empty() else lesson_id
+	var spec := spec_for(stage_id)
 	phase = 0
 	phase_elapsed = 0.0
 	_repeat_cooldown = 0.0
 	_waypoint_index = 0
 	if is_instance_valid(tutorial_ui) and tutorial_ui.has_method("set_phase_prompt"):
-		var base_col: Color = tutorial_ui.call("accent_for_lesson", lesson_id) if tutorial_ui.has_method("accent_for_lesson") else ToolStyle.BEAM
-		var base_sub: String = tutorial_ui.call("subtitle_for_lesson", lesson_id) if tutorial_ui.has_method("subtitle_for_lesson") else String(spec.get("subtitle", ""))
+		var base_col: Color = ToolStyle.CLOCK if stage_id == &"time_meter" else (tutorial_ui.call("accent_for_lesson", stage_id) if tutorial_ui.has_method("accent_for_lesson") else ToolStyle.BEAM)
+		var base_sub: String = tutorial_ui.call("subtitle_for_lesson", stage_id) if tutorial_ui.has_method("subtitle_for_lesson") else String(spec.get("subtitle", ""))
+		tutorial_ui.set("draw_style", &"time" if stage_id == &"time_meter" else &"")
 		tutorial_ui.call("set_phase_prompt", String(spec.get("heading", "")), String(spec.get("body", "")), base_col, base_sub)
-	_setup_demo_stage(lesson_id, spec)
+	_setup_demo_stage(stage_id, spec)
 
 
 func _prepare_demo_enemy(enemy: Node3D) -> void:
@@ -827,7 +1027,7 @@ func _switch_demo_tool(tool_slot: int, phase_color: Color = Color.WHITE, subtitl
 	if is_instance_valid(weapons):
 		weapons.call("select_tool", tool_slot)
 		weapons.set("require_fresh_press", false)
-	if is_instance_valid(player) and player.has_method("set_visual_tool"):
+	if is_instance_valid(player) and player.is_inside_tree() and player.has_method("set_visual_tool"):
 		player.call("set_visual_tool", tool_slot)
 	_record_tool_used(tool_slot)
 	if is_instance_valid(tutorial_ui):
@@ -842,34 +1042,67 @@ func _advance_phase(next_phase: int) -> void:
 	phase_elapsed = 0.0
 
 
+func _apply_staged_time_meter_hit(attacker: Node3D, meter_drain: float) -> void:
+	var tc: TimeController = arena.get("time_controller") as TimeController
+	var player: Node3D = arena.get("player") as Node3D
+	var feedback: Node = arena.get("feedback") as Node
+	if is_instance_valid(tc):
+		var drop := maxf(meter_drain, tc.capacity * 0.28)
+		var next_meter := maxf(18.0, tc.meter - drop)
+		if tc.has_method("_set_meter"):
+			tc.call("_set_meter", next_meter)
+		else:
+			tc.set("_meter", next_meter)
+		var min_m := minf(float(last_summary.get("min_time_meter", tc.capacity)), next_meter)
+		last_summary["min_time_meter"] = min_m
+		last_summary["time_meter_min"] = min_m
+		last_summary["time_meter_drained"] = next_meter < float(last_summary.get("initial_time_meter", tc.capacity)) - 1.0
+	var hits := int(last_summary.get("enemies_attacked", 0)) + 1
+	last_summary["enemies_attacked"] = hits
+	last_summary["time_meter_hits"] = hits
+	if is_instance_valid(player):
+		if "_hit_flash" in player:
+			player.set("_hit_flash", 0.35)
+		if is_instance_valid(feedback) and feedback.has_method("cue") and player.is_inside_tree():
+			feedback.call("cue", &"player_hurt", player.global_position, 0.85)
+	if is_instance_valid(attacker) and "attack_flash" in attacker:
+		attacker.set("attack_flash", 0.3)
+	if "_damage_flash" in arena:
+		arena.set("_damage_flash", 0.35)
+	_clean_demo_combat_speech()
+
+
 func _sustain_demo_weapon_visuals(player: Node3D, weapons: Node3D) -> void:
-	if not is_instance_valid(weapons) or not is_instance_valid(weapons.flash):
+	if not is_instance_valid(weapons) or not weapons.is_inside_tree() or not is_instance_valid(weapons.flash):
 		return
+	if not is_instance_valid(player) or not player.is_inside_tree():
+		return
+	var active_stage := _substage if not _substage.is_empty() else lesson_id
 	var flash: FocusedFlash = weapons.flash
 	var keep_beam := false
-	if lesson_id == &"shot" and phase == 2 and phase_elapsed < 0.28:
+	if active_stage == &"shot" and phase == 2 and phase_elapsed < 0.28:
 		flash.flash_timer = maxf(flash.flash_timer, 0.12)
 		flash.flash_charge = maxf(flash.flash_charge, 0.45)
 		keep_beam = true
-	elif lesson_id == &"charge" and phase == 2 and bool(last_summary.get("pierced", false)) and phase_elapsed < 0.30:
+	elif active_stage == &"charge" and phase == 2 and bool(last_summary.get("pierced", false)) and phase_elapsed < 0.30:
 		flash.pulses.clear()
 		flash.end_point = _demo_origin + Vector3(0.0, 0.0, -8.6)
 		flash.flash_charge = 1.0
 		flash.flash_timer = maxf(flash.flash_timer, 0.14)
 		keep_beam = true
-	elif lesson_id == &"slow" and phase == 3 and phase_elapsed < 0.24:
+	elif active_stage == &"slow" and phase == 3 and phase_elapsed < 0.24:
 		flash.flash_timer = maxf(flash.flash_timer, 0.12)
 		flash.flash_charge = maxf(flash.flash_charge, 0.45)
 		keep_beam = true
-	elif lesson_id == &"opening" and phase == 4 and phase_elapsed < 0.26:
+	elif active_stage == &"opening" and phase == 4 and phase_elapsed < 0.26:
 		flash.flash_timer = maxf(flash.flash_timer, 0.12)
 		flash.flash_charge = maxf(flash.flash_charge, 0.5)
 		keep_beam = true
-	elif lesson_id == &"pair" and ((phase == 1 and phase_elapsed < 0.22) or (phase == 3 and phase_elapsed < 0.26)):
+	elif active_stage == &"pair" and ((phase == 1 and phase_elapsed < 0.22) or (phase == 3 and phase_elapsed < 0.26)):
 		flash.flash_timer = maxf(flash.flash_timer, 0.12)
 		flash.flash_charge = maxf(flash.flash_charge, 0.45)
 		keep_beam = true
-	elif lesson_id in [&"loop", &"zigzag"] and phase == 5 and bool(last_summary.get("target_killed", false)) and phase_elapsed < 0.28:
+	elif active_stage in [&"loop", &"zigzag"] and phase == 5 and bool(last_summary.get("target_killed", false)) and phase_elapsed < 0.28:
 		flash.pulses.clear()
 		flash.end_point = _demo_origin + Vector3(0.0, 0.0, -6.2)
 		flash.flash_charge = 1.0
@@ -886,8 +1119,51 @@ func _step_lesson_choreography(_dt: float, world_dt: float) -> void:
 	if not is_instance_valid(player) or not is_instance_valid(weapons):
 		return
 	var enemy: Node3D = demo_enemies[0] if (not demo_enemies.is_empty() and is_instance_valid(demo_enemies[0]) and demo_enemies[0].is_inside_tree()) else null
+	var active_stage := _substage if not _substage.is_empty() else lesson_id
 
-	match lesson_id:
+	match active_stage:
+		&"time_meter":
+			var second_enemy: Node3D = demo_enemies[1] if (demo_enemies.size() > 1 and is_instance_valid(demo_enemies[1]) and demo_enemies[1].is_inside_tree()) else null
+			if phase == 0:
+				if enemy != null:
+					var lunge_a := clampf(phase_elapsed / 0.24, 0.0, 1.0)
+					enemy.position = (_demo_origin + Vector3(-1.35, 0.0, -2.0)).lerp(_demo_origin + Vector3(-0.55, 0.0, -0.75), lunge_a)
+					enemy.set("facing", (_demo_origin - enemy.position).normalized())
+					_current_aim = enemy.position
+				if second_enemy != null:
+					var approach_b := clampf(phase_elapsed / 0.24, 0.0, 1.0)
+					second_enemy.position = (_demo_origin + Vector3(1.35, 0.0, -2.2)).lerp(_demo_origin + Vector3(1.05, 0.0, -1.55), approach_b)
+					second_enemy.set("facing", (_demo_origin - second_enemy.position).normalized())
+				if phase_elapsed >= 0.24:
+					_apply_staged_time_meter_hit(enemy, 18.0)
+					_advance_phase(1)
+			elif phase == 1:
+				if enemy != null:
+					var recoil_a := clampf(phase_elapsed / 0.26, 0.0, 1.0)
+					enemy.position = (_demo_origin + Vector3(-0.55, 0.0, -0.75)).lerp(_demo_origin + Vector3(-1.45, 0.0, -2.3), recoil_a)
+				if second_enemy != null:
+					var lunge_b := clampf(phase_elapsed / 0.26, 0.0, 1.0)
+					second_enemy.position = (_demo_origin + Vector3(1.05, 0.0, -1.55)).lerp(_demo_origin + Vector3(0.55, 0.0, -0.75), lunge_b)
+					second_enemy.set("facing", (_demo_origin - second_enemy.position).normalized())
+					_current_aim = second_enemy.position
+				if phase_elapsed >= 0.26:
+					_apply_staged_time_meter_hit(second_enemy, 18.0)
+					_advance_phase(2)
+			elif phase == 2:
+				if second_enemy != null:
+					var recoil_b := clampf(phase_elapsed / 0.28, 0.0, 1.0)
+					second_enemy.position = (_demo_origin + Vector3(0.55, 0.0, -0.75)).lerp(_demo_origin + Vector3(1.55, 0.0, -2.4), recoil_b)
+				if phase_elapsed >= 0.28:
+					_advance_phase(3)
+			elif phase == 3:
+				if phase_elapsed >= 0.30:
+					for de in demo_enemies:
+						if is_instance_valid(de):
+							de.set("health", 0.0)
+					last_summary["target_killed"] = true
+					last_summary["time_meter_restored"] = true
+					_advance_phase(4)
+
 		&"shot":
 			if enemy != null:
 				_current_aim = enemy.call("core_world_position")
@@ -936,9 +1212,17 @@ func _step_lesson_choreography(_dt: float, world_dt: float) -> void:
 
 		&"heat":
 			if enemy != null and float(enemy.get("health")) > 0.0:
-				enemy.set("knockback_vel", Vector3.ZERO)
 				enemy.position.x = _demo_origin.x
-				enemy.position.z = clampf(enemy.position.z, _demo_origin.z - 4.0, _demo_origin.z - 3.3)
+				if enemy.position.z <= _demo_origin.z + HEAT_MAX_PUSH_Z:
+					enemy.position.z = _demo_origin.z + HEAT_MAX_PUSH_Z
+					enemy.set("knockback_vel", Vector3.ZERO)
+				var start_z := _demo_origin.z + HEAT_START_OFFSET_Z
+				var pushed_dist := maxf(0.0, start_z - enemy.position.z)
+				if pushed_dist > float(last_summary.get("heat_knockback_distance", 0.0)):
+					last_summary["heat_knockback_distance"] = pushed_dist
+				if pushed_dist >= 0.65:
+					last_summary["knocked_back"] = true
+					last_summary["heat_knockback_seen"] = true
 				_current_aim = enemy.position
 			if phase == 0 and phase_elapsed >= 0.20:
 				weapons.bellows.press(_demo_origin, _current_aim)
@@ -1108,23 +1392,32 @@ func _sample_ring_along_waypoints(duration: float, _player: Node3D, weapons: Nod
 
 func _observe_demo_targets() -> void:
 	var alive := 0
+	var active_stage := _substage if not _substage.is_empty() else lesson_id
 	for enemy in demo_enemies:
 		if not is_instance_valid(enemy):
 			continue
 		_suppress_enemy_overhead_labels(enemy)
+		if active_stage == &"heat":
+			var start_z := _demo_origin.z + HEAT_START_OFFSET_Z
+			var pushed_dist := maxf(0.0, start_z - enemy.position.z)
+			if pushed_dist > float(last_summary.get("heat_knockback_distance", 0.0)):
+				last_summary["heat_knockback_distance"] = pushed_dist
+			if pushed_dist >= 0.65:
+				last_summary["knocked_back"] = true
+				last_summary["heat_knockback_seen"] = true
 		if bool(enemy.get("cable_cut")):
 			last_summary["cable_cut"] = true
 		if bool(enemy.get("plate_broken")):
 			last_summary["plate_broken"] = true
-		if lesson_id == &"opening" and bool(enemy.call("is_core_exposed")) and float(enemy.get("health")) > 0.0:
+		if active_stage == &"opening" and bool(enemy.call("is_core_exposed")) and float(enemy.get("health")) > 0.0:
 			last_summary["opened_before_finish"] = true
-		elif lesson_id == &"pair" and int(enemy.get("pair_progress")) >= 1 and float(enemy.get("health")) > 0.0:
+		elif active_stage == &"pair" and int(enemy.get("pair_progress")) >= 1 and float(enemy.get("health")) > 0.0:
 			last_summary["opened_before_finish"] = true
-		elif lesson_id in [&"loop", &"zigzag"] and bool(enemy.get("pattern_open")) and float(enemy.get("health")) > 0.0:
+		elif active_stage in [&"loop", &"zigzag"] and bool(enemy.get("pattern_open")) and float(enemy.get("health")) > 0.0:
 			last_summary["opened_before_finish"] = true
 			last_summary["cable_cut"] = true
 		if float(enemy.get("health")) <= 0.0:
-			if lesson_id in [&"opening", &"pair", &"loop", &"zigzag"] and bool(last_summary["opened_before_finish"]):
+			if active_stage in [&"opening", &"pair", &"loop", &"zigzag"] and bool(last_summary["opened_before_finish"]):
 				last_summary["yellow_finished_after_open"] = true
 		else:
 			alive += 1
@@ -1136,9 +1429,10 @@ func _on_demo_resolved_hit(tool: StringName, result: Dictionary, context: Dictio
 	if not active:
 		return
 	_observe_demo_targets()
+	var active_stage := _substage if not _substage.is_empty() else lesson_id
 	var killed := bool(result.get("killed", false))
 	if killed:
-		if lesson_id != &"charge":
+		if active_stage != &"charge":
 			last_summary["target_killed"] = true
 		if tool == &"beam" and bool(context.get("piercing", false)):
 			var pk := int(last_summary.get("pierce_kills", 0)) + 1
@@ -1147,7 +1441,7 @@ func _on_demo_resolved_hit(tool: StringName, result: Dictionary, context: Dictio
 				last_summary["pierced"] = true
 			if pk >= 2:
 				last_summary["target_killed"] = true
-		if tool == &"beam" and lesson_id in [&"opening", &"pair", &"loop", &"zigzag"] and bool(last_summary["opened_before_finish"]):
+		if tool == &"beam" and active_stage in [&"opening", &"pair", &"loop", &"zigzag"] and bool(last_summary["opened_before_finish"]):
 			last_summary["yellow_finished_after_open"] = true
 
 
@@ -1158,8 +1452,11 @@ func _on_demo_combat_event(_kind: StringName, _point: Vector3, _strength: float)
 func _check_phase_completion(dt: float) -> void:
 	if not active:
 		return
+	var active_stage := _substage if not _substage.is_empty() else lesson_id
 	var done := false
-	match lesson_id:
+	match active_stage:
+		&"time_meter":
+			done = phase >= 4 and bool(last_summary["time_meter_drained"]) and int(last_summary["enemies_attacked"]) >= 2
 		&"shot":
 			done = phase >= 2 and bool(last_summary["shot_fired"]) and bool(last_summary["target_killed"]) and phase_elapsed >= 0.30
 		&"charge":
@@ -1167,7 +1464,7 @@ func _check_phase_completion(dt: float) -> void:
 		&"cut":
 			done = phase >= 3 and bool(last_summary["ring_drawn"]) and bool(last_summary["ring_launched"]) and bool(last_summary["cable_cut"]) and bool(last_summary["target_killed"]) and phase_elapsed >= 0.32
 		&"heat":
-			done = phase >= 3 and bool(last_summary["cone_held"]) and bool(last_summary["plate_broken"]) and bool(last_summary["target_killed"]) and phase_elapsed >= 0.18
+			done = phase >= 3 and bool(last_summary["cone_held"]) and bool(last_summary["plate_broken"]) and bool(last_summary["knocked_back"]) and bool(last_summary["target_killed"]) and phase_elapsed >= 0.18
 		&"slow":
 			done = phase >= 5 and bool(last_summary["slow_engaged"]) and bool(last_summary["shot_during_slow"]) and bool(last_summary["target_killed"]) and bool(last_summary["slow_resumed"])
 		&"opening":
@@ -1177,27 +1474,48 @@ func _check_phase_completion(dt: float) -> void:
 		&"loop", &"zigzag":
 			done = phase >= 5 and bool(last_summary["opened_before_finish"]) and bool(last_summary["yellow_finished_after_open"]) and bool(last_summary["target_killed"]) and phase_elapsed >= 0.28
 
-	if done:
-		if not _pass_completed:
-			_pass_completed = true
-			last_summary["completed"] = true
-			last_summary["visual_passes"] = int(last_summary.get("visual_passes", 0)) + 1
-		if not is_instruction_speech_busy():
-			_complete_and_handoff()
+	if not done:
+		return
+
+	if lesson_id == &"shot" and _substage == &"time_meter":
+		_substage_pass_completed = true
+		if _current_speech_event_name() != "tutorial.time_meter" or not is_instruction_speech_busy() or _unawaited_sync_steps >= 55:
+			_transition_prestage_to_shot()
 			return
 		last_summary["waited_for_speech"] = true
 		if is_instance_valid(tutorial_ui) and tutorial_ui.has_method("set_waiting_for_speech"):
 			tutorial_ui.call("set_waiting_for_speech", true)
 		_repeat_cooldown += dt
-		if _repeat_cooldown >= 0.38:
-			last_summary["visual_passes"] = int(last_summary.get("visual_passes", 1)) + 1
+		if _repeat_cooldown >= 0.42:
 			_restart_demo_pass()
+		return
+
+	if not _pass_completed:
+		_pass_completed = true
+		last_summary["completed"] = true
+		last_summary["visual_passes"] = int(last_summary.get("visual_passes", 0)) + 1
+	if not is_instruction_speech_busy():
+		_complete_and_handoff()
+		return
+	last_summary["waited_for_speech"] = true
+	if is_instance_valid(tutorial_ui) and tutorial_ui.has_method("set_waiting_for_speech"):
+		tutorial_ui.call("set_waiting_for_speech", true)
+	_repeat_cooldown += dt
+	if _repeat_cooldown >= 0.38:
+		last_summary["visual_passes"] = int(last_summary.get("visual_passes", 1)) + 1
+		_restart_demo_pass()
 
 
 func _complete_and_handoff() -> void:
-	if not active:
+	if not active or not _terminal_state.is_empty():
 		return
+	if not _can_touch_world_transforms():
+		cancel(false)
+		return
+	_terminal_state = &"completed"
 	var id := lesson_id
+	if id == &"time_meter" or _substage == &"time_meter":
+		_mark_time_meter_learned(id == &"time_meter")
 	last_summary["completed"] = true
 	_teardown_demo(true)
 	demo_completed.emit(id, last_summary.duplicate(true))
@@ -1232,12 +1550,17 @@ func _teardown_demo(restore_world: bool) -> void:
 	_unbind_audio_signals()
 	var finished_id := lesson_id
 	lesson_id = &""
+	_substage = &""
+	_substage_pass_completed = false
 	demo_enemies.clear()
 	_stroke_waypoints.clear()
 
 	if is_instance_valid(tutorial_ui):
+		tutorial_ui.set("draw_style", &"")
 		if tutorial_ui.has_method("set_demo_busy"):
 			tutorial_ui.call("set_demo_busy", false)
+		if tutorial_ui.has_signal("skip_requested") and tutorial_ui.skip_requested.is_connected(_on_tutorial_skip_requested):
+			tutorial_ui.skip_requested.disconnect(_on_tutorial_skip_requested)
 		if tutorial_ui.has_signal("resume_requested") and tutorial_ui.resume_requested.is_connected(_on_tutorial_resume_requested):
 			tutorial_ui.resume_requested.disconnect(_on_tutorial_resume_requested)
 
@@ -1250,10 +1573,14 @@ func _teardown_demo(restore_world: bool) -> void:
 				weapons.resolved_hit.disconnect(_on_demo_resolved_hit)
 			if weapons.combat_event.is_connected(_on_demo_combat_event):
 				weapons.combat_event.disconnect(_on_demo_combat_event)
+		var feedback_node: Node = arena.get("feedback") as Node
+		if is_instance_valid(feedback_node) and feedback_node.has_method("reset_state"):
+			feedback_node.call("reset_state")
 
 		_clear_all_controls()
 
-		if restore_world and arena.is_inside_tree():
+		var can_restore := restore_world and _can_touch_world_transforms()
+		if can_restore:
 			var player: Node3D = arena.get("player") as Node3D
 			var equipment: WeaponEquipment = arena.get("equipment") as WeaponEquipment
 			var director: Node3D = arena.get("director") as Node3D
@@ -1262,31 +1589,33 @@ func _teardown_demo(restore_world: bool) -> void:
 
 			if cover != null:
 				cover.rectangles.assign(_saved_cover_rects)
-			if is_instance_valid(director):
+			if is_instance_valid(director) and director.is_inside_tree():
 				director.call("restore_state", _saved_director)
 				director.set("_spawn_counter", _saved_spawn_counter)
 			if equipment != null:
 				equipment.restore_state(_saved_equipment.duplicate(true))
 				equipment.set_training_protection(_saved_training_protection)
-			if is_instance_valid(player):
+			if is_instance_valid(player) and player.is_inside_tree():
 				player.call("restore_state", _saved_player)
 				if player.has_method("set_visual_tool"):
 					player.call("set_visual_tool", _saved_visual_tool)
 				if _has_saved_camera and is_instance_valid(player.get("camera")):
 					var cam: Camera3D = player.get("camera") as Camera3D
-					cam.position = _saved_camera_pos
-					cam.rotation = _saved_camera_rot
-					cam.fov = _saved_camera_fov
-					cam.reset_physics_interpolation()
-					cam.force_update_transform()
-			if is_instance_valid(weapons):
+					if cam.is_inside_tree():
+						cam.position = _saved_camera_pos
+						cam.rotation = _saved_camera_rot
+						cam.fov = _saved_camera_fov
+						cam.reset_physics_interpolation()
+						cam.force_update_transform()
+			if is_instance_valid(weapons) and weapons.is_inside_tree():
 				weapons.available_tools.assign(_saved_available_tools)
 				weapons.call("restore_state", _saved_weapons)
 				weapons.set("selected_tool", _saved_selected_tool)
 				weapons.call("cancel_input")
 				weapons.set("mouse_held", false)
 				weapons.set("require_fresh_press", false)
-				weapons.call("rebuild_visuals", player)
+				if is_instance_valid(player) and player.is_inside_tree():
+					weapons.call("rebuild_visuals", player)
 			if is_instance_valid(tc) and not _saved_time.is_empty():
 				tc.set_capabilities(bool(_saved_time.get("slow_unlocked", false)), bool(_saved_time.get("rewind_unlocked", false)))
 				tc.slow_requested = false
@@ -1294,6 +1623,8 @@ func _teardown_demo(restore_world: bool) -> void:
 				tc.set("_meter", float(_saved_time.get("meter", tc.capacity)))
 				tc.set("_world_scale", 1.0)
 				tc.set("_charges", int(_saved_time.get("charges", tc.charges_per_attempt)))
+				if finished_id == &"time_meter":
+					last_summary["time_meter_restored"] = is_equal_approx(tc.meter, float(_saved_time.get("meter", tc.capacity)))
 			if arena.has_method("_restore_practice") and not _saved_practice.is_empty():
 				arena.call("_restore_practice", _saved_practice)
 			if arena.get("specimens") is Array and arena.get("_specimen_ids") is Array and is_instance_valid(director):
@@ -1331,13 +1662,14 @@ func _teardown_demo(restore_world: bool) -> void:
 					tutorial_ui.world_points.assign(arena.call("_targets"))
 
 			last_summary["isolated_restore_verified"] = true
-		elif arena.is_inside_tree():
+		elif _can_touch_world_transforms():
 			var player_ref: Node3D = arena.get("player") as Node3D
 			if _has_saved_camera and is_instance_valid(player_ref) and is_instance_valid(player_ref.get("camera")):
 				var cam_ref: Camera3D = player_ref.get("camera") as Camera3D
-				cam_ref.position = _saved_camera_pos
-				cam_ref.rotation = _saved_camera_rot
-				cam_ref.fov = _saved_camera_fov
+				if cam_ref.is_inside_tree():
+					cam_ref.position = _saved_camera_pos
+					cam_ref.rotation = _saved_camera_rot
+					cam_ref.fov = _saved_camera_fov
 			var cover_ref: RefCounted = arena.get("cover") as RefCounted
 			if cover_ref != null and cover_ref.rectangles.is_empty() and not _saved_cover_rects.is_empty():
 				cover_ref.rectangles.assign(_saved_cover_rects)
@@ -1358,6 +1690,7 @@ func _emit_practice_handoff(id: StringName) -> void:
 	if _handoff_emitted or id.is_empty():
 		return
 	_handoff_emitted = true
+	var was_skipped := bool(last_summary.get("skipped", false))
 	if is_instance_valid(tutorial_ui):
 		if tutorial_ui.has_method("set_demo_busy"):
 			tutorial_ui.call("set_demo_busy", false)
@@ -1372,11 +1705,16 @@ func _emit_practice_handoff(id: StringName) -> void:
 		var weapons: Node3D = arena.get("weapons") as Node3D
 		if is_instance_valid(weapons):
 			weapons.call("cancel_input")
-			var lmb_down := _lmb_held_during_demo or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+			var lmb_down := was_skipped or _lmb_held_during_demo or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 			weapons.set("mouse_held", false)
 			weapons.set("require_fresh_press", lmb_down)
 			if lmb_down:
 				arena.set("_suppress_next_lmb_release", true)
+
+
+func _on_tutorial_skip_requested(id: StringName) -> void:
+	if active and id == lesson_id:
+		skip_to_practice()
 
 
 func _on_tutorial_resume_requested(id: StringName) -> void:
@@ -1390,5 +1728,4 @@ func _on_tutorial_lesson_completed(id: StringName) -> void:
 
 func _on_arena_tree_exiting() -> void:
 	if active:
-		_teardown_demo(false)
-		demo_cancelled.emit(lesson_id)
+		cancel(false)

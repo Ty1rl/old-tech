@@ -67,4 +67,6 @@ autowrap_mode = 3
 
 [node name="PracticeButton" type="Button" parent="Card/Column"]
 layout_mode = 2
-text = "Try it"
+size_flags_horizontal = 8
+focus_mode = 0
+text = "Skip"

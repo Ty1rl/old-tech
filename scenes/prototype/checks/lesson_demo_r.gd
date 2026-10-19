@@ -143,7 +143,7 @@ func _run() -> void:
 
 		var started := demo.begin(arena, id, tutorial)
 		expect(started and demo.active and demo.lesson_id == id, "LessonDemo starts for %s" % String(id))
-		expect(tutorial.demo_busy and not tutorial.can_dismiss_normally() and tutorial.practice_button.disabled, "Tutorial overlay blocks premature dismissal while %s demo is running" % String(id))
+		expect(tutorial.demo_busy and not tutorial.can_dismiss_normally() and not tutorial.practice_button.disabled and tutorial.practice_button.text == "Skip" and tutorial.practice_button.focus_mode == Control.FOCUS_NONE, "Tutorial overlay exposes enabled click-only Skip button with FOCUS_NONE while %s demo is running" % String(id))
 		expect(arena.player.camera.position.distance_to(saved_cam_pos) > 1.0 and arena.player.camera.position.y < saved_cam_pos.y, "Camera moves closer to frame %s demonstration clearly" % String(id))
 
 		var saw_sustained_beam := false
@@ -153,6 +153,7 @@ func _run() -> void:
 		var saw_overhead_label := false
 		var saw_blue_trace := false
 		var saw_yellow_phase_without_blue_trace := false
+		var saw_yellow_enemy := false
 
 		var ticks := 0
 		while demo.active and ticks < 260:
@@ -163,6 +164,8 @@ func _run() -> void:
 			for enemy in demo.demo_enemies:
 				if _any_enemy_label_visible(enemy):
 					saw_overhead_label = true
+				if is_instance_valid(enemy) and enemy.get("kind") == &"yellow":
+					saw_yellow_enemy = true
 
 			if arena.weapons.flash.flash_timer > 0.05 and arena.weapons.flash.end_point != Vector3.ZERO:
 				saw_sustained_beam = true
@@ -178,6 +181,7 @@ func _run() -> void:
 				saw_yellow_phase_without_blue_trace = true
 
 		expect(not demo.active and bool(demo.last_summary.get("completed", false)) and bool(demo.last_summary.get("target_killed", false)), "Demo %s completes and kills target" % String(id))
+		expect(not tutorial.blocking and tutorial.practicing, "Demo %s hands off automatically to practice without a Try it step" % String(id))
 		expect(not saw_overhead_label, "Demo %s hides floating overhead enemy action labels so instructions stay in the tutorial overlay" % String(id))
 		expect(arena.player.camera.position.distance_to(saved_cam_pos) < 0.01, "Camera position restores cleanly after %s demo" % String(id))
 
@@ -189,7 +193,8 @@ func _run() -> void:
 			&"cut":
 				expect(saw_sustained_ring_preview and saw_blue_trace, "Cut demo renders sustained blue ring cutter path and blue overlay gesture")
 			&"heat":
-				expect(saw_active_cone and not saw_blue_trace, "Heat demo renders sustained orange heat cone without any cutter trace")
+				expect(saw_active_cone and not saw_blue_trace and not saw_yellow_enemy, "Heat demo renders sustained orange heat cone without any cutter trace or yellow enemy")
+				expect(bool(demo.last_summary.get("heat_knockback_seen", false)) and float(demo.last_summary.get("heat_knockback_distance", 0.0)) >= 0.65, "Heat demo visibly knocks back the orange enemy before stripping its armor plate")
 			&"slow":
 				expect(saw_slow_window and saw_sustained_beam and not saw_blue_trace, "Slow demo slows world time and renders visible yellow shot during slow window")
 			&"opening":
@@ -201,7 +206,28 @@ func _run() -> void:
 			&"zigzag":
 				expect(saw_sustained_ring_preview and saw_sustained_beam and saw_blue_trace and saw_yellow_phase_without_blue_trace, "Zigzag demo shows blue zigzag trace during cut phase then switches to charged yellow finish")
 
-	# 2. Speech handoff contract: demo finishes before speech, repeats while speech is busy, and hands off immediately when speech finishes
+	# 1b. Verify standalone time_meter demo AND automatic time_meter pre-stage before shot
+	tutorial.reset_run()
+	demo.reset_run()
+	mock_audio.stop_dialogue()
+	arena.director.clear()
+	expect(LessonDemo.handles(&"time_meter"), "LessonDemo.handles supports standalone time_meter lesson")
+	mock_audio.play_event("tutorial.time_meter")
+	expect(demo.begin(arena, &"time_meter", tutorial), "Standalone time_meter demo starts cleanly")
+	expect(tutorial.body_label.text == "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge.", "Standalone time_meter lesson uses exact spoken reserve caption")
+	var tm_min_meter: float = float(arena.time_controller.meter)
+	var tm_max_enemies := 0
+	for _i in range(95):
+		demo.step(1.0 / 30.0)
+		tutorial._process(1.0 / 30.0)
+		tm_min_meter = minf(tm_min_meter, float(arena.time_controller.meter))
+		tm_max_enemies = maxi(tm_max_enemies, demo.demo_enemies.size())
+	mock_audio.finish_current(false)
+	expect(not demo.active and tm_max_enemies >= 2 and int(demo.last_summary.get("time_meter_hits", 0)) >= 2 and tm_min_meter <= arena.time_controller.capacity * 0.6, "Standalone time_meter demo stages multiple enemies hitting player and visibly drains purple reserve bar")
+	expect(is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity) and arena.time_controller.charges_remaining == 3, "Standalone time_meter demo restores full time reserve and all 3 charges on completion")
+	expect(tutorial.is_learned(&"time_meter") and demo.is_demo_learned(&"time_meter", tutorial), "Standalone time_meter demo marks time_meter learned")
+
+	# 2. Speech handoff + automatic time_meter pre-stage before yellow shot when tutorial.shot + tutorial.time_meter are queued
 	tutorial.reset_run()
 	demo.reset_run()
 	mock_audio.stop_dialogue()
@@ -210,30 +236,41 @@ func _run() -> void:
 	demo.ready_for_practice.connect(on_ready)
 
 	mock_audio.play_event("tutorial.shot")
-	expect(mock_audio.instruction_busy(), "Mock AudioManager reports instruction_busy() while tutorial.shot is playing")
-	expect(demo.begin(arena, &"shot", tutorial), "Shot demo starts while tutorial.shot speech is active")
+	mock_audio.play_event("tutorial.time_meter")
+	expect(mock_audio.instruction_busy(), "Mock AudioManager reports instruction_busy() while tutorial.shot + tutorial.time_meter are queued")
+	expect(demo.begin(arena, &"shot", tutorial), "Shot demo starts with automatic time_meter pre-stage when time_meter is unlearned")
+	expect(demo.substage == &"time_meter", "Shot demo begins in time_meter pre-stage when time_meter is unlearned")
 
-	for i in range(95):
+	var prestage_min_meter: float = float(arena.time_controller.meter)
+	var saw_shot_substage := false
+	var saw_time_meter_caption := false
+	for i in range(180):
 		demo.step(1.0 / 30.0)
 		tutorial._process(1.0 / 30.0)
+		if demo.substage == &"time_meter":
+			prestage_min_meter = minf(prestage_min_meter, float(arena.time_controller.meter))
+		elif demo.substage == &"shot" and not saw_shot_substage:
+			saw_shot_substage = true
+			expect(is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity), "Time reserve is restored to 100% before the yellow shot demo begins")
+		if i == 80:
+			# Advance from tutorial.shot to queued tutorial.time_meter speech
+			mock_audio.finish_current(false)
+		if tutorial.body_label.text == "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge.":
+			saw_time_meter_caption = true
 
-	expect(demo.is_visual_pass_completed(), "Shot visual pass completes within 95 ticks")
-	expect(demo.active and ready_events.is_empty(), "Shot demo stays active and does NOT emit ready_for_practice while tutorial.shot speech is still busy")
-	expect(not tutorial.can_dismiss_normally() and tutorial.practice_button.disabled and tutorial.practice_button.text == "Listening...", "Tutorial button shows 'Listening...' and blocks normal dismissal while waiting on speech")
+	expect(prestage_min_meter <= arena.time_controller.capacity * 0.6 and saw_shot_substage, "Automatic time_meter pre-stage visibly drains reserve from multiple enemy hits then transitions to yellow shot demo")
+	expect(saw_time_meter_caption, "Tutorial card displays exact time_meter caption while tutorial.time_meter speech is active")
+	expect(demo.is_visual_pass_completed(), "Pre-staged time_meter + shot visual pass completes within 180 ticks")
+	expect(demo.active and ready_events.is_empty(), "Demo stays active and does NOT emit ready_for_practice while tutorial.time_meter speech is still busy")
+	expect(not tutorial.can_dismiss_normally() and not tutorial.practice_button.disabled and tutorial.practice_button.text == "Skip", "Skip button remains enabled with text 'Skip' while waiting on speech")
 
-	# Queue follow-up tutorial.time_meter speech and finish tutorial.shot; demo must keep waiting until queued tutorial speech also finishes
-	mock_audio.play_event("tutorial.time_meter")
-	mock_audio.finish_current(false)
-	expect(mock_audio.current_speech_event() == "tutorial.time_meter" and mock_audio.instruction_busy(), "Finishing tutorial.shot advances to queued tutorial.time_meter with instruction_busy() still true")
-	demo.step(1.0 / 30.0)
-	expect(demo.active and ready_events.is_empty(), "Demo continues waiting while queued tutorial.time_meter speech is still playing")
-
-	# Now finish tutorial.time_meter; handoff must occur immediately via speech_finished without arbitrary extra delay
+	# Finish tutorial.time_meter; handoff must occur immediately and automatically without a 'Try it' confirmation step
 	mock_audio.finish_current(false)
 	expect(not mock_audio.instruction_busy() and not demo.active and ready_events == [&"shot"], "Demo completes and emits ready_for_practice immediately when queued tutorial speech finishes")
-	expect(not tutorial.blocking and tutorial.practicing, "Tutorial transitions to non-blocking practice as soon as both demo and speech finish")
+	expect(not tutorial.blocking and tutorial.practicing, "Tutorial transitions automatically to non-blocking practice as soon as both demo and speech finish")
+	expect(is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity) and arena.time_controller.charges_remaining == 3, "Player enters shot practice with full reserve and all 3 charges")
 
-	# 3. Speech finishes before visual demo pass: must still wait for visual demonstration to finish
+	# 3. Speech finishes before visual demo pass: must still wait for visual demonstration to finish, then auto-handoff
 	tutorial.reset_run()
 	demo.reset_run()
 	ready_events.clear()
@@ -247,7 +284,7 @@ func _run() -> void:
 	while demo.active and rem_ticks < 160:
 		demo.step(1.0 / 30.0)
 		rem_ticks += 1
-	expect(not demo.active and ready_events == [&"charge"], "Charge demo emits ready_for_practice once visual pass completes")
+	expect(not demo.active and ready_events == [&"charge"] and not tutorial.blocking and tutorial.practicing, "Charge demo emits ready_for_practice and auto-transitions to practice once visual pass completes")
 
 	# 4. Muted / missing audio fallback: completes cleanly without lockup
 	tutorial.reset_run()
@@ -261,7 +298,7 @@ func _run() -> void:
 	while demo.active and cut_ticks < 160:
 		demo.step(1.0 / 30.0)
 		cut_ticks += 1
-	expect(not demo.active and ready_events == [&"cut"], "Cut demo completes normally when audio is muted")
+	expect(not demo.active and ready_events == [&"cut"] and not tutorial.blocking and tutorial.practicing, "Cut demo completes and auto-transitions to practice when audio is muted")
 	mock_audio.muted = false
 
 	# 5. Cancel while waiting on speech and non-replay on retry
@@ -280,66 +317,101 @@ func _run() -> void:
 	tutorial.complete_lesson(&"heat")
 	expect(not demo.begin(arena, &"heat", tutorial), "Completed lesson does not replay demonstration on retry")
 
-	# 6. Held-input carryover blocking and clean click/Space transition with release suppression
+	# 6. Click-only Skip contract: WASD, Space, Enter, and clicks outside Skip button never skip; clicking Skip stops speech, finishes once, and suppresses held LMB release
 	tutorial.reset_run()
 	demo.reset_run()
 	ready_events.clear()
+	tutorial.complete_lesson(&"time_meter")
 	mock_audio.play_event("tutorial.shot")
-	expect(demo.begin(arena, &"shot", tutorial), "Shot demo starts for input carryover test")
+	expect(demo.begin(arena, &"shot", tutorial), "Shot demo starts for click-only Skip test")
+	await _settle(2)
 
-	# Simulate player holding W, Space, and LMB during active demo/speech
-	var w_press := InputEventKey.new()
-	w_press.pressed = true
-	w_press.keycode = KEY_W
-	w_press.physical_keycode = KEY_W
-	tutorial._input(w_press)
+	for keycode in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE, KEY_ENTER]:
+		var k_press := InputEventKey.new()
+		k_press.pressed = true
+		k_press.keycode = keycode
+		k_press.physical_keycode = keycode
+		tutorial._input(k_press)
+		var k_rel := InputEventKey.new()
+		k_rel.pressed = false
+		k_rel.keycode = keycode
+		k_rel.physical_keycode = keycode
+		tutorial._input(k_rel)
 
-	var space_press := InputEventKey.new()
-	space_press.pressed = true
-	space_press.keycode = KEY_SPACE
-	space_press.physical_keycode = KEY_SPACE
-	tutorial._input(space_press)
+	var outside_lmb := InputEventMouseButton.new()
+	outside_lmb.button_index = MOUSE_BUTTON_LEFT
+	outside_lmb.pressed = true
+	outside_lmb.position = Vector2(12.0, 12.0)
+	tutorial._input(outside_lmb)
+	var outside_lmb_rel := InputEventMouseButton.new()
+	outside_lmb_rel.button_index = MOUSE_BUTTON_LEFT
+	outside_lmb_rel.pressed = false
+	outside_lmb_rel.position = Vector2(12.0, 12.0)
+	tutorial._input(outside_lmb_rel)
 
-	var lmb_press := InputEventMouseButton.new()
-	lmb_press.button_index = MOUSE_BUTTON_LEFT
-	lmb_press.pressed = true
-	tutorial._input(lmb_press)
-	tutorial._on_practice_button_pressed()
+	expect(demo.active and tutorial.blocking and not tutorial.practicing and mock_audio.instruction_busy(), "WASD, Space, Enter, and clicks outside Skip button never skip or dismiss tutorial")
 
-	expect(demo.active and tutorial.blocking and not tutorial.practicing, "Held W, Space, LMB, and button press during busy demo/speech do not skip or dismiss tutorial")
-
-	# Now test blocking card after demo/speech are ready: held inputs from busy state must not dismiss on release, while fresh press transitions and suppresses release fire
-	demo.cancel()
-	mock_audio.stop_dialogue()
-	tutorial.reset_run()
-	var test_targets: Array[Vector3] = [Vector3(0.0, 1.0, -4.0)]
-	tutorial.show_known_lesson(&"shot", test_targets)
-	tutorial.set_demo_busy(true)
-	tutorial._input(lmb_press)
-	tutorial._input(space_press)
-	tutorial.set_demo_busy(false)
-	expect(tutorial.can_dismiss_normally() and tutorial.blocking, "Card is now ready for normal dismissal")
-
-	var lmb_release := InputEventMouseButton.new()
-	lmb_release.button_index = MOUSE_BUTTON_LEFT
-	lmb_release.pressed = false
-	tutorial._input(lmb_release)
-	var space_release := InputEventKey.new()
-	space_release.pressed = false
-	space_release.keycode = KEY_SPACE
-	space_release.physical_keycode = KEY_SPACE
-	tutorial._input(space_release)
-	expect(tutorial.blocking and not tutorial.practicing, "Releasing LMB or Space that was held during busy state does not dismiss tutorial")
-
-	# Fresh LMB press when ready transitions to practice and suppresses accidental weapon fire on release
+	# Now click directly on the Skip button (practice_button) while demo and speech are busy
 	arena.weapons.require_fresh_press = false
 	arena.set("_suppress_next_lmb_release", false)
-	tutorial._input(lmb_press)
-	expect(not tutorial.blocking and tutorial.practicing, "Fresh LMB press once demo and speech are finished transitions cleanly to practice")
-	expect(arena.weapons.require_fresh_press and bool(arena.get("_suppress_next_lmb_release")), "Dismissing via click arms weapon fresh-press and release suppression so dismissing never fires a weapon")
-	tutorial._input(lmb_release)
+	var skip_center: Vector2 = tutorial.practice_button.get_global_rect().get_center()
+	var skip_press := InputEventMouseButton.new()
+	skip_press.button_index = MOUSE_BUTTON_LEFT
+	skip_press.pressed = true
+	skip_press.position = skip_center
+	tutorial._input(skip_press)
+	# Duplicate skip invocation must be idempotent
+	tutorial.skip_active_lesson(true)
+	demo.skip_to_practice()
 
-	# 7. Verify compatibility with real AudioManager autoload
+	expect(not demo.active and ready_events == [&"shot"] and not tutorial.blocking and tutorial.practicing, "Clicking Skip button finishes demo once idempotently and hands off to practice")
+	expect(not mock_audio.instruction_busy(), "Clicking Skip button stops active segment speech immediately")
+	expect(arena.weapons.require_fresh_press and bool(arena.get("_suppress_next_lmb_release")), "Clicking Skip arms weapon fresh-press and release suppression so releasing LMB never fires a weapon")
+
+	var skip_release := InputEventMouseButton.new()
+	skip_release.button_index = MOUSE_BUTTON_LEFT
+	skip_release.pressed = false
+	skip_release.position = skip_center
+	tutorial._input(skip_release)
+
+	# 7. Card-only repair lesson: auto-handoff when speech finishes AND click-only Skip while speech is active
+	tutorial.reset_run()
+	mock_audio.stop_dialogue()
+	mock_audio.play_event("tutorial.repair")
+	var repair_targets: Array[Vector3] = [Vector3(0.0, 1.0, -4.0)]
+	tutorial.show_known_lesson(&"repair", repair_targets)
+	expect(tutorial.blocking and not tutorial.practicing and tutorial.practice_button.text == "Skip" and not tutorial.practice_button.disabled, "Card-only repair lesson shows enabled click-only Skip button")
+	mock_audio.finish_current(false)
+	tutorial._process(1.0 / 30.0)
+	expect(not tutorial.blocking and tutorial.practicing, "Card-only repair lesson auto-transitions to practice when speech finishes")
+
+	tutorial.reset_run()
+	mock_audio.play_event("tutorial.repair")
+	tutorial.show_known_lesson(&"repair", repair_targets)
+	tutorial.skip_active_lesson(true)
+	expect(not tutorial.blocking and tutorial.practicing and not mock_audio.instruction_busy(), "Clicking Skip on card-only repair lesson stops speech and transitions to practice")
+
+	# 8. Detached-scene cancellation reproduction (errors.txt): removing arena while demo and speech are active must not touch world transforms outside the tree
+	tutorial.reset_run()
+	demo.reset_run()
+	ready_events.clear()
+	var cancel_events: Array[StringName] = []
+	var on_cancelled := func(canc_id: StringName) -> void: cancel_events.append(canc_id)
+	demo.demo_cancelled.connect(on_cancelled)
+	mock_audio.play_event("tutorial.slow")
+	expect(demo.begin(arena, &"slow", tutorial), "Slow demo starts for detached-scene teardown check")
+	for i in range(15):
+		demo.step(1.0 / 30.0)
+	# Simulate SceneManager._change removing arena from root while speech_finished(event, true) fires during tree_exiting
+	arena.tree_exiting.connect(func() -> void: mock_audio.stop_dialogue(), CONNECT_ONE_SHOT)
+	root.remove_child(arena)
+	expect(not demo.active and cancel_events == [&"slow"] and ready_events.is_empty(), "Detached-scene removal cancels demo once without emitting ready_for_practice or touching outside-tree transforms")
+	root.add_child(arena)
+	current_scene = arena
+	await _settle(2)
+	demo.demo_cancelled.disconnect(on_cancelled)
+
+	# 9. Verify compatibility with real AudioManager autoload
 	tutorial.audio_manager_override = null
 	demo.audio_manager_override = null
 	if real_audio != null and real_audio.has_method("stop_dialogue"):

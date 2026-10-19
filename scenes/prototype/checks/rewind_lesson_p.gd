@@ -205,18 +205,74 @@ func _run() -> void:
 	lesson.step(2.0)
 	expect(lesson.is_scrubbing and er.active and er.choice_count >= 5 and er.selected_index >= 1, "Empty/short history is safely repopulated before scrub opens")
 
-	# Scene exit while scrubbing cancels cleanly and restores valid non-frozen state.
+	# 13. Round S: Click-only Skip button during STAGING and SCRUB stops speech, suppresses held LMB release, and completes once.
+	lesson.reset_for_new_run()
+	cb["count"] = 0
+	var audio_mgr: Node = root.get_node("AudioManager")
+	audio_mgr.say(&"tutorial.rewind", 3)
+	expect(lesson.begin(arena), "Lesson begins for STAGING Skip check")
+	expect(lesson.skip_button != null and lesson.skip_button.visible and not lesson.skip_button.disabled and lesson.skip_button.text == "Skip" and lesson.skip_button.focus_mode == Control.FOCUS_NONE, "Top banner exposes an enabled click-only Skip button with FOCUS_NONE during STAGING")
+
+	# Keyboard keys (WASD, Space, Enter) and clicks outside SkipButton must NOT skip STAGING.
+	for k in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE, KEY_ENTER]:
+		lesson._input(_key_event(k, true))
+		lesson._input(_key_event(k, false))
+	var outside_click := _mouse_button(MOUSE_BUTTON_LEFT, true)
+	outside_click.position = Vector2(8.0, 8.0)
+	lesson._input(outside_click)
+	expect(lesson.is_staging and not lesson.is_completed and int(cb["count"]) == 0, "WASD, Space, Enter, and clicks outside SkipButton never skip STAGING")
+
+	# Clicking SkipButton during STAGING stops tutorial.rewind speech, restores 3 charges & full meter, arms LMB release suppression, and emits completed once.
+	await settle(2)
+	var skip_rect := lesson.skip_button.get_global_rect()
+	var skip_click := _mouse_button(MOUSE_BUTTON_LEFT, true)
+	skip_click.position = skip_rect.get_center()
+	arena.weapons.require_fresh_press = false
+	arena.set("_suppress_next_lmb_release", false)
+	lesson._input(skip_click)
+	lesson.skip_lesson(true)
+	expect(lesson.is_completed and lesson.was_skipped and int(cb["count"]) == 1, "Clicking Skip during STAGING completes once idempotently and sets was_skipped")
+	expect(not audio_mgr.instruction_busy(), "Clicking Skip during STAGING stops active rewind tutorial speech")
+	expect(arena.time_controller.charges_remaining == 3 and is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity), "Skipping during STAGING restores 3 charges and 100% time meter")
+	expect(arena.weapons.require_fresh_press and bool(arena.get("_suppress_next_lmb_release")), "Skipping via mouse click arms require_fresh_press and _suppress_next_lmb_release")
+	var skip_release := _mouse_button(MOUSE_BUTTON_LEFT, false)
+	skip_release.position = skip_rect.get_center()
+	lesson._input(skip_release)
+	arena.director.clear()
+
+	# Now verify clicking SkipButton during SCRUB intercepts before arena._input LMB confirm and completes cleanly.
+	lesson.reset_for_new_run()
+	cb["count"] = 0
+	audio_mgr.say(&"tutorial.rewind", 3)
+	expect(lesson.begin(arena), "Lesson begins for SCRUB Skip check")
+	lesson.step(2.0)
+	expect(lesson.is_scrubbing and er.active and lesson.skip_button.visible and not lesson.skip_button.disabled, "SkipButton remains visible and enabled during SCRUB")
+	await settle(2)
+	skip_rect = lesson.skip_button.get_global_rect()
+	skip_click = _mouse_button(MOUSE_BUTTON_LEFT, true)
+	skip_click.position = skip_rect.get_center()
+	lesson._input(skip_click)
+	expect(lesson.is_completed and lesson.was_skipped and not er.active and not ev.visible and int(cb["count"]) == 1, "Clicking SkipButton during SCRUB abandons scrub cleanly and completes once")
+	expect(arena.time_controller.charges_remaining == 3 and is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity) and not audio_mgr.instruction_busy(), "Skipping during SCRUB restores 3 charges, full meter, and stops speech")
+	arena.director.clear()
+
+	# 14. Scene exit while scrubbing cancels cleanly and restores valid non-frozen state.
+	lesson.reset_for_new_run()
+	expect(lesson.begin(arena), "Lesson begins for scene-exit cancellation check")
+	lesson.step(2.0)
 	arena.remove_child(lesson)
 	expect(lesson.is_cancelled and not lesson.active and not lesson.is_completed, "Exiting scene tree while active cancels lesson cleanly")
 	expect(not er.active and arena.time_controller.charges_remaining == 3 and not ev.visible, "Scene exit restores non-frozen 3-charge state and hides scrub bar")
 	lesson.free()
 
 	root.size = old_size
-	root.get_node("AudioManager").stop_dialogue()
+	audio_mgr.stop_dialogue()
+	audio_mgr.set_music_context(&"intro")
+	call_group(&"world_audio", &"reset_state")
 	await create_timer(.1).timeout
 	arena.feedback.reset_state()
-	arena.free()
-	await process_frame
+	arena.queue_free()
+	await settle(2)
 	await create_timer(.3).timeout
 	print(JSON.stringify({
 		"status": "passed" if failures.is_empty() else "failed",
@@ -224,3 +280,4 @@ func _run() -> void:
 		"failures": failures,
 	}))
 	quit(0 if failures.is_empty() else 1)
+

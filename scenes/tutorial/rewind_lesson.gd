@@ -48,11 +48,14 @@ const PLAYER_SPAWN_Y := 0.55
 @onready var banner: PanelContainer = get_node_or_null("%Banner") as PanelContainer
 @onready var title_label: Label = get_node_or_null("%TitleLabel") as Label
 @onready var action_label: Label = get_node_or_null("%ActionLabel") as Label
+@onready var skip_button: Button = get_node_or_null("%SkipButton") as Button
 
 var phase: Phase = Phase.IDLE
 ## Completion latch lives outside world snapshots so previewing or restoring
 ## earlier snapshots can never re-arm or repeat the forced lesson.
 var _completed_latch := false
+var was_skipped := false
+var audio_manager_override: Node = null
 
 var phase_name: StringName:
 	get:
@@ -107,15 +110,70 @@ var _cancelling := false
 var _finishing_completion := false
 var _completed_count := 0
 var _last_history_clock := -1.0
+var _suppress_next_lmb_up := false
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_bind_skip_button()
 	_style_banner()
 	if get_window() != null and not get_window().size_changed.is_connected(_fit_banner):
 		get_window().size_changed.connect(_fit_banner)
 	_fit_banner.call_deferred()
 	_sync_banner()
+
+
+func _bind_skip_button() -> void:
+	if skip_button == null:
+		skip_button = get_node_or_null("%SkipButton") as Button
+	if is_instance_valid(skip_button):
+		skip_button.focus_mode = Control.FOCUS_NONE
+		skip_button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+		skip_button.shortcut = null
+		skip_button.text = "Skip"
+		if not skip_button.pressed.is_connected(_on_skip_button_pressed):
+			skip_button.pressed.connect(_on_skip_button_pressed)
+
+
+func _on_skip_button_pressed() -> void:
+	skip_lesson(true)
+
+
+func is_point_on_skip_button(screen_pos: Vector2) -> bool:
+	if not active or overlay == null or not overlay.visible:
+		return false
+	if not is_instance_valid(skip_button) or not skip_button.visible or skip_button.disabled:
+		return false
+	return skip_button.get_global_rect().has_point(screen_pos)
+
+
+func _get_audio_manager() -> Node:
+	if is_instance_valid(audio_manager_override):
+		return audio_manager_override
+	var tree := Engine.get_main_loop() as SceneTree
+	return tree.root.get_node_or_null("AudioManager") if tree != null and tree.root != null else null
+
+
+func _stop_tutorial_dialogue() -> void:
+	var am := _get_audio_manager()
+	if is_instance_valid(am) and am.has_method("stop_dialogue"):
+		am.call("stop_dialogue")
+
+
+func _input(event: InputEvent) -> void:
+	if _suppress_next_lmb_up and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_suppress_next_lmb_up = false
+		if is_inside_tree() and get_viewport() != null:
+			get_viewport().set_input_as_handled()
+		return
+	if not active or _is_interrupted_by_pause_or_modal():
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if is_point_on_skip_button(event.position):
+			skip_lesson(true)
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
 
 
 func _exit_tree() -> void:
@@ -132,7 +190,9 @@ func reset_for_new_run() -> void:
 	if active:
 		cancel()
 	_completed_latch = false
+	was_skipped = false
 	_completed_count = 0
+	_suppress_next_lmb_up = false
 	phase = Phase.IDLE
 	_sync_banner()
 
@@ -150,7 +210,10 @@ func begin(arena: Node) -> bool:
 	if tc == null or er == null or hist == null:
 		return false
 
+	_bind_skip_button()
 	_arena = arena
+	was_skipped = false
+	_suppress_next_lmb_up = false
 	_staging_elapsed = 0.0
 	_shot_fired = false
 	_ambush_spawned = false
@@ -191,7 +254,7 @@ func begin(arena: Node) -> bool:
 	if is_instance_valid(player):
 		player.position = _safe_origin
 		player.velocity = Vector3.ZERO
-		if is_instance_valid(player.model):
+		if is_instance_valid(player.model) and player.model.is_inside_tree():
 			player.model.global_basis = Basis.looking_at(Vector3.FORWARD)
 		player.reset_physics_interpolation()
 
@@ -201,7 +264,7 @@ func begin(arena: Node) -> bool:
 		var preferred_slot: int = 2 if 2 in avail else (int(avail[0]) if not avail.is_empty() else 2)
 		if weapons.has_method("select_tool"):
 			weapons.call("select_tool", preferred_slot)
-		if is_instance_valid(player):
+		if is_instance_valid(player) and player.is_inside_tree():
 			player.set_visual_tool(preferred_slot)
 
 	# Keep the lesson scrub range short and focused while preserving the 18s/12Hz settings.
@@ -250,6 +313,74 @@ func step(real_delta: float) -> void:
 		_step_scrub_freeze(real_delta)
 
 
+## Skips the rewind teaching segment via the click-only Skip button, stopping
+## active tutorial speech, restoring a clean 3-charge attempt boundary, and
+## emitting `completed` once idempotently.
+func skip_lesson(from_mouse: bool = true) -> bool:
+	if not active or _completed_latch or _cancelling or _finishing_completion:
+		return false
+	if _is_interrupted_by_pause_or_modal():
+		return false
+	_finishing_completion = true
+	was_skipped = true
+	_suppress_next_lmb_up = from_mouse or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	_disconnect_arena_signals()
+	phase = Phase.COMPLETED
+	_completed_latch = true
+	_completed_count += 1
+	_stop_tutorial_dialogue()
+
+	if is_instance_valid(_arena):
+		var ev: EmergencyRewindView = _arena.get("emergency_view") as EmergencyRewindView
+		if is_instance_valid(ev):
+			ev.set_lesson_mode(false)
+		var er: EmergencyRewind = _arena.get("emergency_rewind") as EmergencyRewind
+		if is_instance_valid(er) and er.active:
+			er.abandon()
+		var sv: Variant = _arena.get("scrub_view")
+		if sv != null and sv is Object and (sv as Object).has_method("finish"):
+			(sv as Object).call("finish")
+		var feedback: Node = _arena.get("feedback") as Node
+		if is_instance_valid(feedback) and feedback.has_method("clear_effects"):
+			feedback.call("clear_effects")
+		_cleanup_staged_entities()
+		var player: CombatPlayer = _arena.get("player") as CombatPlayer
+		if is_instance_valid(player):
+			player.position = _safe_origin
+			player.reset_input()
+			player.reset_physics_interpolation()
+		_clear_live_inputs()
+		var lmb_down := from_mouse or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+		if "_suppress_next_lmb_release" in _arena and lmb_down:
+			_arena.set("_suppress_next_lmb_release", true)
+		var weapons: Node = _arena.get("weapons") as Node
+		if is_instance_valid(weapons) and "require_fresh_press" in weapons:
+			weapons.set("require_fresh_press", lmb_down)
+
+		if "_rewound" in _arena:
+			_arena.set("_rewound", true)
+		if "_injury_given" in _arena:
+			_arena.set("_injury_given", true)
+		if "_rewind_unlocked" in _arena:
+			_arena.set("_rewind_unlocked", true)
+
+		var tc: TimeController = _arena.get("time_controller") as TimeController
+		if is_instance_valid(tc):
+			tc.set_capabilities(tc.slow_unlocked, true)
+			tc.begin_attempt()
+
+		if _arena.is_inside_tree():
+			_sanitize_history_after_completion()
+			if _arena.has_method("_update_hud"):
+				_arena.call("_update_hud")
+
+	_sync_banner()
+	_finishing_completion = false
+	completed.emit()
+	_stop_tutorial_dialogue()
+	return true
+
+
 ## Cancels an active lesson without setting the completion latch.
 func cancel() -> void:
 	if _cancelling or _finishing_completion:
@@ -277,11 +408,11 @@ func cancel() -> void:
 		if is_instance_valid(tc):
 			tc.begin_attempt()
 		var hist: ReplayHistory = _arena.get("history") as ReplayHistory
-		if hist != null:
+		if hist != null and _arena.is_inside_tree():
 			hist.clear()
 			var clean := _capture_clean_snapshot()
 			hist.seed_checkpoint(clean)
-		if _arena.has_method("_update_hud"):
+		if _arena.is_inside_tree() and _arena.has_method("_update_hud"):
 			_arena.call("_update_hud")
 	_sync_banner()
 	_cancelling = false
@@ -308,9 +439,9 @@ func _step_staging_slice(dt: float) -> void:
 		player.velocity = step_vel if _staging_elapsed < AMBUSH_TIME else Vector3.ZERO
 		var aim_point: Vector3 = _target_pos + Vector3(0.0, 1.2, 0.0)
 		var look_dir := Vector3(aim_point.x - desired_pos.x, 0.0, aim_point.z - desired_pos.z)
-		if look_dir.length_squared() > 0.001 and is_instance_valid(player.model):
+		if look_dir.length_squared() > 0.001 and is_instance_valid(player.model) and player.model.is_inside_tree():
 			player.model.global_basis = Basis.looking_at(look_dir.normalized())
-		if is_instance_valid(player.visual) and is_instance_valid(player.model):
+		if is_instance_valid(player.visual) and is_instance_valid(player.model) and player.model.is_inside_tree():
 			var local_motion: Vector3 = player.model.global_basis.inverse() * Vector3(step_vel.x, 0.0, step_vel.z)
 			player.visual.call("step_visual", dt, local_motion.length(), 7.0, local_motion)
 
@@ -788,6 +919,9 @@ func _style_banner() -> void:
 	box.content_margin_top = 5
 	box.content_margin_bottom = 6
 	banner.add_theme_stylebox_override("panel", box)
+	if is_instance_valid(skip_button):
+		skip_button.focus_mode = Control.FOCUS_NONE
+		skip_button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 
 
 func _fit_banner() -> void:
@@ -800,12 +934,20 @@ func _fit_banner() -> void:
 	for lbl in [title_label, action_label]:
 		if is_instance_valid(lbl) and lbl.has_meta("base_font_size"):
 			lbl.add_theme_font_size_override("font_size", roundi(float(lbl.get_meta("base_font_size")) * factor))
+	if is_instance_valid(skip_button) and skip_button.has_meta("base_font_size"):
+		skip_button.add_theme_font_size_override("font_size", roundi(float(skip_button.get_meta("base_font_size")) * factor))
 
 
 func _sync_banner() -> void:
 	if overlay == null:
 		return
 	overlay.visible = active
+	if is_instance_valid(skip_button):
+		skip_button.text = "Skip"
+		skip_button.visible = active
+		skip_button.disabled = not active
+		skip_button.focus_mode = Control.FOCUS_NONE
+		skip_button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	if not active:
 		return
 	if is_instance_valid(title_label):

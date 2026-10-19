@@ -36,14 +36,19 @@ theme_override_constants/margin_right = 20
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
-mouse_filter = 2
+mouse_filter = 1
 
-[node name="Stack" type="VBoxContainer" parent="Overlay/Root/TopMargin/Banner"]
+[node name="Row" type="HBoxContainer" parent="Overlay/Root/TopMargin/Banner"]
+layout_mode = 2
+mouse_filter = 1
+theme_override_constants/separation = 14
+
+[node name="Stack" type="VBoxContainer" parent="Overlay/Root/TopMargin/Banner/Row"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 1
 
-[node name="TitleLabel" type="Label" parent="Overlay/Root/TopMargin/Banner/Stack"]
+[node name="TitleLabel" type="Label" parent="Overlay/Root/TopMargin/Banner/Row/Stack"]
 unique_name_in_owner = true
 modulate = Color(0.729412, 0.611765, 0.913725, 1)
 layout_mode = 2
@@ -53,7 +58,7 @@ text = "EMERGENCY REWIND"
 horizontal_alignment = 1
 metadata/base_font_size = 11
 
-[node name="ActionLabel" type="Label" parent="Overlay/Root/TopMargin/Banner/Stack"]
+[node name="ActionLabel" type="Label" parent="Overlay/Root/TopMargin/Banner/Row/Stack"]
 unique_name_in_owner = true
 modulate = Color(0.898039, 0.870588, 0.815686, 1)
 layout_mode = 2
@@ -62,3 +67,15 @@ theme_override_font_sizes/font_size = 16
 text = "Rewind before the ambush"
 horizontal_alignment = 1
 metadata/base_font_size = 16
+
+[node name="SkipButton" type="Button" parent="Overlay/Root/TopMargin/Banner/Row"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 28)
+layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 4
+focus_mode = 0
+theme_override_font_sizes/font_size = 13
+action_mode = 0
+text = "Skip"
+metadata/base_font_size = 13

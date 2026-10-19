@@ -1,0 +1,64 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/tutorial/rewind_lesson.gd" id="1"]
+[ext_resource type="Theme" path="res://scenes/ui/museum_theme.tres" id="2"]
+
+[node name="RewindLesson" type="Node"]
+process_mode = 3
+script = ExtResource("1")
+
+[node name="Overlay" type="CanvasLayer" parent="."]
+layer = 58
+visible = false
+
+[node name="Root" type="Control" parent="Overlay"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("2")
+
+[node name="TopMargin" type="MarginContainer" parent="Overlay/Root"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 76.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 20
+
+[node name="Banner" type="PanelContainer" parent="Overlay/Root/TopMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 2
+
+[node name="Stack" type="VBoxContainer" parent="Overlay/Root/TopMargin/Banner"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 1
+
+[node name="TitleLabel" type="Label" parent="Overlay/Root/TopMargin/Banner/Stack"]
+unique_name_in_owner = true
+modulate = Color(0.729412, 0.611765, 0.913725, 1)
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+text = "EMERGENCY REWIND"
+horizontal_alignment = 1
+metadata/base_font_size = 11
+
+[node name="ActionLabel" type="Label" parent="Overlay/Root/TopMargin/Banner/Stack"]
+unique_name_in_owner = true
+modulate = Color(0.898039, 0.870588, 0.815686, 1)
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 16
+text = "Rewind before the ambush"
+horizontal_alignment = 1
+metadata/base_font_size = 16

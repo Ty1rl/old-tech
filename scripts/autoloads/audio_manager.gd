@@ -33,15 +33,24 @@ var _world_pitch := 1.0
 var _world_frozen := false
 var _foreground_gain := 1.0
 var _world_muted := false
+var web_sample_voice := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	library = load("res://audio/voice/library.tres") as DialogueLibrary
+	configure_playback_types(OS.has_feature("web"))
 	voice.finished.connect(_on_finished)
 	music.finished.connect(func(): _music_completed = true)
 	SceneManager.scene_changed.connect(_on_scene_changed)
 	get_tree().auto_accept_quit = false
 	get_tree().root.close_requested.connect(request_quit)
+
+func configure_playback_types(for_web: bool = OS.has_feature("web")) -> void:
+	web_sample_voice = for_web
+	if is_instance_valid(voice):
+		voice.playback_type = AudioServer.PLAYBACK_TYPE_SAMPLE if for_web else AudioServer.PLAYBACK_TYPE_STREAM
+	if is_instance_valid(music):
+		music.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 
 func instruction_busy() -> bool:
 	if not _speech_available(): return false
@@ -148,7 +157,9 @@ func _check_stopped_speech(serial: int) -> void:
 	# The player's native finished signal is processed after its parent's tick.
 	# Give it that turn before treating stopped playback as an interruption.
 	if serial == _speech_serial and not current_event.is_empty() and not voice.playing:
-		_finish_current(true)
+		var expected := voice.stream.get_length() / maxf(.01, voice.pitch_scale) if voice.stream != null else 0.0
+		var natural := web_sample_voice and expected > 0.25 and _speech_elapsed >= expected - 0.15
+		_finish_current(not natural)
 
 func _on_scene_changed(_key: StringName) -> void:
 	stop_dialogue()
@@ -199,6 +210,7 @@ func _flush_music() -> void:
 	if _quitting or is_queued_for_deletion() or _music_completed or _music_context == &"intro": return
 	# A paused player reports !playing; starting it again would reset its cursor.
 	if not music.can_process(): return
+	if music.stream_paused: return
 	if _bus_audible(&"Master") and not (_music_context in [&"encounter", &"boss"] and (_world_muted or _world_frozen)) and not music.playing and music.stream != null: music.play()
 
 func request_quit() -> void:
@@ -232,7 +244,7 @@ func _process(delta: float) -> void:
 		stop_dialogue()
 	elif not current_event.is_empty():
 		if not paused:
-			_speech_elapsed += maxf(0, delta)
+			_speech_elapsed += minf(maxf(0, delta), 0.25) if web_sample_voice else maxf(0, delta)
 			# Native completion normally owns the terminal event. This bounded
 			# fallback cancels an externally stopped/failed/looping stream too.
 			if voice.stream == null or _speech_elapsed > voice.stream.get_length() / maxf(.01, voice.pitch_scale) + 1:
@@ -243,7 +255,8 @@ func _process(delta: float) -> void:
 	var target := -8.0 if not current_event.is_empty() else 0.0
 	_duck = move_toward(_duck, target, delta * 24)
 	var index := AudioServer.get_bus_index(&"World")
-	if index >= 0: AudioServer.set_bus_volume_db(index, _duck)
+	if index >= 0 and absf(AudioServer.get_bus_volume_db(index) - _duck) > 0.01:
+		AudioServer.set_bus_volume_db(index, _duck)
 	var world_music := _music_context in [&"encounter", &"boss"]
 	var pause_music := world_music and paused
 	if music.stream_paused != pause_music: music.stream_paused = pause_music
@@ -251,9 +264,11 @@ func _process(delta: float) -> void:
 	var gain_target := _foreground_gain if world_music else 1.0
 	if not audible or (world_music and _world_frozen): gain_target = 0
 	_music_gain = lerpf(_music_gain, gain_target, 1 - exp(-maxf(0, delta) / .2))
-	music.pitch_scale = _world_pitch if world_music else 1.0
+	var next_pitch := _world_pitch if world_music else 1.0
+	if absf(music.pitch_scale - next_pitch) > 0.001: music.pitch_scale = next_pitch
 	var context_boost := MENU_MUSIC_BOOST_DB if _music_context == &"menu" else 0.0
-	music.volume_db = -80 if _music_gain < .0001 else music_library.music_volume_db + context_boost + linear_to_db(_music_gain)
+	var next_db := -80.0 if _music_gain < .0001 else music_library.music_volume_db + context_boost + linear_to_db(_music_gain)
+	if absf(music.volume_db - next_db) > 0.02: music.volume_db = next_db
 	if not audible or (world_music and _world_frozen and _music_gain < .001):
 		if music.playing: music.stop()
-	elif music.can_process() and not (world_music and _world_frozen) and not _music_completed and music.stream != null and not music.playing: _queue_music_start()
+	elif music.can_process() and not music.stream_paused and not (world_music and _world_frozen) and not _music_completed and music.stream != null and not music.playing: _queue_music_start()

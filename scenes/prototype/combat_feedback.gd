@@ -226,14 +226,17 @@ func step(real_delta: float, world_delta: float, world_scale: float, inspecting:
 		if float(voice.remaining) <= 0: continue
 		var player: AudioStreamPlayer3D = voice.player
 		var rate := 1.0 if voice.responsive else world_pitch
-		player.pitch_scale = float(voice.base_pitch) * rate
+		var next_pitch := float(voice.base_pitch) * rate
+		if absf(player.pitch_scale - next_pitch) > 0.001: player.pitch_scale = next_pitch
 		voice.remaining = maxf(0.0, float(voice.remaining) - dt * rate)
 		var target := minf(1.0, float(voice.remaining) / 0.025)
 		voice.gain = move_toward(float(voice.gain), target, dt * 60.0)
-		player.volume_db = _volume(float(voice.gain) * float(voice.strength), float(voice.volume_db))
+		var next_db := _volume(float(voice.gain) * float(voice.strength), float(voice.volume_db))
+		if absf(player.volume_db - next_db) > 0.02: player.volume_db = next_db
 		if float(voice.remaining) <= 0:
 			voice.pending = false
 			player.volume_db = -80.0
+			if player.playing: player.stop()
 	if not frozen:
 		for index in range(_effects.size() - 1, -1, -1):
 			_effects[index].age = float(_effects[index].age) + maxf(0.0, world_delta)
@@ -244,11 +247,16 @@ func _set_loop(kind: StringName, target: float, pitch: float, dt: float) -> void
 	var loop: Dictionary = _loops[kind]
 	loop.target = target
 	loop.gain = lerpf(float(loop.gain), target, 1.0 - exp(-dt / 0.045))
+	if target <= 0.0005 and float(loop.gain) <= 0.0005: loop.gain = 0.0
 	loop.pitch = pitch
 	var player: AudioStreamPlayer = loop.player
-	player.pitch_scale = clampf(pitch, 0.05, 4.0)
-	player.volume_db = _volume(float(loop.gain), _cues[kind].volume_db)
-	if not muted and float(loop.gain) > 0.001 and not player.playing: _queue_audio_flush()
+	var next_pitch := clampf(pitch, 0.05, 4.0)
+	if absf(player.pitch_scale - next_pitch) > 0.001: player.pitch_scale = next_pitch
+	var next_db := _volume(float(loop.gain), _cues[kind].volume_db)
+	if absf(player.volume_db - next_db) > 0.02: player.volume_db = next_db
+	if float(loop.gain) <= 0.0001 and target <= 0.0005:
+		if player.playing: player.stop()
+	elif not muted and float(loop.gain) > 0.001 and not player.playing: _queue_audio_flush()
 
 func _queue_audio_flush() -> void:
 	if not _audio_flush_pending:

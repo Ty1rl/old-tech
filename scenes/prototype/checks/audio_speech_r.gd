@@ -160,7 +160,7 @@ func run() -> void:
 		for clip: AudioStream in recorded.clips[event]:
 			count += 1
 			expect(clip is AudioStreamMP3 and clip.get_length() > .1, "Supplied speech decodes: " + String(event))
-	expect(count == 38 and manager.voice.volume_db == -3 and manager.voice.bus == &"Voice", "All 38 current recordings and original Voice node gain/bus preserved")
+	expect(count == 40 and manager.voice.volume_db == -3 and manager.voice.bus == &"Voice", "All 40 current recordings and original Voice node gain/bus preserved")
 	var voice_bus := AudioServer.get_bus_index(&"Voice")
 	var effect := AudioEffectRecord.new()
 	AudioServer.add_bus_effect(voice_bus, effect)

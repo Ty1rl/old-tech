@@ -7,24 +7,29 @@ signal lesson_completed(id: StringName)
 signal blocking_changed(value: bool)
 
 const UI = preload("res://scenes/ui/ui_style.gd")
-const BLUE := Color("60dbde")
-const ORANGE := Color("ed9966")
-const YELLOW := Color("f0d77b")
-const VIOLET := Color("ba9ce9")
+const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
+const BLUE: Color = ToolStyle.RING
+const ORANGE: Color = ToolStyle.CONE
+const YELLOW: Color = ToolStyle.BEAM
+const VIOLET: Color = ToolStyle.CLOCK
+const GUIDE: Color = ToolStyle.REPAIR_GUIDE
+
+# Entry format: [imperative_heading, subtle_body, lesson_key, subtle_subtitle]
 const LESSONS := {
-	"cut": ["Cut the blue connection", "1 · Hold the mouse, draw across the blue link, then release. The cutter follows your line. A bare blue link dismantles its host; armored hosts may need a yellow finisher.", "cut"],
-	"heat": ["Strip the orange armor", "3 · Aim at the orange covering and hold the mouse until it breaks. Heat also pushes nearby enemies back, helping you make an escape.", "heat"],
-	"shot": ["Aim for yellow", "2 · Aim at the yellow core and click. An exposed core needs only a quick shot.\n\nPurple time is your survival meter and recharges in calm moments. Incoming hits and repairs spend it.", "shot"],
-	"slow": ["Make yourself time", "Your time meter fuels slow-motion, repairs, and survival. Hold Space to slow the world, strike the marked target while time is slowed, then release Space to return to full speed.", "slow"],
-	"repair": ["Keep your tools working", "The yellow flash camera is exhausted. Keep 2 selected and press E to open repair. Restore every marked section to 100%: spin the lens ring, connect matching terminals, and trace the bellows seam. Repair closes when your owned tools are full.", "repair"],
-	"charge": ["A charged shot goes through", "2 · Hold the mouse until the lens is bright, then release. A full charge pierces enemies in its path. Solid cover stops it.", "charge"],
-	"opening": ["Open it, then shoot", "Cut the blue link OR heat the orange armor. The opening stays. Switch to 2 and shoot the exposed yellow core.", "opening"],
-	"pair": ["A, then B", "2 · Shoot A to open B. Shoot B before its shutter closes. Quick aimed shots work. If you wait, try the pair again.", "pair"],
-	"loop": ["Cut every support", "1 · Draw around the creature through every blue support before the links reconnect. A finished loop leaves the yellow core open. Switch to 2, hold to charge, then release at the core.", "loop"],
-	"zigzag": ["Follow the blue spans", "1 · Bend your line across each blue span before they reconnect. Keep your turns deliberate. Finish the pattern, then use a charged shot from 2 on yellow.", "zigzag"],
-	"rewind": ["Take back a bad moment", "When a hit empties your time meter, one emergency charge is spent and the world freezes. Move and fire during the live demonstration until the incoming hit empties time, scroll the mouse wheel down to an earlier safe moment, then click or press Enter to recover there. Recovery restores time, not the spent charge.", "rewind"],
-	"final": ["Dismantle the burial device", "Shoot A then B. Cut the zigzag, then the loop of supports. Each completed opening stays. Finish with the yellow core.", "final"],
+	"cut": ["Hold, draw, release", "1 · Ring Cutter — draw across the blue link.", "cut", "1 · RING CUTTER"],
+	"heat": ["Aim and hold", "3 · Heat Bellows — strip orange armor and push threats back.", "heat", "3 · HEAT BELLOWS"],
+	"shot": ["Click to shoot", "2 · Focused Flash — aim at the yellow core.", "shot", "2 · FOCUSED FLASH"],
+	"slow": ["Hold Space", "Hold Space to slow the world, shoot the target, then release.", "slow", "TIME SLOW"],
+	"repair": ["Press E to repair", "Press E to open repair: spin, connect, and trace to 100%; closes when full.", "repair", "TOOL REPAIR"],
+	"charge": ["Hold, then release", "2 · Focused Flash — charge until bright to pierce aligned targets.", "charge", "2 · FOCUSED FLASH · PIERCE"],
+	"opening": ["Cut or heat, then shoot", "Open the blue link or orange armor, then switch to 2 for yellow.", "opening", "OPEN · THEN 2 · FOCUSED FLASH"],
+	"pair": ["Click A, then B", "2 · Focused Flash — shoot A to open B before its shutter closes.", "pair", "2 · FOCUSED FLASH · PAIR"],
+	"loop": ["Hold, draw, release", "1 · Ring Cutter — cut every blue support, then charge 2 on yellow.", "loop", "1 · RING CUTTER · LOOP"],
+	"zigzag": ["Hold, draw, release", "1 · Ring Cutter — bend across each blue span, then charge 2 on yellow.", "zigzag", "1 · RING CUTTER · ZIGZAG"],
+	"rewind": ["Scroll, then press Enter", "When a hit spends an emergency charge, scroll the wheel to an earlier safe moment and confirm.", "rewind", "EMERGENCY REWIND"],
+	"final": ["Open each lock, then shoot", "Clear pair, zigzag, and loop phases, then finish the yellow core.", "final", "THE BURIAL DEVICE"],
 }
+
 var blocking := false
 var practicing := false
 var active_id: StringName = &""
@@ -41,70 +46,125 @@ var heading: Label
 var body_label: Label
 var state_label: Label
 var practice_button: Button
-var accent := BLUE
+var accent: Color = BLUE
+var _subtitle_text := ""
 var _layout_size := Vector2(-1, -1)
 var _layout_dirty := true
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	theme = UI.skin()
-	card = PanelContainer.new()
-	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("111c22")
-	style.border_color = Color("697376")
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(18)
-	card.add_theme_stylebox_override("panel", style)
-	add_child(card)
-	var column := VBoxContainer.new()
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_theme_constant_override("separation", 8)
-	card.add_child(column)
-	state_label = UI.label(column, "WORLD HELD · LOOK AT THE MARKED TARGET", 13)
-	heading = UI.label(column, "", 25)
-	body_label = UI.label(column, "", 18)
-	practice_button = UI.button(column, "Try it safely", request_practice)
-	resized.connect(func(): _layout(true))
-	GameState.settings_changed.connect(_on_settings_changed)
+	_ensure_authored_hierarchy()
+	if not resized.is_connected(_on_resized):
+		resized.connect(_on_resized)
+	if not GameState.settings_changed.is_connected(_on_settings_changed):
+		GameState.settings_changed.connect(_on_settings_changed)
 	hide()
+
+
+func _ensure_authored_hierarchy() -> void:
+	if get_node_or_null("Card") == null:
+		var packed: PackedScene = load("res://scenes/ui/tutorial.tscn")
+		if packed != null:
+			var authored: Control = packed.instantiate()
+			var authored_card: PanelContainer = authored.get_node_or_null("Card") as PanelContainer
+			if authored_card != null:
+				authored.remove_child(authored_card)
+				add_child(authored_card)
+			authored.free()
+	card = get_node_or_null("Card") as PanelContainer
+	state_label = get_node_or_null("Card/Column/StateLabel") as Label
+	heading = get_node_or_null("Card/Column/HeadingLabel") as Label
+	body_label = get_node_or_null("Card/Column/BodyLabel") as Label
+	practice_button = get_node_or_null("Card/Column/PracticeButton") as Button
+	if is_instance_valid(body_label):
+		body_label.modulate = UI.MUTED
+	if is_instance_valid(practice_button) and not practice_button.pressed.is_connected(request_practice):
+		practice_button.pressed.connect(request_practice)
+
+
+func _on_resized() -> void:
+	_layout(true)
+
 
 func setup(value: Camera3D) -> void:
 	camera = value
+
+
+static func is_drawing_lesson(id: StringName) -> bool:
+	return id in [&"cut", &"loop", &"zigzag"]
+
+
+static func accent_for_lesson(id: StringName) -> Color:
+	if id == &"heat":
+		return ORANGE
+	if id in [&"shot", &"charge", &"pair", &"final"]:
+		return YELLOW
+	if id in [&"slow", &"rewind"]:
+		return VIOLET
+	if id == &"repair":
+		return GUIDE
+	return BLUE
+
+
+static func subtitle_for_lesson(id: StringName) -> String:
+	if LESSONS.has(String(id)):
+		var entry: Array = LESSONS[String(id)]
+		if entry.size() >= 4:
+			return String(entry[3])
+	return "ACTION GUIDE"
+
+
+func set_phase_accent(color: Color, subtitle: String = "") -> void:
+	accent = color
+	if is_instance_valid(state_label):
+		state_label.modulate = accent
+		if not subtitle.is_empty():
+			_subtitle_text = subtitle
+			state_label.text = subtitle
+	queue_redraw()
+
 
 func show_known_lesson(id: StringName, targets: Array[Vector3]) -> bool:
 	if not LESSONS.has(String(id)):
 		return false
 	var text: Array = LESSONS[String(id)]
-	show_lesson(id, text[0], text[1], targets, gesture_for(id))
+	_subtitle_text = subtitle_for_lesson(id)
+	show_lesson(id, String(text[0]), String(text[1]), targets, gesture_for(id))
 	if active_id == id:
-		align_pattern = true
+		align_pattern = is_drawing_lesson(id)
 	return visible and active_id == id
 
+
 func show_lesson(id: StringName, title: String, text: String, targets: Array[Vector3], gesture: Array[Vector2] = []) -> void:
+	_ensure_authored_hierarchy()
 	if is_learned(id) or id == active_id or not active_id.is_empty():
 		return
 	active_id = id
 	align_pattern = false
 	world_points = targets.duplicate()
-	ghost = gesture.duplicate()
+	ghost.clear()
+	if is_drawing_lesson(id) or not LESSONS.has(String(id)):
+		ghost.assign(gesture)
 	heading.text = title
 	body_label.text = text
-	accent = ORANGE if id == &"heat" else YELLOW if id in [&"shot", &"charge", &"pair"] else VIOLET if id in [&"slow", &"rewind"] else BLUE
+	accent = accent_for_lesson(id)
+	_subtitle_text = subtitle_for_lesson(id)
 	state_label.modulate = accent
-	state_label.text = "WORLD HELD · LOOK AT THE MARKED TARGET"
+	state_label.text = _subtitle_text
 	practice_button.focus_mode = Control.FOCUS_ALL
 	practice_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	practice_button.show()
 	practicing = false
-	age = 0
+	age = 0.0
 	_set_blocking(true)
 	show()
 	_layout(true)
 	practice_button.grab_focus.call_deferred()
+
 
 func request_practice() -> void:
 	if active_id.is_empty() or not blocking or SceneManager.has_popup():
@@ -114,13 +174,15 @@ func request_practice() -> void:
 	practice_button.focus_mode = Control.FOCUS_NONE
 	practice_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	practice_button.hide()
-	state_label.text = "SAFE PRACTICE · COMPLETE THE ACTION"
+	state_label.modulate = accent
+	state_label.text = _subtitle_text + " · YOUR TURN"
 	_set_blocking(false)
 	resume_requested.emit(active_id)
 	_layout(true)
 
+
 func complete_lesson(id: StringName) -> void:
-	# Only the campaign calls this after observing actual success.
+	# Only the campaign/harness calls this after observing actual success.
 	if id != active_id or not practicing:
 		return
 	learned[id] = true
@@ -129,11 +191,14 @@ func complete_lesson(id: StringName) -> void:
 	_set_blocking(false)
 	world_points.clear()
 	projected.clear()
+	ghost.clear()
 	hide()
 	lesson_completed.emit(id)
 
+
 func is_learned(id: StringName) -> bool:
 	return bool(learned.get(id, false)) or not bool(GameState.preferences().tutorial)
+
 
 func dismiss() -> void:
 	active_id = &""
@@ -141,7 +206,9 @@ func dismiss() -> void:
 	_set_blocking(false)
 	world_points.clear()
 	projected.clear()
+	ghost.clear()
 	hide()
+
 
 func reset_run() -> void:
 	learned.clear()
@@ -150,7 +217,9 @@ func reset_run() -> void:
 	_set_blocking(false)
 	world_points.clear()
 	projected.clear()
+	ghost.clear()
 	hide()
+
 
 func _set_blocking(value: bool) -> void:
 	var filter := Control.MOUSE_FILTER_STOP if value else Control.MOUSE_FILTER_IGNORE
@@ -161,6 +230,7 @@ func _set_blocking(value: bool) -> void:
 		blocking = value
 		blocking_changed.emit(value)
 
+
 func _on_settings_changed(values: Dictionary) -> void:
 	if not values.tutorial and not active_id.is_empty():
 		var id := active_id
@@ -169,30 +239,48 @@ func _on_settings_changed(values: Dictionary) -> void:
 		learned = prior
 		resume_requested.emit(id)
 
+
 func _layout(force: bool = true) -> void:
 	if not is_instance_valid(card):
 		return
+	if is_inside_tree() and (size.x <= 1.0 or size.y <= 1.0):
+		size = get_viewport_rect().size
 	if force or _layout_dirty or _layout_size != size:
 		_layout_size = size
 		_layout_dirty = false
 		var factor := UI.scale_for(self)
-		theme.default_font_size = roundi(19 * factor)
-		var width := minf(550 * factor, maxf(220, size.x - 32))
+		theme.default_font_size = roundi(18 * factor)
+		var width := minf(420 * factor, maxf(210, size.x - 32))
+		var inner_w := maxf(160.0, width - 32.0)
+		var col := card.get_node_or_null("Column") as Control
+		if is_instance_valid(col):
+			col.custom_minimum_size.x = inner_w
+			col.size.x = inner_w
+		for ctrl: Control in [state_label, heading, body_label, practice_button]:
+			if is_instance_valid(ctrl):
+				ctrl.custom_minimum_size.x = inner_w
+				ctrl.size.x = inner_w
 		card.custom_minimum_size.x = width
-		card.size.x = width
-		heading.add_theme_font_size_override("font_size", roundi((21 if size.y < 480 else 25) * factor))
-		body_label.add_theme_font_size_override("font_size", roundi((15 if size.y < 480 else 18) * factor))
-		state_label.add_theme_font_size_override("font_size", roundi(13 * factor))
+		card.size = Vector2(width, 0.0)
+		heading.add_theme_font_size_override("font_size", roundi((22 if size.y < 480 else 26) * factor))
+		body_label.add_theme_font_size_override("font_size", roundi((13 if size.y < 480 else 14) * factor))
+		state_label.add_theme_font_size_override("font_size", roundi(12 * factor))
 		card.reset_size()
+	var min_size := card.get_combined_minimum_size()
+	if absf(card.size.y - min_size.y) > 1.0:
+		card.size.y = min_size.y
 	card.position.x = (size.x - card.size.x) * 0.5
 	var target_y := size.y * 0.4
 	if not projected.is_empty():
 		target_y = projected[0].y
-	card.position.y = maxf(16, size.y - card.size.y - 18) if target_y < size.y * 0.55 else 18
+	card.position.y = maxf(14, size.y - card.size.y - 16) if target_y < size.y * 0.55 else 16
+
 
 func _process(delta: float) -> void:
 	if not visible:
 		return
+	if is_inside_tree() and (size.x <= 1.0 or size.y <= 1.0):
+		size = get_viewport_rect().size
 	# Pause/settings cover this card and stop its practice controls; emergency mode stays uncovered.
 	var in_emergency: bool = GameState.has_method("is_in_emergency") and bool(GameState.call("is_in_emergency")) and not GameState.is_paused()
 	var covered: bool = SceneManager.has_popup() or (not GameState.is_playing() and not in_emergency)
@@ -225,30 +313,34 @@ func _process(delta: float) -> void:
 	_layout(false)
 	queue_redraw()
 
+
 func _gui_input(event: InputEvent) -> void:
 	if blocking and event is InputEventMouse:
 		accept_event()
+
 
 func _draw() -> void:
 	if not visible or not card.visible:
 		return
 	if blocking:
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.015, 0.025, 0.035, 0.35))
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.015, 0.025, 0.035, 0.22))
 	var font := ThemeDB.fallback_font
 	var factor := UI.scale_for(self)
 	for i in range(projected.size()):
 		var p := projected[i]
-		draw_arc(p, 23 + 3 * sin(age * 4), 0, TAU, 40, accent, 3, true)
-		draw_circle(p, 4, accent)
-		var caption := str(i + 1) + (" · offscreen" if offscreen[i] else "")
-		var label_position := p + Vector2(28, 6)
-		label_position.x = clampf(label_position.x, 16, maxf(16, size.x - 170 * factor))
-		draw_string(font, label_position, caption, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(17 * factor), UI.PAPER)
+		draw_arc(p, 21 + 2.5 * sin(age * 4), 0, TAU, 36, accent, 2.5, true)
+		draw_circle(p, 3.5, accent)
+		if projected.size() > 1 or offscreen[i]:
+			var caption := str(i + 1) + (" · offscreen" if offscreen[i] else "")
+			var label_position := p + Vector2(26, 6)
+			label_position.x = clampf(label_position.x, 16, maxf(16, size.x - 160 * factor))
+			draw_string(font, label_position, caption, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(15 * factor), GUIDE)
 		if offscreen[i]:
 			var direction := (p - size * 0.5).normalized()
 			var side := direction.orthogonal()
 			draw_colored_polygon(PackedVector2Array([p + direction * 17, p - direction * 8 + side * 8, p - direction * 8 - side * 8]), accent)
-	if ghost.size() >= 2 and not projected.is_empty() and not offscreen.has(true):
+	# A blue line only teaches drawing; never draw a moving line for clicks, holds, Space, or rewind.
+	if ghost.size() >= 2 and (is_drawing_lesson(active_id) or not LESSONS.has(String(active_id))) and not projected.is_empty() and not offscreen.has(true):
 		var area := Rect2(projected[0], Vector2.ZERO)
 		for p in projected:
 			area = area.expand(p)
@@ -256,28 +348,29 @@ func _draw() -> void:
 		var path := PackedVector2Array()
 		for p in ghost:
 			path.append(area.position + p * area.size)
-		if align_pattern and active_id in [&"loop", &"final", &"zigzag", &"pair"] and projected.size() >= 2:
+		if align_pattern and active_id in [&"loop", &"zigzag"] and projected.size() >= 2:
 			path = PackedVector2Array(projected)
-			if active_id in [&"loop", &"final"]:
+			if active_id == &"loop":
 				path.append(projected[0])
-		draw_polyline(path, Color(accent, 0.45), 3, true)
+		draw_polyline(path, Color(BLUE, 0.5), 3.0, true)
 		var step := fmod(age * 0.65, 1.0) * (path.size() - 1)
 		var index := mini(int(step), path.size() - 2)
 		var cursor := path[index].lerp(path[index + 1], step - index)
-		draw_circle(cursor, 7, UI.PAPER)
-		draw_arc(cursor, 11, 0, TAU, 24, accent, 2, true)
+		draw_circle(cursor, 6.5, GUIDE)
+		draw_arc(cursor, 10.5, 0, TAU, 24, BLUE, 2.0, true)
+
 
 # Ghost coordinates are normalized to the padded projected target bounds.
+# Only drawing lessons return a blue trace path; clicks/holds/Space/rewind use real action demos.
 static func gesture_for(id: StringName) -> Array[Vector2]:
-	if id in [&"loop", &"final", &"repair"]:
+	var empty: Array[Vector2] = []
+	if id == &"loop":
 		var path: Array[Vector2] = []
 		for i in range(25):
 			path.append(Vector2(0.5, 0.5) + Vector2(cos(i * TAU / 24), sin(i * TAU / 24)) * 0.43)
 		return path
-	if id == &"rewind":
-		return [Vector2(0.9, 0.5), Vector2(0.1, 0.5)]
 	if id == &"zigzag":
 		return [Vector2(0, 0.75), Vector2(0.25, 0.2), Vector2(0.5, 0.8), Vector2(0.75, 0.2), Vector2(1, 0.7)]
-	if id in [&"shot", &"pair", &"charge", &"heat", &"slow"]:
-		return [Vector2(0.5, 1), Vector2(0.5, 0.5)]
-	return [Vector2(0, 0.75), Vector2(1, 0.25)]
+	if id == &"cut":
+		return [Vector2(0, 0.75), Vector2(1, 0.25)]
+	return empty

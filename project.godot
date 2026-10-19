@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Some Assembly Required"
-run/main_scene="uid://dc1k8c1u03wl2"
+run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -21,18 +21,14 @@ driver/output_latency.web=100
 
 [autoload]
 
-GameState="*uid://rhk582cflle3"
-SceneManager="*uid://4f0s5frrbhrl"
+GameState="*res://scripts/autoloads/game_state.gd"
+SceneManager="*res://scripts/autoloads/scene_manager.gd"
 AudioManager="*res://scripts/audio/dialogue_manager.tscn"
 
 [display]
 
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-
-[gui]
-
-theme/custom="res://scenes/ui/museum_theme.tres"
 
 [input]
 

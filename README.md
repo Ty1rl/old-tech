@@ -50,6 +50,10 @@ godot --path . -- --developer
 F10 opens developer options in that mode. F7 cycles the diagnostic readout.
 Developer options are hidden during normal play and in Web exports.
 
+Settings includes independent Master, Music, Voice and Effects sliders.
+New installs start Voice at 45%; saved levels are preserved. Music has an extra
+6 dB of gain. Changes apply immediately and persist across launches.
+
 ## Build and upload
 
 Install the matching **4.7.2 export templates** in Godot's export-template manager.

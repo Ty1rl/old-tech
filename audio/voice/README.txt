@@ -70,3 +70,9 @@ and the previous rewind encoding/event row: supplied-round-t.json. Raw copies
 are in shared audio/archive/round-t; prior game generation is retained in Git.
 Campaign owns movement -> pickup and tool-switch -> item-lesson timing. Rewind
 confirmation precedes the separate tutorial.rewind_charges statement.
+
+MIX CONTROLS
+Settings provides saved Master, Music, Voice and Effects sliders. Master remains
+80% by default; Voice defaults to45%. Music and Effects default to100%, with
++6dB on the Music bus. Existing saved values win. Effects changes both world
+effects and responsive/clock cues, leaving music and dialogue independent.

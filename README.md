@@ -13,6 +13,10 @@ Made for [Ludum Dare 60](https://ldjam.com/events/ludum-dare/60), theme **Old Te
 The campaign crosses four museum areas and three bosses. Choose Easy or Hard;
 **Skip tutorials** starts combat with all three tools, slow time and emergency rewinds.
 
+## Gameplay
+
+[![Watch Some Assembly Required gameplay on YouTube](https://img.youtube.com/vi/8vjK7JALCeI/maxresdefault.jpg)](https://www.youtube.com/watch?v=8vjK7JALCeI)
+
 ## Controls
 
 | Input | Action |

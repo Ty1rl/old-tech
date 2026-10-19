@@ -170,15 +170,89 @@ func run() -> void:
 	expect(mock_cond.bind_calls > 0 and mock_cond.bound_tool == &"ring" and mock_cond.segment_count() == 4 and mock_cond.filled_segments() == 0,
 		"ConditionSlot binds RepairConditionView to active equipment and tool with 4 segments")
 
-	# Verify all 3 weapons resolve named 3D model parts and project inside the 520x260 board
+	# Verify all 3 weapons resolve named 3D model parts, project inside the 520x260 board,
+	# and order stages, trace contacts (1->4), and connect pairs (a->b) strictly left-to-right.
 	for t_id in Gestures.TOOL_ORDER:
 		standalone_repair.switch_tool(t_id)
 		await frames(1)
 		var all_resolved := standalone_repair.projected_operations.size() == 3
+		var stage_xs: Array[float] = []
+		var traces_ltr := true
+		var connects_ltr := true
 		for op in standalone_repair.projected_operations:
 			if not bool(op.get("part_resolved", false)):
 				all_resolved = false
+			var kind := StringName(op.get("kind", &"spin"))
+			if kind == &"spin":
+				stage_xs.append(Vector2(op["center"]).x)
+			elif kind == &"connect":
+				var pairs: Array = op.get("pairs", [])
+				var sum_x := 0.0
+				for p in pairs:
+					var ax := Vector2(p["a"]).x
+					var bx := Vector2(p["b"]).x
+					if not (ax < bx):
+						connects_ltr = false
+					sum_x += (ax + bx) * 0.5
+				stage_xs.append(sum_x / maxf(1.0, float(pairs.size())))
+			elif kind == &"trace":
+				var pts: Array = op.get("points", [])
+				var sum_x := 0.0
+				for pi in range(pts.size()):
+					sum_x += Vector2(pts[pi]).x
+					if pi > 0 and not (Vector2(pts[pi - 1]).x < Vector2(pts[pi]).x):
+						traces_ltr = false
+				stage_xs.append(sum_x / maxf(1.0, float(pts.size())))
 		expect(all_resolved, "%s resolves all 3 named 3D GLB part nodes and projects coordinates via PreviewCamera" % String(t_id))
+		expect(stage_xs.size() == 3 and stage_xs[0] < stage_xs[1] and stage_xs[1] < stage_xs[2],
+			"%s orders repair stages strictly left-to-right (%s)" % [String(t_id), str(stage_xs)])
+		expect(traces_ltr and connects_ltr,
+			"%s orders trace contacts (1->4) and connect pairs (a->b) strictly left-to-right" % String(t_id))
+
+		# Verify per-instance translucent model materials without mutating shared GLB Mesh resources
+		var holder: Node3D = standalone_repair.model_instances.get(String(t_id))
+		var mesh_nodes := holder.find_children("*", "MeshInstance3D", true, false)
+		var all_translucent := not mesh_nodes.is_empty()
+		for mn in mesh_nodes:
+			var mi := mn as MeshInstance3D
+			var mat := mi.get_active_material(0) as BaseMaterial3D
+			if mat == null or mat.transparency != BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS or mat.albedo_color.a >= 0.95 or mat.emission_enabled:
+				all_translucent = false
+		var fresh_glb: Node3D = standalone_repair.ToolModels[String(t_id)].instantiate()
+		var fresh_meshes := fresh_glb.find_children("*", "MeshInstance3D", true, false)
+		var shared_untouched := not fresh_meshes.is_empty()
+		for fmn in fresh_meshes:
+			var fmi := fmn as MeshInstance3D
+			var fmat := fmi.get_active_material(0) as BaseMaterial3D
+			if fmat != null and (fmat.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED or not is_equal_approx(fmat.albedo_color.a, 1.0)):
+				shared_untouched = false
+		fresh_glb.free()
+		expect(all_translucent and shared_untouched,
+			"%s applies per-instance depth-prepass translucency without mutating shared GLB materials" % String(t_id))
+
+	# Verify neutral ToolStyle.REPAIR_GUIDE color, get_model_region(), frozen gesture targets while dragging, and finite stage-hint demo
+	expect(standalone_repair.GUIDE == standalone_repair.ToolStyle.REPAIR_GUIDE
+		and standalone_repair.get_model_region().size.x > 200.0,
+		"WeaponRepair uses neutral ToolStyle.REPAIR_GUIDE and exposes get_model_region()")
+	standalone_repair.switch_tool(&"ring")
+	await frames(1)
+	var frozen_before: Vector2 = standalone_repair.projected_operations[0]["center"]
+	standalone_repair.dragging = true
+	var ring_holder: Node3D = standalone_repair.model_instances.get("ring")
+	ring_holder.position += Vector3(0.4, 0.2, 0.0)
+	standalone_repair._rebuild_routes_for_tool(&"ring")
+	var frozen_during: Vector2 = standalone_repair.projected_operations[0]["center"]
+	standalone_repair.dragging = false
+	standalone_repair._refresh()
+	expect(frozen_before.is_equal_approx(frozen_during) and is_equal_approx(standalone_repair._switch_transition_alpha, 1.0),
+		"Active repair gesture freezes projected targets and snaps switch transition so targets never drift mid-gesture")
+	standalone_repair.show_stage_hint("Finite hint check")
+	for _tick in range(15):
+		standalone_repair._process(0.25)
+	expect(standalone_repair._stage_hint_passes >= standalone_repair.STAGE_HINT_MAX_PASSES and not standalone_repair.is_processing(),
+		"Stage hint demonstration runs a finite number of passes and stops processing automatically")
+	standalone_repair.clear_stage_hint()
+
 	var cone_holder: Node3D = standalone_repair.model_instances.get("cone")
 	expect(cone_holder != null
 		and cone_holder.find_child("Intake_Fan_Rotor", true, false) != null

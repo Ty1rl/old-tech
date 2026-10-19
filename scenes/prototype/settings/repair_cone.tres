@@ -6,13 +6,13 @@
 script = ExtResource("1")
 id = &"cone"
 title = "Heat Bellows"
-accent = Color(0.94902, 0.596078, 0.352941, 1)
+accent = Color(0.929412, 0.6, 0.4, 1)
 glb = "res://assets/equipment/heat_bellows.glb"
 cam_pos = Vector3(0, 1.15, 1.45)
 cam_target = Vector3(0, 0, 0)
 cam_size = 0.64
-model_pos = Vector3(0.11, -0.04, -0.06)
-model_rot_deg = Vector3(6, 112, -4)
+model_pos = Vector3(-0.08, -0.04, -0.06)
+model_rot_deg = Vector3(6, -112, 4)
 open_cover_and_grille = true
 spin_part_pivots = {
 "Intake_Fan_Rotor": {
@@ -22,48 +22,48 @@ spin_part_pivots = {
 }
 }
 operations = [{
-"badge_pos": Vector2(342, 142),
-"center_local": Vector3(-0.065, 0.188, 0.048),
+"badge_pos": Vector2(118, 24),
+"center_local": Vector3(0.065, 0.188, 0.048),
 "dir": 1.0,
 "index": 0,
 "kind": &"spin",
 "part_label": "Intake Fan",
 "part_node": "HeatBellows_Slate_Olive",
-"prompt": "With the rear fan cover open, spin the intake fan in either direction.",
-"radius": 36.0,
+"prompt": "Spin the intake fan",
+"radius": 35.0,
 "short": "Fan Spin",
 "start_angle": -1.88496,
-"tag": "1 · SPIN FAN"
+"tag": "SPIN FAN"
 }, {
-"badge_pos": Vector2(198, 224),
+"badge_pos": Vector2(212, 204),
 "index": 1,
 "kind": &"trace",
 "part_label": "Leather Seams",
 "part_node": "Leather_Bellows_Chamber",
-"points_local": [Vector3(-0.105, 0.155, -0.34), Vector3(-0.105, 0.155, -0.165), Vector3(-0.105, 0.052, -0.33), Vector3(-0.105, 0.052, -0.155)],
-"prompt": "Trace across the leather bellows stitch seams in order.",
+"points_local": [Vector3(0.105, 0.155, -0.15), Vector3(0.105, 0.048, -0.212), Vector3(0.105, 0.155, -0.278), Vector3(0.105, 0.048, -0.342)],
+"prompt": "Trace 1 to 4 across the leather seams",
 "short": "Leather Trace",
-"tag": "2 · TRACE LEATHER"
+"tag": "TRACE SEAMS"
 }, {
-"badge_pos": Vector2(16, 188),
+"badge_pos": Vector2(312, 204),
 "index": 2,
 "kind": &"connect",
 "pairs": [{
-"a_local": Vector3(-0.088, 0.158, -0.535),
-"b_local": Vector3(-0.098, 0.148, -0.43),
+"a_local": Vector3(0.098, 0.152, -0.425),
+"b_local": Vector3(0.088, 0.158, -0.538),
 "label": "A",
 "pair_id": &"A",
 "shape": &"triangle"
 }, {
-"a_local": Vector3(-0.088, 0.042, -0.535),
-"b_local": Vector3(-0.098, 0.038, -0.43),
+"a_local": Vector3(0.098, 0.038, -0.425),
+"b_local": Vector3(0.088, 0.042, -0.538),
 "label": "B",
 "pair_id": &"B",
 "shape": &"square"
 }],
 "part_label": "Heating Coils",
 "part_node": "HeatBellows_Accent_Orange",
-"prompt": "With the front grille open, click or drag matching triangle and square heating coils.",
+"prompt": "Connect matching heating coils",
 "short": "Coil Contacts",
-"tag": "3 · COIL CONTACTS"
+"tag": "CONNECT COILS"
 }]

@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = &"ring"
 title = "Ring Cutter"
-accent = Color(0.403922, 0.788235, 0.960784, 1)
+accent = Color(0.376471, 0.858824, 0.870588, 1)
 glb = "res://assets/equipment/ring_caster.glb"
 cam_pos = Vector3(0, 1.45, 1.15)
 cam_target = Vector3(0, 0, 0)
@@ -27,48 +27,48 @@ spin_part_pivots = {
 }
 }
 operations = [{
-"badge_pos": Vector2(168, 10),
-"center_local": Vector3(0.004, 0.125, -0.145),
+"badge_pos": Vector2(142, 34),
+"center_local": Vector3(0.035, 0.115, -0.115),
 "dir": 1.0,
 "index": 0,
 "kind": &"spin",
 "part_label": "Cassette Spool",
 "part_node": "RingCaster_Oatmeal_Linen",
-"prompt": "Drag around the cassette reel in either direction to wind the tape.",
+"prompt": "Spin the cassette reel",
 "radius": 30.0,
 "short": "Wind Tape",
 "start_angle": -2.04204,
-"tag": "1 · WIND TAPE"
+"tag": "WIND TAPE"
 }, {
-"badge_pos": Vector2(14, 184),
+"badge_pos": Vector2(218, 214),
 "index": 1,
 "kind": &"connect",
 "pairs": [{
-"a_local": Vector3(0.135, 0.105, -0.215),
-"b_local": Vector3(0.175, 0.065, -0.280),
+"a_local": Vector3(0.185, 0.095, -0.255),
+"b_local": Vector3(0.105, 0.095, -0.355),
 "label": "A",
 "pair_id": &"A",
 "shape": &"triangle"
 }, {
-"a_local": Vector3(0.218, 0.022, -0.348),
-"b_local": Vector3(0.262, -0.018, -0.422),
+"a_local": Vector3(0.215, 0.005, -0.315),
+"b_local": Vector3(0.135, 0.005, -0.415),
 "label": "B",
 "pair_id": &"B",
 "shape": &"square"
 }],
 "part_label": "Arch Contacts",
 "part_node": "RingCaster_Accent_Cyan",
-"prompt": "Click or drag matching triangle and square contacts along the arch.",
+"prompt": "Pair matching arch contacts",
 "short": "Pair Contacts",
-"tag": "2 · PAIR CONTACTS"
+"tag": "PAIR CONTACTS"
 }, {
-"badge_pos": Vector2(372, 232),
+"badge_pos": Vector2(316, 224),
 "index": 2,
 "kind": &"trace",
 "part_label": "Saw Ring Rim",
 "part_node": "Suspended_Saw_Ring",
-"points_local": [Vector3(0.132, 0.015, -0.44), Vector3(0.085, 0.015, -0.602), Vector3(-0.032, 0.015, -0.625), Vector3(-0.128, 0.015, -0.54)],
-"prompt": "Trace along the saw ring blade rim from 1 to 4.",
+"points_local": [Vector3(0.135, 0.015, -0.435), Vector3(0.062, 0.015, -0.538), Vector3(-0.028, 0.015, -0.598), Vector3(-0.125, 0.015, -0.618)],
+"prompt": "Trace 1 to 4 along the blade rim",
 "short": "Align Blade",
-"tag": "3 · TRACE TO ALIGN"
+"tag": "ALIGN BLADE"
 }]

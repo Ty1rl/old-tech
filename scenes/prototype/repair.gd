@@ -5,12 +5,12 @@ signal stage_changed(tool: StringName, stage: int)
 signal tool_switched(tool: StringName)
 
 const Gestures = preload("res://scenes/prototype/repair_gestures.gd")
+const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 const ToolModels := {
 	"ring": preload("res://assets/equipment/ring_caster.glb"),
 	"beam": preload("res://assets/equipment/flash_camera.glb"),
 	"cone": preload("res://assets/equipment/heat_bellows.glb"),
 }
-const RepairConditionScenePath := "res://scenes/ui/repair_condition.tscn"
 
 const BOARD := Vector2(520.0, 260.0)
 const PANEL_MIN_SIZE := Vector2(280.0, 220.0)
@@ -18,18 +18,17 @@ const BOARD_MIN_SIZE := Vector2(240.0, 120.0)
 const CORRIDOR := Gestures.TRACE_CORRIDOR
 const CONTACT := Gestures.TRACE_CONTACT
 
-const INK := Color("e6ecf4")
-const BLUE := Color("67c9f5")
-const GREEN := Color("8ad2a3")
+const GUIDE := ToolStyle.REPAIR_GUIDE
+const GUIDE_BRIGHT := Color("f8f3e8")
+const GUIDE_MUTED := Color(0.898039, 0.870588, 0.815686, 0.56)
+const GUIDE_TRACK := Color(0.898039, 0.870588, 0.815686, 0.22)
 const RED := Color("ef8c94")
-const YELLOW := Color("f5d76e")
-const PURPLE := Color("c394f7")
-const ORANGE := Color("f59b56")
-const DARK_BACKING := Color(0.018, 0.032, 0.052, 0.92)
-const MISSING_DIM := Color(0.92, 0.64, 0.48, 0.58)
+const DARK_BACKING := Color(0.018, 0.028, 0.044, 0.90)
+const MODEL_TRANSLUCENCY_ALPHA := 0.84
 
 const TOOL_ORDER: Array[StringName] = [&"ring", &"beam", &"cone"]
-const COMPLETION_FLASH_DURATION_SEC := 0.42
+const COMPLETION_FLASH_DURATION_SEC := 0.36
+const STAGE_HINT_MAX_PASSES := 2.0
 
 var ROUTES: Array = []
 var equipment: WeaponEquipment
@@ -69,6 +68,8 @@ var dragging: bool:
 		return _dragging
 	set(value):
 		_dragging = value
+		if _dragging:
+			_snap_switch_transition()
 		_sync_gesture_active()
 
 var next_contact := 1
@@ -103,6 +104,8 @@ var _completion_flash_until_usec: int = 0
 var _stage_hint_active := false
 var _stage_hint_prompt := ""
 var _stage_hint_phase := 0.0
+var _stage_hint_passes := 0.0
+var _learned_gestures: Dictionary = {}
 var _switch_transition_alpha := 1.0
 var _switch_transition_offset := Vector2.ZERO
 var _last_emitted_tool: StringName = &""
@@ -114,6 +117,9 @@ func _init() -> void:
 
 
 func _rebuild_routes_for_tool(for_tool: StringName) -> void:
+	# Freeze projected targets while a gesture is actively dragging so nothing drifts underneath the cursor.
+	if _dragging and for_tool == tool and not projected_operations.is_empty():
+		return
 	var spec := Gestures.tool_spec(for_tool)
 	var raw_ops: Array = spec["operations"]
 	projected_operations.clear()
@@ -206,9 +212,17 @@ func current_operation_kind() -> StringName:
 	return active_kind
 
 
+func get_model_region() -> Rect2:
+	if board == null:
+		return Rect2(Vector2.ZERO, BOARD)
+	return Rect2(_board_offset(), BOARD * _board_scale())
+
+
 func show_stage_hint(custom_prompt: String = "") -> void:
 	_stage_hint_active = true
 	_stage_hint_prompt = custom_prompt
+	_stage_hint_phase = 0.0
+	_stage_hint_passes = 0.0
 	if custom_prompt != "" and instructions != null:
 		instructions.text = custom_prompt
 	set_process(true)
@@ -218,9 +232,21 @@ func show_stage_hint(custom_prompt: String = "") -> void:
 func clear_stage_hint() -> void:
 	_stage_hint_active = false
 	_stage_hint_prompt = ""
+	_stage_hint_phase = 0.0
+	_stage_hint_passes = 0.0
 	if is_node_ready():
 		_refresh()
 	_queue_redraws()
+
+
+func _maybe_auto_show_spin_demo() -> void:
+	if not is_inside_tree() or _allow_full_preview or equipment == null or equipment.is_full(tool):
+		return
+	if active_kind == &"spin" and not bool(_learned_gestures.get(&"spin", false)) and not _stage_hint_active:
+		_stage_hint_active = true
+		_stage_hint_phase = 0.0
+		_stage_hint_passes = 0.0
+		set_process(true)
 
 
 func _emit_stage_if_changed() -> void:
@@ -295,17 +321,29 @@ func switch_tool(next_tool: StringName) -> void:
 		tool_switched.emit(tool)
 	if is_node_ready():
 		_refresh()
+		_maybe_auto_show_spin_demo()
 		if equipment != null and equipment.is_full(tool):
-			feedback.text = "Ready · Tab / 1–3 switch tools · E or Esc close."
+			feedback.text = "Ready · Tab / 1–3 switch · E / Esc close"
 		else:
-			feedback.text = "E or Esc close · Tab / 1–3 switch tools · WASD move · Space slow."
+			feedback.text = "E / Esc close · Tab / 1–3 switch · WASD move · Space slow"
 	_emit_stage_if_changed()
 
 
 func _start_switch_transition() -> void:
-	_switch_transition_alpha = 0.45
-	_switch_transition_offset = Vector2(14.0, 0.0)
+	if _dragging:
+		_snap_switch_transition()
+		return
+	_switch_transition_alpha = 0.55
+	_switch_transition_offset = Vector2(12.0, 0.0)
 	set_process(true)
+
+
+func _snap_switch_transition() -> void:
+	_switch_transition_alpha = 1.0
+	_switch_transition_offset = Vector2.ZERO
+	if viewport_container != null:
+		viewport_container.modulate.a = 1.0
+		viewport_container.position = _board_offset()
 
 
 func _find_arena() -> Node:
@@ -372,11 +410,6 @@ func _ensure_condition_view() -> void:
 		return
 	if condition_slot.get_child_count() > 0:
 		condition_view = condition_slot.get_child(0) as Control
-	elif ResourceLoader.exists(RepairConditionScenePath):
-		var packed := load(RepairConditionScenePath) as PackedScene
-		if packed != null:
-			condition_view = packed.instantiate() as Control
-			condition_slot.add_child(condition_view)
 
 
 func _sync_condition_view() -> void:
@@ -408,6 +441,7 @@ func _ready() -> void:
 		sm.popup_opened.connect(_on_popup_opened)
 	_update_layout()
 	_refresh()
+	_maybe_auto_show_spin_demo()
 	_emit_stage_if_changed()
 	if not _allow_full_preview and equipment != null and Gestures.pick_repair_tool(equipment, _acquired_tools(), tool) == &"":
 		call_deferred("_request_close")
@@ -415,18 +449,24 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	var keep_processing := false
-	if _stage_hint_active:
-		_stage_hint_phase = fmod(_stage_hint_phase + delta * 0.85, 1.0)
-		keep_processing = true
+	if _stage_hint_active and not _dragging and not bool(_learned_gestures.get(active_kind, false)) and _stage_hint_passes < STAGE_HINT_MAX_PASSES:
+		var next_phase := _stage_hint_phase + delta * 0.78
+		if next_phase >= 1.0:
+			_stage_hint_passes += floorf(next_phase)
+			_stage_hint_phase = fmod(next_phase, 1.0)
+		else:
+			_stage_hint_phase = next_phase
+		if _stage_hint_passes < STAGE_HINT_MAX_PASSES:
+			keep_processing = true
 	if _completion_flash_until_usec > 0:
 		if Time.get_ticks_usec() < _completion_flash_until_usec:
 			keep_processing = true
 		else:
 			_completion_flash_until_usec = 0
 			_completion_flash_op = {}
-	if _switch_transition_alpha < 0.999 or _switch_transition_offset.length() > 0.2:
-		_switch_transition_alpha = move_toward(_switch_transition_alpha, 1.0, delta * 5.0)
-		_switch_transition_offset = _switch_transition_offset.move_toward(Vector2.ZERO, delta * 120.0)
+	if not _dragging and (_switch_transition_alpha < 0.999 or _switch_transition_offset.length() > 0.2):
+		_switch_transition_alpha = move_toward(_switch_transition_alpha, 1.0, delta * 5.5)
+		_switch_transition_offset = _switch_transition_offset.move_toward(Vector2.ZERO, delta * 130.0)
 		if viewport_container != null:
 			viewport_container.modulate.a = _switch_transition_alpha
 			viewport_container.position = _board_offset() + _switch_transition_offset
@@ -448,9 +488,35 @@ func _populate_tool_models() -> void:
 		holder.add_child(inst)
 		if key == "cone":
 			_attach_heat_bellows_open_mechanisms(holder)
+		_apply_instance_translucency(holder)
 		holder.visible = false
 		sub_viewport.add_child(holder)
 		model_instances[key] = holder
+
+
+# Applies mild per-instance translucency (depth pre-pass, no glow) without mutating shared GLB Mesh resources.
+func _apply_instance_translucency(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mi := node as MeshInstance3D
+		if mi.material_override is BaseMaterial3D:
+			var dup_over := (mi.material_override as BaseMaterial3D).duplicate() as BaseMaterial3D
+			_configure_translucent_material(dup_over)
+			mi.material_override = dup_over
+		elif mi.mesh != null:
+			for s_idx in range(mi.mesh.get_surface_count()):
+				var active_mat := mi.get_active_material(s_idx)
+				if active_mat is BaseMaterial3D:
+					var dup_mat := (active_mat as BaseMaterial3D).duplicate() as BaseMaterial3D
+					_configure_translucent_material(dup_mat)
+					mi.set_surface_override_material(s_idx, dup_mat)
+	for child in node.get_children():
+		_apply_instance_translucency(child)
+
+
+func _configure_translucent_material(mat: BaseMaterial3D) -> void:
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+	mat.albedo_color.a = clampf(mat.albedo_color.a * MODEL_TRANSLUCENCY_ALPHA, 0.72, MODEL_TRANSLUCENCY_ALPHA)
+	mat.emission_enabled = false
 
 
 func _attach_heat_bellows_open_mechanisms(holder: Node3D) -> void:
@@ -466,15 +532,13 @@ func _attach_heat_bellows_open_mechanisms(holder: Node3D) -> void:
 	slate_mat.roughness = 0.55
 
 	var coil_mat := StandardMaterial3D.new()
-	coil_mat.albedo_color = Color(0.96, 0.54, 0.26, 1.0)
-	coil_mat.emission_enabled = true
-	coil_mat.emission = Color(0.95, 0.45, 0.18, 1.0)
-	coil_mat.emission_energy_multiplier = 0.55
+	coil_mat.albedo_color = Color(0.94, 0.56, 0.32, 1.0)
+	coil_mat.roughness = 0.38
 
-	# Rear intake fan rotor inside open housing
+	# Rear intake fan rotor inside open housing (+X camera-facing side under Y = -112 deg)
 	var rotor := Node3D.new()
 	rotor.name = "Intake_Fan_Rotor"
-	rotor.position = Vector3(-0.065, 0.188, 0.048)
+	rotor.position = Vector3(0.065, 0.188, 0.048)
 	var hub := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.018
@@ -501,15 +565,15 @@ func _attach_heat_bellows_open_mechanisms(holder: Node3D) -> void:
 	cover_mesh.bottom_radius = 0.052
 	cover_mesh.height = 0.008
 	cover.mesh = cover_mesh
-	cover.position = Vector3(-0.045, 0.238, 0.095)
-	cover.rotation_degrees = Vector3(-68.0, 0.0, 12.0)
+	cover.position = Vector3(0.045, 0.238, 0.095)
+	cover.rotation_degrees = Vector3(-68.0, 0.0, -12.0)
 	cover.material_override = slate_mat
 	holder.add_child(cover)
 
 	# Hinged open front nozzle grille & exposed heating coil bars
 	var grille := Node3D.new()
 	grille.name = "Open_Front_Grille"
-	grille.position = Vector3(-0.088, 0.100, -0.485)
+	grille.position = Vector3(0.088, 0.100, -0.485)
 	for y_off in [0.052, -0.058]:
 		var coil := MeshInstance3D.new()
 		var cmesh := BoxMesh.new()
@@ -534,12 +598,14 @@ func _update_3d_backdrop() -> void:
 		var holder: Node3D = model_instances[key]
 		holder.visible = (key == active_key)
 		if holder.visible:
-			holder.position = spec["model_pos"]
-			holder.rotation_degrees = spec["model_rot_deg"]
+			if not _dragging:
+				holder.position = spec["model_pos"]
+				holder.rotation_degrees = spec["model_rot_deg"]
 			_animate_model_parts(holder, spec)
-	preview_cam.position = spec["cam_pos"]
-	preview_cam.size = float(spec["cam_size"])
-	preview_cam.look_at_from_position(preview_cam.position, spec["cam_target"], Vector3.UP)
+	if not _dragging:
+		preview_cam.position = spec["cam_pos"]
+		preview_cam.size = float(spec["cam_size"])
+		preview_cam.look_at_from_position(preview_cam.position, spec["cam_target"], Vector3.UP)
 
 
 static func _rotate_node_around_pivot(node: Node3D, pivot: Vector3, axis: Vector3, angle: float) -> void:
@@ -567,7 +633,7 @@ func _animate_model_parts(holder: Node3D, spec: Dictionary) -> void:
 
 
 func _update_layout() -> void:
-	if panel == null:
+	if panel == null or _dragging:
 		return
 	if preview_rect.size.x > 0.0 and preview_rect.size.y > 0.0:
 		panel.position = preview_rect.position
@@ -586,7 +652,7 @@ func _update_layout() -> void:
 
 func _style_prompt(label: Label, font_size: int) -> void:
 	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", INK)
+	label.add_theme_color_override("font_color", GUIDE)
 	label.add_theme_color_override("font_outline_color", Color(0.015, 0.025, 0.035, 0.95))
 	label.add_theme_constant_override("outline_size", 6)
 	label.add_theme_color_override("font_shadow_color", Color.BLACK)
@@ -594,17 +660,13 @@ func _style_prompt(label: Label, font_size: int) -> void:
 
 
 func _sync_tool_canvas() -> void:
-	if board == null or viewport_container == null:
+	if board == null or viewport_container == null or _dragging:
 		return
 	var b_offset := _board_offset()
 	var b_scale := _board_scale()
 	viewport_container.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	viewport_container.position = b_offset + _switch_transition_offset
 	viewport_container.size = BOARD * b_scale
-	if condition_slot != null:
-		var cond_scale := clampf(b_scale * 0.54, 0.34, 0.68)
-		condition_slot.position = b_offset + Vector2(6.0, 4.0) * b_scale
-		condition_slot.scale = Vector2.ONE * cond_scale
 	_queue_redraws()
 
 
@@ -629,20 +691,21 @@ func _refresh() -> void:
 	if board == null or equipment == null:
 		return
 	_update_3d_backdrop()
-	_rebuild_routes_for_tool(tool)
+	if not _dragging:
+		_rebuild_routes_for_tool(tool)
 	_sync_condition_view()
 	var spec := Gestures.tool_spec(tool)
 	var cap: float = equipment.capacity(tool)
 	var rem: float = equipment.remaining(tool)
 	var cond: float = equipment.condition(tool)
 	var full: bool = equipment.is_full(tool)
-	heading.text = "Repair · " + String(spec["title"])
+	heading.text = String(spec["title"])
 	if full:
 		active_op_index = 3
 		active_op = projected_operations[2]
 		active_kind = active_op["kind"]
-		progress.text = "Ready · %.1f / %.1f" % [rem, cap]
-		instructions.text = "All mechanisms aligned and ready. Tab / 1–3 switch tools · E or Esc close."
+		progress.text = "Ready"
+		instructions.text = "Ready"
 		solved_path.assign(full_path)
 		missing_path.clear()
 		future_missing_path.clear()
@@ -653,7 +716,7 @@ func _refresh() -> void:
 		active_op_index = Gestures.operation_index_for_stage(s)
 		active_op = projected_operations[clampi(active_op_index, 0, projected_operations.size() - 1)]
 		active_kind = active_op["kind"]
-		progress.text = "Step %d/3 · %d / %d checkpoints · %.1f / %.1f" % [active_op_index + 1, s, steps, rem, cap]
+		progress.text = "Step %d/3" % (active_op_index + 1)
 		if _stage_hint_active and _stage_hint_prompt != "":
 			instructions.text = _stage_hint_prompt
 		else:
@@ -664,7 +727,10 @@ func _refresh() -> void:
 		var q_end := float(s + 1) / float(steps)
 		future_missing_path = _slice_polyline(full_path, q_end, 1.0)
 		local_intact_ratio = clampf((cond - q_start) / maxf(0.0001, q_end - q_start), 0.0, 1.0)
-		_prepare_active_operation_geometry(s, local_intact_ratio)
+		if not _dragging:
+			_prepare_active_operation_geometry(s, local_intact_ratio)
+		if active_kind == &"trace" and route.size() >= 2 and route.size() != 4 and not (_stage_hint_active and _stage_hint_prompt != ""):
+			instructions.text = instructions.text.replace("1 to 4", "1 to %d" % route.size())
 	meter.max_value = cap
 	meter.value = rem
 	_queue_redraws()
@@ -680,10 +746,7 @@ func _prepare_active_operation_geometry(stage_idx: int, local_intact: float) -> 
 		else:
 			route = _slice_polyline(base_route, minf(local_intact, 0.82), 1.0)
 	elif active_kind == &"trace":
-		if local_intact <= 0.0001:
-			route.assign(base_route)
-		else:
-			route = _slice_polyline(base_route, minf(local_intact, 0.82), 1.0, CONTACT * 1.35)
+		route.assign(base_route)
 	elif active_kind == &"connect":
 		connected_pairs.clear()
 		if stage_idx == 3:
@@ -780,31 +843,10 @@ func _board_offset() -> Vector2:
 	return (board.size - BOARD * _board_scale()) * 0.5
 
 
-func _try_click_tool_chip(board_pt: Vector2) -> bool:
-	var acquired := _acquired_tools()
-	if acquired.size() <= 1:
-		return false
-	for i in range(acquired.size()):
-		var chip_rect := _tool_chip_rect(i)
-		if chip_rect.has_point(board_pt):
-			var slot_idx := TOOL_ORDER.find(acquired[i]) + 1
-			_select_acquired_tool_index(slot_idx)
-			return true
-	return false
-
-
-func _tool_chip_rect(index_in_acquired: int) -> Rect2:
-	return Rect2(Vector2(8.0 + float(index_in_acquired) * 58.0, BOARD.y - 28.0), Vector2(54.0, 22.0))
-
-
 func _on_board_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var click_pt: Vector2 = (event.position - _board_offset()) / _board_scale()
-		if not dragging and _try_click_tool_chip(click_pt):
-			return
 	if not _can_trace():
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and equipment != null and equipment.is_full(tool):
-			feedback.text = "Ready · Tab / 1–3 switch tools · E or Esc close."
+			feedback.text = "Ready · Tab / 1–3 switch · E / Esc close"
 			_queue_redraws()
 		else:
 			_clear_trace()
@@ -856,7 +898,7 @@ func _handle_spin_button(point: Vector2, pressed: bool) -> void:
 		elif not keep_bank:
 			spin_grip_angle = float(active_op.get("start_angle", -PI * 0.5))
 		var pct := int(round(clampf(spin_accum / maxf(0.01, spin_required), 0.0, 1.0) * 100.0))
-		feedback.text = ("Continue spinning (%d%%) in either direction." % pct) if pct > 0 else "Drag around the mechanism in either direction to spin."
+		feedback.text = ("Continue spinning (%d%%)." % pct) if pct > 0 else "Spin in either direction."
 	elif dragging:
 		_extend_spin(point)
 		if dragging:
@@ -911,6 +953,8 @@ func _extend_spin(finish: Vector2) -> void:
 	spin_accum = spin_base_accum + spin_stroke_accum
 	if spin_stroke_dir != 0.0:
 		spin_locked_dir = spin_stroke_dir
+	if spin_accum >= spin_required * 0.35:
+		_learned_gestures[&"spin"] = true
 	# 1:1 angular correspondence between gesture rotation and 3D part rotation
 	spin_visual_angle = _completed_spin_angle + (spin_locked_dir if spin_locked_dir != 0.0 else 1.0) * spin_accum
 	_update_3d_backdrop()
@@ -938,7 +982,7 @@ func _handle_trace_button(point: Vector2, pressed: bool) -> void:
 		dragging = true
 		trace_stage = equipment.stage(tool)
 		stroke = [point]
-		feedback.text = "Follow the trace channel in order; release at the end mark."
+		feedback.text = "Trace in order and release at the end mark."
 	elif dragging:
 		_extend_trace(point)
 		if dragging:
@@ -965,6 +1009,8 @@ func _extend_trace(finish: Vector2) -> void:
 			return
 		if next_contact < route.size() and point.distance_to(route[next_contact]) <= CONTACT:
 			next_contact += 1
+			if next_contact >= 2:
+				_learned_gestures[&"trace"] = true
 			if next_contact == route.size():
 				feedback.text = "All contacts joined. Release inside the end circle."
 		if stroke[-1].distance_to(point) >= 3.0:
@@ -1071,6 +1117,7 @@ func _commit_connect_pairs(pair_indices: Array[int]) -> void:
 			added_indices.append(idx)
 	if added_indices.is_empty():
 		return
+	_learned_gestures[&"connect"] = true
 	if active_op_index == 2:
 		var committed := _commit_steps(added_indices.size())
 		if committed < added_indices.size():
@@ -1102,6 +1149,7 @@ func _commit_steps(step_count: int) -> int:
 		_clear_trace()
 		return 0
 	var completed_op_snapshot := active_op.duplicate(true)
+	var completed_kind := active_kind
 	var tc := _resolve_time_controller()
 	var total_restored := 0.0
 	var committed_steps := 0
@@ -1130,10 +1178,9 @@ func _commit_steps(step_count: int) -> int:
 		else:
 			_clear_trace()
 		return 0
-	if active_kind == &"spin":
+	_learned_gestures[completed_kind] = true
+	if completed_kind == &"spin":
 		_completed_spin_angle += (spin_locked_dir if spin_locked_dir != 0.0 else 1.0) * maxf(spin_accum, spin_required)
-	else:
-		_completed_spin_angle += 0.65
 	_completion_flash_op = completed_op_snapshot
 	_completion_flash_until_usec = Time.get_ticks_usec() + int(COMPLETION_FLASH_DURATION_SEC * 1000000.0)
 	set_process(true)
@@ -1158,11 +1205,11 @@ func _commit_steps(step_count: int) -> int:
 			feedback.text = "All owned tools repaired!"
 			_request_close()
 		else:
-			feedback.text = "Ready. Repair complete · Tab / 1–3 switch tools · E or Esc close."
+			feedback.text = "Ready · Tab / 1–3 switch · E / Esc close"
 	elif blocked_by_time:
 		feedback.text = "Checkpoint complete (+%.1f). Let time recharge for next checkpoint." % total_restored
 	else:
-		feedback.text = "Stage locked (+%.1f). Next mechanism ready immediately · E or Esc close." % total_restored
+		feedback.text = "Checkpoint complete (+%.1f) · Next step ready." % total_restored
 	return committed_steps
 
 
@@ -1183,97 +1230,59 @@ func _draw_overlay() -> void:
 		return
 	overlay.draw_set_transform(_board_offset(), 0, Vector2.ONE * _board_scale())
 	var full := equipment.is_full(tool)
-	# Draw all 3 operations on the 3D weapon so intact (done), active, and future-missing parts are all clear.
-	for op_idx in range(projected_operations.size()):
-		if not full and op_idx == active_op_index:
-			continue
-		var op: Dictionary = projected_operations[op_idx]
-		var is_done := full or (op_idx < active_op_index)
-		_draw_operation_layer(op, is_done, false)
-
+	# Draw ONLY the current actionable repair UI. No future/completed operation badges or lines behind it.
 	if not full:
 		_draw_operation_layer(active_op, false, true)
-		if _stage_hint_active:
+		if _stage_hint_active and not _dragging and not bool(_learned_gestures.get(active_kind, false)) and _stage_hint_passes < STAGE_HINT_MAX_PASSES:
 			_draw_stage_hint_overlay(active_op)
 	else:
-		var spec := Gestures.tool_spec(tool)
-		_draw_badge(Vector2(174.0, 12.0), String(spec["title"]).to_upper() + " · ALL PARTS INTACT ✓", GREEN)
+		_draw_badge(Vector2(214.0, 14.0), "READY ✓", GUIDE)
 
 	if _completion_flash_until_usec > Time.get_ticks_usec() and not _completion_flash_op.is_empty():
 		var rem_sec := float(_completion_flash_until_usec - Time.get_ticks_usec()) / 1000000.0
 		var flash_t := clampf(rem_sec / COMPLETION_FLASH_DURATION_SEC, 0.0, 1.0)
 		_draw_completion_flash(_completion_flash_op, flash_t)
 
-	_draw_owned_tool_silhouettes()
-
 
 func _draw_operation_layer(op: Dictionary, is_done: bool, is_active: bool) -> void:
+	if not is_active and not is_done:
+		return
 	var kind: StringName = op["kind"]
 	if kind == &"spin":
-		_draw_spin_operation(op, is_done, is_active)
+		_draw_spin_operation(op)
 	elif kind == &"trace":
-		_draw_trace_operation(op, is_done, is_active)
+		_draw_trace_operation(op)
 	elif kind == &"connect":
-		_draw_connect_operation(op, is_done, is_active)
+		_draw_connect_operation(op)
 
 
-func _draw_leader_line(badge_pos: Vector2, badge_w: float, target_pt: Vector2, col: Color, dashed: bool = false) -> void:
-	var rect := Rect2(badge_pos, Vector2(badge_w, 20.0))
-	var anchor := Vector2(
-		clampf(target_pt.x, rect.position.x + 6.0, rect.end.x - 6.0),
-		rect.position.y if target_pt.y < rect.position.y else (rect.end.y if target_pt.y > rect.end.y else rect.get_center().y)
-	)
-	if anchor.distance_to(target_pt) < 8.0:
-		return
-	overlay.draw_line(anchor, target_pt, Color(0.01, 0.02, 0.04, 0.82), 4.0, true)
-	if dashed:
-		overlay.draw_dashed_line(anchor, target_pt, col, 1.6, 5.0, true)
-	else:
-		overlay.draw_line(anchor, target_pt, col, 1.8, true)
-	overlay.draw_circle(target_pt, 3.2, col)
-
-
-func _draw_spin_operation(op: Dictionary, is_done: bool, is_active: bool) -> void:
+func _draw_spin_operation(op: Dictionary) -> void:
 	var center: Vector2 = op["center"]
 	var radius: float = float(op["radius"])
 	var start_ang: float = float(op["start_angle"])
 	var dir: float = float(op["dir"])
-	var bpos: Vector2 = op.get("badge_pos", center + Vector2(-42.0, -radius - 24.0))
-	var leader_pt: Vector2 = op.get("leader_target", center)
-	if is_done:
-		overlay.draw_arc(center, radius, 0.0, TAU, 32, DARK_BACKING, 8.0, true)
-		overlay.draw_arc(center, radius, 0.0, TAU, 32, GREEN, 3.5, true)
-		_draw_badge(bpos, String(op["tag"]) + " ✓", GREEN, leader_pt)
-		return
-	if not is_active:
-		overlay.draw_arc(center, radius, 0.0, TAU, 28, DARK_BACKING, 6.0, true)
-		overlay.draw_arc(center, radius, 0.0, TAU, 28, MISSING_DIM, 2.0, true)
-		_draw_badge(bpos, String(op["tag"]) + " · MISSING", MISSING_DIM, leader_pt, true)
-		return
+	var bpos: Vector2 = op.get("badge_pos", center + Vector2(-42.0, -radius - 28.0))
 
-	var ring_col := RED if trace_bad else PURPLE
-	# High-contrast backing halo over the 3D model
-	overlay.draw_arc(center, radius + 18.0, 0.0, TAU, 36, Color(0.65, 0.48, 0.92, 0.22), 2.0, true)
-	overlay.draw_arc(center, radius, 0.0, TAU, 36, DARK_BACKING, 16.0, true)
-	overlay.draw_arc(center, radius, 0.0, TAU, 36, Color(ring_col, 0.45), 8.0, true)
-	overlay.draw_arc(center, radius, 0.0, TAU, 36, ring_col, 3.2, true)
+	var ring_col := RED if trace_bad else GUIDE
+	overlay.draw_arc(center, radius, 0.0, TAU, 36, DARK_BACKING, 15.0, true)
+	overlay.draw_arc(center, radius, 0.0, TAU, 36, GUIDE_TRACK, 7.0, true)
+	overlay.draw_arc(center, radius, 0.0, TAU, 36, ring_col, 2.6, true)
 
-	# Show already-intact partial arc in solid GREEN if partially worn
 	if local_intact_ratio > 0.02:
 		var intact_end := start_ang + dir * Gestures.SPIN_FULL_RADIANS * minf(local_intact_ratio, 0.82)
-		overlay.draw_arc(center, radius, start_ang, intact_end, 20, GREEN, 5.5, true)
+		overlay.draw_arc(center, radius, start_ang, intact_end, 20, GUIDE_MUTED, 5.0, true)
 
 	var prog_frac := clampf(spin_accum / maxf(0.01, spin_required), 0.0, 1.0)
 	var base_ang := spin_grip_angle if (dragging or prog_frac > 0.01) else start_ang
 	var use_dir := spin_locked_dir if spin_locked_dir != 0.0 else dir
 	var head_ang := base_ang + use_dir * spin_required * prog_frac
 	if prog_frac > 0.01:
-		overlay.draw_arc(center, radius, base_ang, head_ang, 28, GREEN, 6.5, true)
+		overlay.draw_arc(center, radius, base_ang, head_ang, 28, GUIDE_BRIGHT, 6.0, true)
 
 	var handle_pt := center + Vector2(cos(head_ang), sin(head_ang)) * radius
-	overlay.draw_circle(handle_pt, 10.5, DARK_BACKING)
-	overlay.draw_circle(handle_pt, 8.5, GREEN if (dragging or prog_frac > 0.01) else INK)
-	overlay.draw_arc(handle_pt, 9.5, 0.0, TAU, 16, ring_col, 2.2, true)
+	overlay.draw_circle(handle_pt, 10.0, DARK_BACKING)
+	overlay.draw_circle(handle_pt, 8.0, GUIDE_BRIGHT if (dragging or prog_frac > 0.01) else GUIDE)
+	overlay.draw_arc(handle_pt, 9.0, 0.0, TAU, 16, ring_col, 2.0, true)
 
 	var dirs_to_draw: Array = [use_dir] if spin_locked_dir != 0.0 else [1.0, -1.0]
 	for d_sign in dirs_to_draw:
@@ -1282,151 +1291,116 @@ func _draw_spin_operation(op: Dictionary, is_done: bool, is_active: bool) -> voi
 		var tang := Vector2(-sin(arrow_ang), cos(arrow_ang)) * float(d_sign)
 		var norm := Vector2(cos(arrow_ang), sin(arrow_ang))
 		var tri := PackedVector2Array([
-			arrow_tip + tang * 10.5,
-			arrow_tip - tang * 6.0 + norm * 6.8,
-			arrow_tip - tang * 6.0 - norm * 6.8,
+			arrow_tip + tang * 10.0,
+			arrow_tip - tang * 5.8 + norm * 6.4,
+			arrow_tip - tang * 5.8 - norm * 6.4,
 		])
-		overlay.draw_colored_polygon(tri, GREEN if prog_frac >= 0.98 else ring_col)
+		overlay.draw_colored_polygon(tri, GUIDE_BRIGHT if prog_frac >= 0.98 else ring_col)
 
-	var tag_txt := String(op["tag"])
+	var tag_txt := String(op.get("tag", "SPIN"))
 	if prog_frac > 0.01:
 		tag_txt += " · %d%%" % int(round(prog_frac * 100.0))
-	_draw_badge(bpos, tag_txt, GREEN if prog_frac > 0.01 else ring_col, leader_pt)
+	_draw_badge(bpos, tag_txt, ring_col)
 
 
-func _draw_trace_operation(op: Dictionary, is_done: bool, is_active: bool) -> void:
+func _draw_trace_operation(op: Dictionary) -> void:
 	var full_pts: Array[Vector2] = []
 	full_pts.assign(op["points"])
 	var bpos: Vector2 = op.get("badge_pos", full_pts[0] + Vector2(-24.0, -28.0))
-	var leader_pt: Vector2 = op.get("leader_target", full_pts[0])
-	if is_done:
-		for i in range(full_pts.size() - 1):
-			overlay.draw_line(full_pts[i], full_pts[i + 1], DARK_BACKING, 11.0, true)
-		overlay.draw_polyline(PackedVector2Array(full_pts), GREEN, 4.0, true)
-		_draw_badge(bpos, String(op["tag"]) + " ✓", GREEN, leader_pt)
-		return
-	if not is_active:
-		for i in range(full_pts.size() - 1):
-			overlay.draw_line(full_pts[i], full_pts[i + 1], DARK_BACKING, 7.0, true)
-			overlay.draw_dashed_line(full_pts[i], full_pts[i + 1], MISSING_DIM, 2.2, 6.0, true)
-		overlay.draw_circle(full_pts[0], 6.0, MISSING_DIM)
-		overlay.draw_circle(full_pts[-1], 6.0, MISSING_DIM)
-		_draw_badge(bpos, String(op["tag"]) + " · MISSING", MISSING_DIM, leader_pt, true)
-		return
 
-	# Clearly show intact portion in solid GREEN vs missing portion in high-contrast channel
 	if route.size() >= 2 and full_pts.size() >= 2 and route[0].distance_to(full_pts[0]) > 2.0:
 		var intact_slice := _slice_polyline(full_pts, 0.0, 0.5)
 		if intact_slice.size() >= 2:
 			for i in range(intact_slice.size() - 1):
-				overlay.draw_line(intact_slice[i], intact_slice[i + 1], DARK_BACKING, 12.0, true)
-			overlay.draw_polyline(PackedVector2Array(intact_slice), GREEN, 4.5, true)
-			overlay.draw_circle(intact_slice[0], 7.5, GREEN)
+				overlay.draw_line(intact_slice[i], intact_slice[i + 1], DARK_BACKING, 11.0, true)
+			overlay.draw_polyline(PackedVector2Array(intact_slice), GUIDE_MUTED, 4.0, true)
 
+	var guide_col := RED if trace_bad else GUIDE
 	for i in range(route.size() - 1):
-		overlay.draw_line(route[i], route[i + 1], DARK_BACKING, CORRIDOR * 1.45, true)
-		overlay.draw_line(route[i], route[i + 1], Color(0.10, 0.28, 0.42, 0.88), CORRIDOR * 1.15, true)
-		overlay.draw_dashed_line(route[i], route[i + 1], BLUE.lightened(0.18), 2.6, 7.0, true)
+		overlay.draw_line(route[i], route[i + 1], DARK_BACKING, CORRIDOR * 1.35, true)
+		overlay.draw_line(route[i], route[i + 1], Color(0.16, 0.17, 0.19, 0.72), CORRIDOR * 1.05, true)
+		overlay.draw_dashed_line(route[i], route[i + 1], guide_col, 2.4, 7.0, true)
 	if stroke.size() > 1:
-		overlay.draw_polyline(PackedVector2Array(stroke), RED if trace_bad else GREEN, 4.5, true)
+		overlay.draw_polyline(PackedVector2Array(stroke), RED if trace_bad else GUIDE_BRIGHT, 4.2, true)
 	for i in range(route.size()):
-		var c_col := GREEN if (dragging and i < next_contact) else BLUE
-		overlay.draw_circle(route[i], 14.5, DARK_BACKING)
-		overlay.draw_circle(route[i], 12.5, c_col.darkened(0.62))
-		overlay.draw_arc(route[i], 12.5, 0.0, TAU, 20, c_col, 2.6, true)
-		overlay.draw_string(ThemeDB.fallback_font, route[i] + Vector2(-4.0, 5.0), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, INK)
+		var reached := dragging and i < next_contact
+		var c_col := GUIDE_BRIGHT if reached else guide_col
+		overlay.draw_circle(route[i], 14.0, DARK_BACKING)
+		overlay.draw_circle(route[i], 12.0, Color(0.18, 0.18, 0.20, 0.94) if not reached else Color(0.32, 0.30, 0.26, 0.94))
+		overlay.draw_arc(route[i], 12.0, 0.0, TAU, 20, c_col, 2.4, true)
+		overlay.draw_string(ThemeDB.fallback_font, route[i] + Vector2(-4.0, 5.0), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, GUIDE_BRIGHT)
 
-	_draw_badge(bpos, String(op["tag"]), GREEN if (dragging and next_contact > 1) else BLUE, leader_pt)
+	_draw_badge(bpos, String(op.get("tag", "TRACE")), guide_col)
 
 
-func _draw_connect_operation(op: Dictionary, is_done: bool, is_active: bool) -> void:
+func _draw_connect_operation(op: Dictionary) -> void:
 	var pairs: Array = op["pairs"]
 	var first_pos: Vector2 = pairs[0]["a"]
 	var bpos: Vector2 = op.get("badge_pos", first_pos + Vector2(-20.0, -32.0))
-	var leader_pt: Vector2 = op.get("leader_target", first_pos)
-	if is_done:
-		for p in pairs:
-			overlay.draw_line(p["a"], p["b"], DARK_BACKING, 8.0, true)
-			overlay.draw_line(p["a"], p["b"], GREEN, 3.8, true)
-			_draw_terminal_node(p["a"], p["shape"], p["label"], GREEN, true)
-			_draw_terminal_node(p["b"], p["shape"], p["label"], GREEN, true)
-		_draw_badge(bpos, String(op["tag"]) + " ✓", GREEN, leader_pt)
-		return
-	if not is_active:
-		for p in pairs:
-			overlay.draw_line(p["a"], p["b"], DARK_BACKING, 6.0, true)
-			overlay.draw_dashed_line(p["a"], p["b"], MISSING_DIM, 2.0, 6.0, true)
-			_draw_terminal_node(p["a"], p["shape"], p["label"], MISSING_DIM, false)
-			_draw_terminal_node(p["b"], p["shape"], p["label"], MISSING_DIM, false)
-		_draw_badge(bpos, String(op["tag"]) + " · MISSING", MISSING_DIM, leader_pt, true)
-		return
 
 	for pair_idx in range(pairs.size()):
 		var p: Dictionary = pairs[pair_idx]
 		var pair_done := pair_idx in connected_pairs
 		var pair_selected := not selected_terminal.is_empty() and int(selected_terminal["pair_index"]) == pair_idx
-		var pair_color := BLUE if p["shape"] == &"triangle" else YELLOW
-		var col := GREEN if pair_done else pair_color
-		overlay.draw_line(p["a"], p["b"], DARK_BACKING, 9.0, true)
+		var col := GUIDE_BRIGHT if pair_done else GUIDE
+		overlay.draw_line(p["a"], p["b"], DARK_BACKING, 8.5, true)
 		if pair_done:
-			overlay.draw_line(p["a"], p["b"], GREEN, 4.0, true)
+			overlay.draw_line(p["a"], p["b"], GUIDE_BRIGHT, 3.8, true)
 		else:
-			overlay.draw_dashed_line(p["a"], p["b"], Color(col, 0.78 if pair_selected else 0.48), 2.2, 6.0, true)
+			overlay.draw_dashed_line(p["a"], p["b"], Color(col, 0.80 if pair_selected else 0.44), 2.0, 6.0, true)
 		for side in ["a", "b"]:
 			var is_sel: bool = pair_selected and String(selected_terminal["side"]) == side
-			var t_col := GREEN if (pair_done or is_sel) else (RED if trace_bad else col)
+			var t_col := GUIDE_BRIGHT if (pair_done or is_sel) else (RED if trace_bad else col)
 			if pair_selected and not is_sel:
-				overlay.draw_arc(p[side], 19.0, 0.0, TAU, 28, Color(col, 0.85), 2.4, true)
+				overlay.draw_arc(p[side], 18.0, 0.0, TAU, 28, Color(GUIDE_BRIGHT, 0.85), 2.2, true)
 			_draw_terminal_node(p[side], p["shape"], p["label"], t_col, pair_done or is_sel)
 
 	if stroke.size() > 1:
-		overlay.draw_polyline(PackedVector2Array(stroke), RED if trace_bad else GREEN, 4.0, true)
+		overlay.draw_polyline(PackedVector2Array(stroke), RED if trace_bad else GUIDE_BRIGHT, 3.8, true)
 
-	var status_suffix := " · %d/%d" % [connected_pairs.size(), pairs.size()] if not connected_pairs.is_empty() else ""
-	_draw_badge(bpos, String(op["tag"]) + status_suffix, GREEN if not connected_pairs.is_empty() else YELLOW, leader_pt)
+	_draw_badge(bpos, String(op.get("tag", "CONNECT")), RED if trace_bad else GUIDE)
 
 
 func _draw_terminal_node(pos: Vector2, shape: StringName, _label_txt: String, col: Color, filled: bool) -> void:
 	overlay.draw_circle(pos, 13.5, DARK_BACKING)
-	overlay.draw_arc(pos, 12.5, 0.0, TAU, 24, col, 2.2, true)
+	overlay.draw_arc(pos, 12.2, 0.0, TAU, 24, col, 2.2, true)
 	var points := PackedVector2Array()
 	if shape == &"triangle":
-		points = PackedVector2Array([pos + Vector2(0, -8.5), pos + Vector2(-7.5, 6.5), pos + Vector2(7.5, 6.5)])
+		points = PackedVector2Array([pos + Vector2(0, -8.2), pos + Vector2(-7.2, 6.2), pos + Vector2(7.2, 6.2)])
 	else:
-		points = PackedVector2Array([pos + Vector2(-6.5, -6.5), pos + Vector2(6.5, -6.5), pos + Vector2(6.5, 6.5), pos + Vector2(-6.5, 6.5)])
+		points = PackedVector2Array([pos + Vector2(-6.2, -6.2), pos + Vector2(6.2, -6.2), pos + Vector2(6.2, 6.2), pos + Vector2(-6.2, 6.2)])
 	if filled:
 		overlay.draw_colored_polygon(points, col)
 	else:
-		overlay.draw_colored_polygon(points, Color(col, 0.22))
+		overlay.draw_colored_polygon(points, Color(col, 0.20))
 	points.append(points[0])
-	overlay.draw_polyline(points, col, 2.5, true)
+	overlay.draw_polyline(points, col, 2.4, true)
 
 
 func _draw_completion_flash(op: Dictionary, flash_t: float) -> void:
 	var alpha := clampf(flash_t, 0.0, 1.0)
-	var flash_col := Color(GREEN.r, GREEN.g, GREEN.b, alpha * 0.88)
+	var flash_col := Color(GUIDE_BRIGHT.r, GUIDE_BRIGHT.g, GUIDE_BRIGHT.b, alpha * 0.90)
 	var kind := StringName(op.get("kind", &"spin"))
 	var anchor := Vector2(BOARD.x * 0.5, BOARD.y * 0.5)
 	if kind == &"spin":
 		anchor = op.get("center", anchor)
-		var r := float(op.get("radius", 32.0)) + (1.0 - flash_t) * 22.0
-		overlay.draw_arc(anchor, r, 0.0, TAU, 36, flash_col, 5.0, true)
 	elif kind == &"connect":
 		var pairs: Array = op.get("pairs", [])
-		for p in pairs:
-			overlay.draw_line(p["a"], p["b"], flash_col, 7.0, true)
-			overlay.draw_arc(p["a"], 16.0 + (1.0 - flash_t) * 10.0, 0.0, TAU, 20, flash_col, 3.0, true)
-			overlay.draw_arc(p["b"], 16.0 + (1.0 - flash_t) * 10.0, 0.0, TAU, 20, flash_col, 3.0, true)
+		if not pairs.is_empty():
+			anchor = Vector2(pairs[0]["a"]).lerp(Vector2(pairs[0]["b"]), 0.5)
 	elif kind == &"trace":
 		var pts: Array[Vector2] = []
 		pts.assign(op.get("points", []))
-		if pts.size() >= 2:
-			overlay.draw_polyline(PackedVector2Array(pts), flash_col, 8.0, true)
+		if not pts.is_empty():
+			anchor = pts[pts.size() / 2]
+	overlay.draw_circle(anchor, 11.0, Color(DARK_BACKING.r, DARK_BACKING.g, DARK_BACKING.b, alpha * 0.82))
+	overlay.draw_arc(anchor, 11.0, 0.0, TAU, 20, flash_col, 1.8, true)
+	overlay.draw_string(ThemeDB.fallback_font, anchor + Vector2(-5.0, 5.0), "✓", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, flash_col)
 
 
 func _draw_stage_hint_overlay(op: Dictionary) -> void:
 	var kind := StringName(op.get("kind", &"spin"))
-	var hint_col := Color(1.0, 0.95, 0.68, 0.92)
+	var hint_col := Color(GUIDE_BRIGHT.r, GUIDE_BRIGHT.g, GUIDE_BRIGHT.b, 0.90)
 	var ghost_pos := Vector2.ZERO
 	if kind == &"spin":
 		var center: Vector2 = op["center"]
@@ -1441,7 +1415,7 @@ func _draw_stage_hint_overlay(op: Dictionary) -> void:
 		if not pairs.is_empty():
 			var target_pair: Dictionary = pairs[1] if (0 in connected_pairs and pairs.size() >= 2) else pairs[0]
 			ghost_pos = Vector2(target_pair["a"]).lerp(Vector2(target_pair["b"]), _stage_hint_phase)
-			overlay.draw_dashed_line(target_pair["a"], ghost_pos, hint_col, 2.5, 5.0, true)
+			overlay.draw_dashed_line(target_pair["a"], ghost_pos, hint_col, 2.4, 5.0, true)
 	elif kind == &"trace":
 		if route.size() >= 2:
 			var slice := _slice_polyline(route, 0.0, maxf(0.05, _stage_hint_phase))
@@ -1450,58 +1424,15 @@ func _draw_stage_hint_overlay(op: Dictionary) -> void:
 				if slice.size() >= 2:
 					overlay.draw_polyline(PackedVector2Array(slice), Color(hint_col, 0.65), 3.0, true)
 	if ghost_pos != Vector2.ZERO:
-		overlay.draw_circle(ghost_pos, 9.0, Color(hint_col, 0.28))
-		overlay.draw_arc(ghost_pos, 9.0, 0.0, TAU, 18, hint_col, 2.2, true)
+		overlay.draw_circle(ghost_pos, 8.5, Color(hint_col, 0.26))
+		overlay.draw_arc(ghost_pos, 8.5, 0.0, TAU, 18, hint_col, 2.0, true)
 
 
-func _draw_owned_tool_silhouettes() -> void:
-	var acquired := _acquired_tools()
-	for i in range(acquired.size()):
-		var t_id: StringName = acquired[i]
-		var spec := Gestures.tool_spec(t_id)
-		var accent: Color = spec["accent"]
-		var is_sel := (t_id == tool)
-		var full := equipment.is_full(t_id) if equipment != null else true
-		var rect := _tool_chip_rect(i)
-		overlay.draw_rect(rect, Color(0.04, 0.07, 0.11, 0.94 if is_sel else 0.78), true)
-		overlay.draw_rect(rect, GREEN if full else (accent if is_sel else accent.darkened(0.45)), false, 2.0 if is_sel else 1.2)
-		var icon_c := rect.position + Vector2(13.0, 11.0)
-		var icon_col := GREEN if full else accent
-		if t_id == &"ring":
-			overlay.draw_arc(icon_c, 6.0, 0.0, TAU, 16, icon_col, 1.8, true)
-			overlay.draw_circle(icon_c, 2.0, icon_col)
-		elif t_id == &"beam":
-			overlay.draw_rect(Rect2(icon_c - Vector2(6.0, 4.5), Vector2(9.0, 9.0)), icon_col, false, 1.6)
-			overlay.draw_line(icon_c + Vector2(3.0, 0.0), icon_c + Vector2(7.5, -3.5), icon_col, 1.6, true)
-			overlay.draw_line(icon_c + Vector2(3.0, 0.0), icon_c + Vector2(7.5, 3.5), icon_col, 1.6, true)
-		else:
-			var cone_poly := PackedVector2Array([
-				icon_c + Vector2(-6.5, 0.0),
-				icon_c + Vector2(5.5, -5.5),
-				icon_c + Vector2(5.5, 5.5),
-			])
-			overlay.draw_colored_polygon(cone_poly, Color(icon_col, 0.35))
-			cone_poly.append(cone_poly[0])
-			overlay.draw_polyline(cone_poly, icon_col, 1.6, true)
-		var slot_num := TOOL_ORDER.find(t_id) + 1
-		var cond_pct := int(round((equipment.condition(t_id) if equipment != null else 1.0) * 100.0))
-		overlay.draw_string(
-			ThemeDB.fallback_font,
-			rect.position + Vector2(23.0, 14.5),
-			"%d·%d%%" % [slot_num, cond_pct],
-			HORIZONTAL_ALIGNMENT_LEFT,
-			-1,
-			9,
-			INK if is_sel else INK.darkened(0.22)
-		)
-
-
-func _draw_badge(pos: Vector2, text: String, col: Color, leader_target: Variant = null, dashed_leader: bool = false) -> void:
-	var w := maxf(88.0, float(text.length()) * 7.0 + 14.0)
-	var clamped := Vector2(clampf(pos.x, 8.0, BOARD.x - w - 8.0), clampf(pos.y, 6.0, BOARD.y - 26.0))
-	if leader_target is Vector2:
-		_draw_leader_line(clamped, w, leader_target as Vector2, col, dashed_leader)
-	var rect := Rect2(clamped, Vector2(w, 20.0))
+# Small, subtle neutral verb/part label with no leader line crossing the puzzle.
+func _draw_badge(pos: Vector2, text: String, col: Color) -> void:
+	var w := maxf(72.0, float(text.length()) * 6.5 + 12.0)
+	var clamped := Vector2(clampf(pos.x, 8.0, BOARD.x - w - 8.0), clampf(pos.y, 6.0, BOARD.y - 24.0))
+	var rect := Rect2(clamped, Vector2(w, 18.0))
 	overlay.draw_rect(rect, DARK_BACKING, true)
-	overlay.draw_rect(rect, col, false, 1.6)
-	overlay.draw_string(ThemeDB.fallback_font, clamped + Vector2(6.0, 14.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, INK)
+	overlay.draw_rect(rect, Color(col, 0.72), false, 1.2)
+	overlay.draw_string(ThemeDB.fallback_font, clamped + Vector2(6.0, 13.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, GUIDE)

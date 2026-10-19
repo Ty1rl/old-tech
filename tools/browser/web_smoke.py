@@ -25,10 +25,31 @@ def resident_bytes(processes):
     return total  # Sum of RSS includes shared pages; not unique memory or just JS heap.
 
 
+def prepare_actions(actions):
+    """Reject malformed schedules before launch and accept common key spellings."""
+    aliases = {"space": "Space", "escape": "Escape", "enter": "Enter", "tab": "Tab",
+               "backspace": "Backspace", "arrowup": "ArrowUp", "arrowdown": "ArrowDown",
+               "arrowleft": "ArrowLeft", "arrowright": "ArrowRight"}
+    if not isinstance(actions, list):
+        raise ValueError("Actions must be a JSON list")
+    for action in actions:
+        if not isinstance(action, dict) or type(action.get("at")) is not int or action["at"] < 0:
+            raise ValueError("Each action needs a nonnegative integer 'at' in seconds")
+        for name in ["key", "key_down", "key_up"]:
+            if name in action:
+                if not isinstance(action[name], str):
+                    raise ValueError(f"{name} must be a keyboard key string")
+                action[name] = aliases.get(action[name].lower(), action[name])
+        for name in ["mouse_down", "mouse_up"]:
+            if name in action and action[name] not in ["left", "middle", "right"]:
+                raise ValueError(f"{name} must be left/middle/right; use 'move' for coordinates")
+    return actions
+
+
 async def run(args, url):
     args.output.mkdir(parents=True, exist_ok=True)
     console, samples, failures, requests = [], [], [], []
-    actions = json.loads(args.actions.read_text()) if args.actions else []
+    actions = prepare_actions(json.loads(args.actions.read_text())) if args.actions else []
     engine_seen = False
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(executable_path=str(args.browser), headless=True,

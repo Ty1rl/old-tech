@@ -36,3 +36,7 @@ This is a smoke/measurement harness,not proof of full game completion. Pair it
 with campaign/rewind/repair native checks and human playtests. It reports errors
 instead of masking them. Detailed initial evidence and ready-to-upload build are
 under jam-1 state/exports/web-audit,not in the game package.
+
+Use whole seconds for at. Common key aliases such as space/escape are normalized.
+Held mouse input uses {"move":[640,270]}, then {"mouse_down":"left"} and
+{"mouse_up":"left"}. Malformed schedules/buttons fail before browser launch.

@@ -59,9 +59,11 @@ static func readable_from_player(point: Vector3, extent: float, player: Vector3)
 			return false
 	return true
 
-func _free_slot(point: Vector3, extent: float, player_position: Vector3, cover: RefCounted, occupied_positions: PackedVector3Array, occupied_clearances: PackedFloat64Array, slots: Array[Dictionary], is_pattern: bool) -> bool:
+func _free_slot(point: Vector3, extent: float, player_position: Vector3, cover: RefCounted, occupied_positions: PackedVector3Array, occupied_clearances: PackedFloat64Array, slots: Array[Dictionary], is_pattern: bool, is_boss: bool) -> bool:
 	var limit := float(Tuning.ARENA_HALF_SIZE) - extent - 0.6
 	if absf(point.x) > limit or absf(point.z) > limit or point.distance_to(player_position) < maxf(5.0, extent + 1.4): return false
+	# Keep the boss's whole silhouette out of the bottom entrance area.
+	if is_boss and point.z + extent > float(Tuning.ARENA_HALF_SIZE) * 0.5: return false
 	for occupied_index in range(occupied_positions.size()):
 		if point.distance_to(occupied_positions[occupied_index]) < extent + occupied_clearances[occupied_index]: return false
 	for prior: Dictionary in slots:
@@ -82,11 +84,13 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 	var extents: Array[float] = []
 	var member_kinds: Array[StringName] = []
 	var member_is_pattern: Array[bool] = []
+	var member_is_boss: Array[bool] = []
 	var widest := 0.0
 	for i in range(count):
 		var k := StringName(kinds[i])
 		member_kinds.append(k)
 		member_is_pattern.append(_is_pattern_kind(k))
+		member_is_boss.append(k in [&"loop_boss", &"sequence_boss", &"final_boss"])
 		jitter.append(rng.randf_range(-0.22, 0.22))
 		extents.append(placement_radius(k))
 		widest = maxf(widest, extents[-1])
@@ -120,7 +124,7 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 					_:
 						var arc := index * maxf(0.21, spacing / distance)
 						point = player + (radial * cos(arc) + side * sin(arc)) * (distance + jitter[i])
-				if not _free_slot(point, extents[i], player, cover, occupied_positions, occupied_clearances, slots, member_is_pattern[i]): break
+				if not _free_slot(point, extents[i], player, cover, occupied_positions, occupied_clearances, slots, member_is_pattern[i], member_is_boss[i]): break
 				if extents[i] > 3.0 and not readable_from_player(point, extents[i], player): break
 				if formation == &"line" and cover != null and cover.clip_segment(player, point).blocked: break
 				slots.append({"kind": member_kinds[i], "position": point, "radius": extents[i], "source_index": i})
@@ -146,7 +150,7 @@ func layout(formation: StringName, kinds: Array, player_position: Vector3, cover
 				var relative := point - player
 				var cost := point.distance_squared_to(desired) + absf(relative.length() - 9) * 3
 				if cost >= score: continue
-				if not _free_slot(point, member_extent, player, cover, occupied_positions, occupied_clearances, best, member_is_cuttable): continue
+				if not _free_slot(point, member_extent, player, cover, occupied_positions, occupied_clearances, best, member_is_cuttable, member_is_boss[i]): continue
 				if member_extent > 3.0 and not readable_from_player(point, member_extent, player): cost += 10000
 				if cost < score:
 					score = cost

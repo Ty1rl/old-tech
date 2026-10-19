@@ -40,7 +40,7 @@ func phase_count() -> int:
 	return phases_for(kind)
 
 func _spans() -> Array:
-	return PatternVisual.spans(active_pattern(), phase if kind == &"loop_boss" else 0)
+	return PatternVisual.spans(active_pattern(), phase if kind == &"loop_boss" else 0, is_boss())
 
 func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> void:
 	phase = 0
@@ -107,6 +107,46 @@ func core_world_position() -> Vector3:
 
 func valve_world_position(index: int) -> Vector3:
 	return _local_part_world(PatternVisual.valve_anchor(clampi(index, 0, 1), is_boss()))
+
+func visible_flash_aim(ray_origin: Vector3, ray_direction: Vector3) -> Variant:
+	# Optional camera adapter: map ONLY pixels on a shown socket to that exact
+	# surface, not its center. The arena/AimAssist owner chooses whether to use it.
+	if not is_instance_valid(pattern_visual) or active_pattern() != &"pair" or pattern_open: return null
+	for i in [pair_progress, 1-pair_progress]:
+		if i < 0 or i >= pattern_visual.valves.size(): continue
+		var socket: MeshInstance3D = pattern_visual.valves[i]
+		if not socket.visible: continue
+		var inverse := socket.global_transform.affine_inverse()
+		var local: Variant = socket.get_aabb().grow(.001).intersects_ray(inverse * ray_origin, inverse.basis * ray_direction)
+		if local != null: return socket.global_transform * local
+	return null
+
+func yellow_hit_radius(core_target: bool = false) -> float:
+	if not is_boss(): return float(Tuning.PATTERNS.target_radius)
+	# Enclose the shown socket's XZ corners, plus only4cm edge tolerance.
+	# Core radius also follows its actual sphere rather than the smaller socket.
+	return PatternVisual.core_radius(true) + .04 if core_target else Vector2(PatternVisual.valve_size(true).x, PatternVisual.valve_size(true).z).length() * .5 + .04
+
+func _flash_circle_entry(start: Vector3, finish: Vector3, center: Vector3, size: float) -> float:
+	var a := Vector2(start.x, start.z)
+	var b := Vector2(finish.x, finish.z)
+	var point := Vector2(center.x, center.z)
+	return 0.0 if a.distance_squared_to(point) <= size * size else Geometry2D.segment_intersects_circle(a, b, point, size)
+
+func flash_entry_t(start: Vector3, finish: Vector3, width: float) -> float:
+	# Traveling shots must consider visible parts outside the body circle. Keep
+	# the same straight swept segment, including its existing cover/range clip.
+	var entry := _flash_circle_entry(start, finish, global_position, radius + width)
+	var targets: Array[Vector3] = []
+	var core_target := active_pattern() != &"pair" or pattern_open
+	if active_pattern() == &"pair" and not pattern_open:
+		targets.assign([valve_world_position(0), valve_world_position(1)])
+	elif is_core_exposed():
+		targets.append(core_world_position())
+	for point in targets:
+		var candidate := _flash_circle_entry(start, finish, point, yellow_hit_radius(core_target) + width)
+		if candidate >= 0 and (entry < 0 or candidate < entry): entry = candidate
+	return entry
 
 func _build_visuals() -> void:
 	if not handles(kind):
@@ -203,7 +243,7 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 	if tool == &"ring" and segmented and has_cuttable_part():
 		var points := cable_world_points()
 		for i in range(points.size() / 2):
-			if _segment_distance(start, finish, points[i * 2], points[i * 2 + 1]) <= width + float(Tuning.PATTERNS.link_radius):
+			if _segment_distance(start, finish, points[i * 2], points[i * 2 + 1]) <= width + (PatternVisual.link_radius(true) if is_boss() else float(Tuning.PATTERNS.link_radius)):
 				cuts |= 1 << i
 	var target_finish: Vector3 = context.get("mechanism_end", finish)
 	var valve_hit := -1
@@ -211,10 +251,10 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 		# Aim assistance selects the currently open valve. A ray crossing both
 		# sensors must not overwrite that valid hit with the closed sensor.
 		for i in [pair_progress, 1-pair_progress]:
-			if _point_segment_distance(valve_world_position(i), start, target_finish) <= width + float(Tuning.PATTERNS.target_radius):
+			if _point_segment_distance(valve_world_position(i), start, target_finish) <= width + yellow_hit_radius():
 				valve_hit = i
 				break
-	var core_hit := tool == &"beam" and segmented and _point_segment_distance(core_world_position(), start, target_finish) <= width + float(Tuning.PATTERNS.target_radius)
+	var core_hit := tool == &"beam" and segmented and _point_segment_distance(core_world_position(), start, target_finish) <= width + yellow_hit_radius(true)
 	# Preserve exact swept endpoints: a blocked/short segment cannot hit beyond it.
 	if not body and cuts == 0 and not core_hit and valve_hit == -1: return miss
 	var cue: StringName = &""

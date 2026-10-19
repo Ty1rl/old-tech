@@ -51,7 +51,7 @@ static func palette_for(identity: StringName, is_boss: bool) -> Dictionary:
 		_:
 			return {"body": Color("3b383f"), "trim": Color("222026"), "accent": Color("b89852")}
 
-static func spans(mode: StringName, stage := 0) -> Array:
+static func spans(mode: StringName, stage := 0, is_boss := false) -> Array:
 	if mode == &"loop":
 		var anchors := [[Vector3(-0.85, 0.85, -0.85), Vector3(-2.15, 0.85, -2.15)],
 			[Vector3(0.85, 0.85, -0.85), Vector3(2.15, 0.85, -2.15)],
@@ -59,12 +59,15 @@ static func spans(mode: StringName, stage := 0) -> Array:
 			[Vector3(-0.85, 0.85, 0.85), Vector3(-2.15, 0.85, 2.15)]]
 		# Later boss shells rotate the four physical links into a fresh arrangement.
 		for span: Array in anchors:
-			for i in range(2): span[i] = span[i].rotated(Vector3.UP, stage * PI / 8)
+			for i in range(2):
+				span[i] = span[i].rotated(Vector3.UP, stage * PI / 8)
+				if is_boss: span[i].y = 1.65
 		return anchors
 	if mode == &"zigzag":
-		return [[Vector3(-2.35, 0.85, -1.55), Vector3(-1.35, 0.85, -0.95)],
-			[Vector3(1.35, 0.85, -0.30), Vector3(2.35, 0.85, 0.30)],
-			[Vector3(-2.35, 0.85, 0.95), Vector3(-1.35, 0.85, 1.55)]]
+		var height := 1.65 if is_boss else .85
+		return [[Vector3(-2.35, height, -1.55), Vector3(-1.35, height, -0.95)],
+			[Vector3(1.35, height, -0.30), Vector3(2.35, height, 0.30)],
+			[Vector3(-2.35, height, 0.95), Vector3(-1.35, height, 1.55)]]
 	return []
 
 # Spawn reservation derives from the actual link endpoints and pod half-diagonal.
@@ -86,15 +89,26 @@ static func core_anchor(is_boss := false) -> Vector3:
 static func valve_anchor(index: int, is_boss := false) -> Vector3:
 	return Vector3(-1.1 if index == 0 else 1.1, 2.2 if is_boss else 1.95, -1.4 if is_boss else -0.95)
 
+static func valve_size(is_boss: bool) -> Vector3:
+	return Vector3(.84, .84, .30) if is_boss else Vector3(.78, .78, .28)
+
+static func core_radius(is_boss: bool) -> float:
+	return .50 if is_boss else .44
+
+static func link_radius(is_boss: bool) -> float:
+	return .38 if is_boss else .28
+
 func mat(color: Color, unlit := false) -> StandardMaterial3D:
 	var key := color.to_html() + ("_unlit" if unlit else "_lit")
+	if boss and color == BLUE: key += "_boss_target"
 	if not _materials.has(key):
 		var m := StandardMaterial3D.new()
 		m.albedo_color = color
 		m.roughness = 0.85
 		if unlit: m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		# Both yellow targets must remain readable through their own torso.
-		m.no_depth_test = unlit and color == YELLOW
+		# Mechanisms can be cut through their own chassis; show those boss spans
+		# as opaque unlit targets too. External cover still blocks the weapon.
+		m.no_depth_test = unlit and (color == YELLOW or (boss and color == BLUE))
 		_materials[key] = m
 	return _materials[key]
 
@@ -192,9 +206,9 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 	core_rim.position = core_anchor(boss)
 	core_rim.material_override = mat(Color("574914"), true)
 	add_child(core_rim)
-	core = ball(self, core_anchor(boss), .50 if boss else .44, YELLOW)
+	core = ball(self, core_anchor(boss), core_radius(boss), YELLOW)
 	for i in range(2):
-		valves.append(box(self, valve_anchor(i, boss), Vector3(.84 if boss else .78, .84 if boss else .78, .30 if boss else .28), YELLOW))
+		valves.append(box(self, valve_anchor(i, boss), valve_size(boss), YELLOW))
 		var gate := box(self, valve_anchor(i, boss) + Vector3(0, 0, -.18), Vector3(.92 if boss else .86, .22 if boss else .20, .12), Color("64717b"))
 		valve_gates.append(gate)
 		var letter := Label3D.new()
@@ -207,13 +221,13 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 		letter.visible = false
 		add_child(letter)
 		valve_labels.append(letter)
-	for span: Array in spans(mode, stage if identity == &"loop_boss" else 0):
-		links.append(rod(self, span[0], span[1], .31 if boss else .28, BLUE))
+	for span: Array in spans(mode, stage if identity == &"loop_boss" else 0, boss):
+		links.append(rod(self, span[0], span[1], link_radius(boss), BLUE))
 		var ends := Node3D.new()
 		add_child(ends)
 		cut_ends.append(ends)
-		rod(ends, span[0], span[0].lerp(span[1], .18), .31 if boss else .28, BLUE)
-		rod(ends, span[1].lerp(span[0], .18), span[1], .31 if boss else .28, BLUE)
+		rod(ends, span[0], span[0].lerp(span[1], .18), link_radius(boss), BLUE.darkened(.5) if boss else BLUE)
+		rod(ends, span[1].lerp(span[0], .18), span[1], link_radius(boss), BLUE.darkened(.5) if boss else BLUE)
 		var number := Label3D.new()
 		number.text = str(links.size())
 		number.position = (span[0] + span[1]) * 0.5 + Vector3(0, 0.48, 0)
@@ -375,10 +389,10 @@ func _refresh_instruction_visibility() -> void:
 		valve_labels[i].visible = false
 
 func pose(clock: float, speed: float, attack: StringName, timer: float) -> void:
-	# A gentle socket pulse marks the next quick shot; the exposed round core is
-	# steady and larger. These cosmetic scales never move query anchors.
+	# Keep the shown target edge fixed. The next socket is distinguished by its
+	# bright material and raised shutter, not a misleading changing silhouette.
 	for i in range(valves.size()):
-		valves[i].scale = Vector3.ONE * (1.0 + .09 * sin(clock * 1.8) if valves[i].material_override == lit_valve else .88)
+		valves[i].scale = Vector3.ONE
 	var moving := clampf(speed, 0, 1)
 	var base_foot_y := 0.28 if boss else 0.22
 	var base_foot_z := 0.18 if boss else 0.15

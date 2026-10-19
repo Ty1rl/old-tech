@@ -131,6 +131,8 @@ func _step_pulses(w_delta: float, enemies: Array) -> void:
 			var center := Vector2(node.global_position.x, node.global_position.z)
 			var radius := float(node.radius)
 			var t := _swept_circle_entry_t(a, b, center, float(pulse.radius) + radius)
+			if node.has_method("flash_entry_t"):
+				t = float(node.flash_entry_t(start, end, float(pulse.radius)))
 			if t < 0.0: continue
 			var toward := a.lerp(b, t) - center
 			var normal := toward.normalized() if toward.length_squared() > 0.000001 else -direction

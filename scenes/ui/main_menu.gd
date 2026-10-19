@@ -5,14 +5,12 @@ const UI = preload("res://scenes/ui/ui_style.gd")
 @onready var margin: MarginContainer = %Margin
 @onready var footer: Label = %Footer
 @onready var play: Button = %PlayButton
-@onready var developer_button: Button = %DeveloperButton
 var buttons: Array[Button] = []
 var _layout_size := Vector2.ZERO
 var _layout_factor := 0.0
 
 func _ready() -> void:
 	AudioManager.set_music_context(&"menu")
-	developer_button.visible = SceneManager.developer_tools
 	for node in column.get_children():
 		if node is Button:
 			buttons.append(node)
@@ -50,7 +48,7 @@ func _fit() -> void:
 	heading.add_theme_font_size_override("font_size", roundi(clampf(title_size, 30 * factor, 108 * factor)))
 	heading.add_theme_constant_override("line_spacing", roundi(-title_size * .22))
 	for button in buttons:
-		var text_size := (13 if compact else 14) if button == developer_button else (18 if compact else 25)
+		var text_size := 18 if compact else 25
 		if button == play: text_size = 23 if compact else 32
 		button.add_theme_font_size_override("font_size", roundi(text_size * factor))
 		button.queue_redraw()
@@ -64,11 +62,6 @@ func _draw_selection(button: Button) -> void:
 	var inset := button.get_theme_stylebox("normal").get_content_margin(SIDE_LEFT)
 	button.draw_line(Vector2(inset, button.size.y - 3), Vector2(minf(button.size.x - 8, inset + text_width), button.size.y - 3), UI.ACCENT, 2, true)
 
-func _on_developer() -> void: SceneManager.push_popup(&"Developer")
-
-func _unhandled_input(event: InputEvent) -> void:
-	if SceneManager.developer_tools and event is InputEventKey and event.pressed and event.physical_keycode == KEY_F10:
-		SceneManager.push_popup(&"Developer")
 
 func _on_play_button_pressed() -> void: SceneManager.push_popup(&"NewGame")
 func _on_settings_button_pressed() -> void: SceneManager.push_popup(&"Settings")

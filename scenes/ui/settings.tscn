@@ -51,15 +51,6 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Eyebrow" type="Label" parent="Margin/Center/Panel/Stack/Header"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "SOME ASSEMBLY REQUIRED"
-autowrap_mode = 3
-mouse_filter = 2
-theme_override_font_sizes/font_size = 13
-metadata/base_font_size = 13
-modulate = Color(0.796, 0.651, 0.424, 1)
 
 [node name="Title" type="Label" parent="Margin/Center/Panel/Stack/Header"]
 unique_name_in_owner = true
@@ -70,15 +61,6 @@ mouse_filter = 2
 theme_override_font_sizes/font_size = 34
 metadata/base_font_size = 34
 
-[node name="Subtitle" type="Label" parent="Margin/Center/Panel/Stack/Header"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Changes save automatically."
-autowrap_mode = 3
-mouse_filter = 2
-theme_override_font_sizes/font_size = 17
-metadata/base_font_size = 17
-modulate = Color(0.706, 0.671, 0.6, 1)
 
 [node name="Separator" type="HSeparator" parent="Margin/Center/Panel/Stack/Header"]
 layout_mode = 2
@@ -160,14 +142,12 @@ popup/item_1/id = 1
 popup/item_2/text = "Hidden"
 popup/item_2/id = 2
 
-[node name="TeachingNote" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+
+[node name="DeveloperButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
-text = "Teaching appears once per run. Turn it off to enter encounters directly."
-autowrap_mode = 3
-mouse_filter = 2
-theme_override_font_sizes/font_size = 15
-metadata/base_font_size = 15
+text = "Developer options"
 
 [node name="BackButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true
@@ -185,3 +165,5 @@ text = "Back"
 [connection signal="item_selected" from="Margin/Center/Panel/Stack/Scroll/Body/Hud" to="." method="_on_hud"]
 
 [connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/BackButton" to="." method="_on_back"]
+
+[connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/DeveloperButton" to="." method="_on_developer"]

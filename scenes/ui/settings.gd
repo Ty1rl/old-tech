@@ -5,10 +5,12 @@ extends "res://scenes/ui/menu_layout.gd"
 @onready var volume: HSlider = %Volume
 @onready var voice_volume: HSlider = %VoiceVolume
 @onready var hud: OptionButton = %Hud
+@onready var developer_button: Button = %DeveloperButton
 var widgets: Dictionary = {}
 
 func _ready() -> void:
 	super._ready()
+	developer_button.visible = SceneManager.developer_tools
 	var prefs: Dictionary = GameState.preferences()
 	sound.set_pressed_no_signal(prefs.sound)
 	fullscreen.set_pressed_no_signal(prefs.fullscreen)
@@ -27,3 +29,8 @@ func _on_volume(value: float) -> void: GameState.set_setting("volume", value / 1
 func _on_voice_volume(value: float) -> void: GameState.set_setting("voice_volume", value / 100)
 func _on_hud(value: int) -> void: GameState.set_setting("hud", value)
 func _on_back() -> void: SceneManager.close_popup(&"Settings")
+
+func _on_developer() -> void:
+	if not SceneManager.developer_tools: return
+	developer_button.grab_focus()
+	SceneManager.push_popup(&"Developer")

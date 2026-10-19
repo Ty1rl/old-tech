@@ -95,7 +95,7 @@ metadata/base_font_size = 34
 [node name="Subtitle" type="Label" parent="Margin/Center/Panel/Stack/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Choose the encounter pressure for this run."
+text = "Choose a difficulty."
 autowrap_mode = 3
 mouse_filter = 2
 theme_override_font_sizes/font_size = 17
@@ -127,7 +127,7 @@ button_group = SubResource("Difficulty")
 
 [node name="EasyDescription" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 layout_mode = 2
-text = "Gentler encounter pressure. More room to learn and recover."
+text = "More room to learn and recover."
 autowrap_mode = 3
 mouse_filter = 2
 metadata/base_font_size = 16
@@ -142,7 +142,7 @@ button_group = SubResource("Difficulty")
 
 [node name="HardDescription" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 layout_mode = 2
-text = "Greater encounter pressure. Less breathing room between threats."
+text = "More enemies. Less breathing room."
 autowrap_mode = 3
 mouse_filter = 2
 metadata/base_font_size = 16

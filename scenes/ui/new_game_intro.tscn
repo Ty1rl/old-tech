@@ -37,66 +37,29 @@ mouse_filter = 2
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 16
-[node name="TopSpace" type="Control" parent="Margin/Stack"]
+[node name="QuoteScroll" type="ScrollContainer" parent="Margin/Stack"]
 layout_mode = 2
 size_flags_vertical = 3
+horizontal_scroll_mode = 0
 mouse_filter = 2
-[node name="Title" type="Label" parent="Margin/Stack"]
+[node name="QuoteCenter" type="CenterContainer" parent="Margin/Stack/QuoteScroll"]
 layout_mode = 2
-text = "SOME ASSEMBLY REQUIRED"
-theme_type_variation = &"MuseumTitle"
-theme_override_font_sizes/font_size = 42
-metadata/base_font_size = 42
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+[node name="Quote" type="Label" parent="Margin/Stack/QuoteScroll/QuoteCenter"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "An ancient device has turned exhibits into monsters. Survive with cobbled-together old tech and time borrowed from your future self."
+theme_type_variation = &"MuseumHeading"
 horizontal_alignment = 1
 autowrap_mode = 3
 mouse_filter = 2
-[node name="Subtitle" type="Label" parent="Margin/Stack"]
-layout_mode = 2
-text = "Old tech. Borrowed time."
-modulate = Color(0.914, 0.725, 0.329, 0.85)
-metadata/base_font_size = 20
-horizontal_alignment = 1
-autowrap_mode = 3
-mouse_filter = 2
-[node name="BottomSpace" type="Control" parent="Margin/Stack"]
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 2
-[node name="Status" type="Label" parent="Margin/Stack"]
+[node name="Skip" type="Button" parent="Margin/Stack"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Narration"
-modulate = Color(0.66, 0.64, 0.60, 1)
-metadata/base_font_size = 15
-horizontal_alignment = 1
-mouse_filter = 2
-[node name="Actions" type="HFlowContainer" parent="Margin/Stack"]
-layout_mode = 2
-alignment = 1
-theme_override_constants/h_separation = 12
-theme_override_constants/v_separation = 8
-[node name="Skip" type="Button" parent="Margin/Stack/Actions"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Skip intro"
-[node name="Pause" type="Button" parent="Margin/Stack/Actions"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Pause"
-[node name="Settings" type="Button" parent="Margin/Stack/Actions"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Settings"
-[node name="Menu" type="Button" parent="Margin/Stack/Actions"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Menu"
-[node name="Quit" type="Button" parent="Margin/Stack/Actions"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Quit"
-[connection signal="pressed" from="Margin/Stack/Actions/Skip" to="." method="_on_skip"]
-[connection signal="pressed" from="Margin/Stack/Actions/Pause" to="." method="_on_pause"]
-[connection signal="pressed" from="Margin/Stack/Actions/Settings" to="." method="_on_settings"]
-[connection signal="pressed" from="Margin/Stack/Actions/Menu" to="." method="_on_menu"]
-[connection signal="pressed" from="Margin/Stack/Actions/Quit" to="." method="_on_quit"]
+size_flags_horizontal = 8
+text = "Skip"
+focus_mode = 0
+[connection signal="gui_input" from="Margin/Stack/Skip" to="." method="_on_skip_input"]

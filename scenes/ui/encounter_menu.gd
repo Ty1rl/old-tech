@@ -46,5 +46,6 @@ func _launch() -> void:
 
 func _on_room(_index: int) -> void: _update_encounters()
 func _on_encounter(_index: int) -> void: _update_phases()
-func _on_sandbox() -> void: SceneManager.start_play(true)
+func _on_sandbox() -> void:
+	if SceneManager.developer_tools: SceneManager.start_play(true)
 func _on_back() -> void: SceneManager.close_popup(&"Developer")

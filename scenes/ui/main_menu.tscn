@@ -173,14 +173,6 @@ size_flags_horizontal = 0
 alignment = 0
 metadata/base_button_font = 24
 
-[node name="DeveloperButton" type="Button" parent="Margin/Scroll/Column"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Encounter select · F10"
-theme_type_variation = &"MuseumMenuButton"
-size_flags_horizontal = 0
-alignment = 0
-metadata/base_button_font = 14
 
 [node name="BottomSpace" type="Control" parent="Margin/Scroll/Column"]
 layout_mode = 2
@@ -201,5 +193,3 @@ metadata/base_font_size = 14
 [connection signal="pressed" from="Margin/Scroll/Column/SettingsButton" to="." method="_on_settings_button_pressed"]
 
 [connection signal="pressed" from="Margin/Scroll/Column/ExitButton" to="." method="_on_exit_button_pressed"]
-
-[connection signal="pressed" from="Margin/Scroll/Column/DeveloperButton" to="." method="_on_developer"]

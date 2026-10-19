@@ -6,9 +6,8 @@ signal cancelled
 const INTRO: StringName = &"narration.intro"
 const UI = preload("res://scenes/ui/ui_style.gd")
 enum Phase { IDLE, NARRATING, READY, TRANSITION }
-@onready var status: Label = %Status
+@onready var quote: Label = %Quote
 @onready var skip: Button = %Skip
-@onready var pause_button: Button = %Pause
 var active := false
 var phase := Phase.IDLE
 var _difficulty: StringName = &"easy"
@@ -48,7 +47,9 @@ func begin(difficulty: StringName, skip_tutorials: bool = false) -> void:
 	set_process(true)
 	AudioManager.say(INTRO, 2)
 	_refresh_lifetime()
-	UI.focus_on_open(get_parent(), skip)
+	# Skip is deliberately absent from keyboard/gamepad focus.
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused != null: focused.release_focus()
 
 func _process(_delta: float) -> void:
 	if not active: return
@@ -57,19 +58,17 @@ func _process(_delta: float) -> void:
 	if _paused or get_tree().paused: return
 	_refresh_lifetime()
 	if phase == Phase.READY:
-		status.text = "Release controls to begin" if _controls_held() else ""
 		if not _controls_held(): _start_game()
 
 func _refresh_lifetime() -> void:
 	if phase == Phase.NARRATING and not _paused and not get_tree().paused and not AudioManager.is_speaking(INTRO):
 		phase = Phase.READY
-	status.text = "Paused" if _paused else "Narration" if phase == Phase.NARRATING else ""
 
 func _speech_finished(event: StringName, _interrupted: bool) -> void:
 	if active and event == INTRO: _refresh_lifetime()
 
 func _controls_held() -> bool:
-	return Input.is_anything_pressed() or Input.get_vector("move_left", "move_right", "move_up", "move_down").length_squared() > .001
+	return Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 
 func _input(event: InputEvent) -> void:
 	if not active or SceneManager.get_popup(&"") != get_parent(): return
@@ -81,6 +80,12 @@ func _input(event: InputEvent) -> void:
 
 func _owns_input() -> bool:
 	return active and _armed and SceneManager.get_popup(&"") == get_parent()
+
+func _on_skip_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if _owns_input():
+			_on_skip()
+			skip.accept_event()
 
 func _on_skip() -> void:
 	if not _owns_input(): return
@@ -94,7 +99,6 @@ func _on_pause() -> void:
 func _set_paused(value: bool) -> void:
 	_paused = value
 	get_tree().paused = value
-	pause_button.text = "Resume" if value else "Pause"
 	_refresh_lifetime()
 
 func _on_settings() -> void:
@@ -175,7 +179,8 @@ func _exit_tree() -> void:
 func _fit() -> void:
 	if not is_node_ready() or is_queued_for_deletion(): return
 	var factor := UI.scale_for(self)
+	quote.custom_minimum_size.x = minf(860 * factor, maxf(1, size.x - 64))
 	for text: Label in find_children("*", "Label", true, false):
-		text.add_theme_font_size_override("font_size", roundi(float(text.get_meta("base_font_size", 19)) * factor))
+		text.add_theme_font_size_override("font_size", roundi((20 if size.y < 480 * factor else 25) * factor))
 	for button: Button in find_children("*", "Button", true, false):
 		button.add_theme_font_size_override("font_size", roundi(18 * factor))

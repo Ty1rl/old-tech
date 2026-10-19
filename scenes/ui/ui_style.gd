@@ -6,6 +6,8 @@ const MUTED := Color("aaa69d")
 const ACCENT := Color("e9b954")
 
 static func scale_for(node: Node) -> float:
+	# Delayed layout can outlive a popup's window during scene teardown.
+	if not node.is_inside_tree(): return 1.0
 	var pixels := node.get_window().size.x
 	return clampf(node.get_viewport().get_visible_rect().size.x / maxf(1, pixels), 1, 1.5)
 

@@ -51,20 +51,11 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Eyebrow" type="Label" parent="Margin/Center/Panel/Stack/Header"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "SOME ASSEMBLY REQUIRED"
-autowrap_mode = 3
-mouse_filter = 2
-theme_override_font_sizes/font_size = 13
-metadata/base_font_size = 13
-modulate = Color(0.796, 0.651, 0.424, 1)
 
 [node name="Title" type="Label" parent="Margin/Center/Panel/Stack/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Encounter select"
+text = "Developer options"
 autowrap_mode = 3
 mouse_filter = 2
 theme_override_font_sizes/font_size = 34
@@ -73,7 +64,7 @@ metadata/base_font_size = 34
 [node name="Subtitle" type="Label" parent="Margin/Center/Panel/Stack/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Development shortcuts · starts with the equipment needed here."
+text = "Encounter selection and debugging"
 autowrap_mode = 3
 mouse_filter = 2
 theme_override_font_sizes/font_size = 17
@@ -151,7 +142,7 @@ text = "Start encounter"
 [node name="SandboxButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Prototype sandbox"
+text = "Sandbox"
 
 [node name="BackButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true

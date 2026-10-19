@@ -173,7 +173,8 @@ func set_music_context(context: StringName) -> bool:
 	if context == &"intro": return true
 	music.stream = music_library.music_tracks[context]
 	music.process_mode = Node.PROCESS_MODE_ALWAYS if context in [&"menu", &"victory"] else Node.PROCESS_MODE_PAUSABLE
-	music.stream_paused = context in [&"encounter", &"boss"] and (GameState.is_paused() or get_tree().paused)
+	var pause_music := context in [&"encounter", &"boss"] and (GameState.is_paused() or get_tree().paused)
+	if music.stream_paused != pause_music: music.stream_paused = pause_music
 	if context in [&"menu", &"victory"]:
 		_world_pitch = 1
 		_world_frozen = false
@@ -224,7 +225,9 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	_bark_cooldown = maxf(0, _bark_cooldown - delta)
 	var paused := GameState.is_paused() or get_tree().paused
-	voice.stream_paused = paused
+	# Web Sample playback restarts its source on every unpause assignment.
+	# Only send pause transitions, even though the desktop mixer tolerates repeats.
+	if voice.stream_paused != paused: voice.stream_paused = paused
 	if not _speech_available() and (not current_event.is_empty() or not _queue.is_empty()):
 		stop_dialogue()
 	elif not current_event.is_empty():
@@ -242,7 +245,8 @@ func _process(delta: float) -> void:
 	var index := AudioServer.get_bus_index(&"World")
 	if index >= 0: AudioServer.set_bus_volume_db(index, _duck)
 	var world_music := _music_context in [&"encounter", &"boss"]
-	music.stream_paused = world_music and paused
+	var pause_music := world_music and paused
+	if music.stream_paused != pause_music: music.stream_paused = pause_music
 	var audible := _bus_audible(&"Master") and _music_context != &"intro" and not _quitting and not (world_music and _world_muted)
 	var gain_target := _foreground_gain if world_music else 1.0
 	if not audible or (world_music and _world_frozen): gain_target = 0

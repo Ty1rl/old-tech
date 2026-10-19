@@ -25,3 +25,6 @@ bus/4/volume_db = 0.0
 bus/5/name = &"Voice"
 bus/5/send = &"Master"
 bus/5/volume_db = 0.0
+bus/6/name = &"Effects"
+bus/6/send = &"World"
+bus/6/volume_db = 0.0

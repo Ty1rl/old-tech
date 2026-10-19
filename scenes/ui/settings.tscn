@@ -95,7 +95,7 @@ text = "Contextual teaching"
 [node name="VolumeLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Volume"
+text = "Master volume"
 autowrap_mode = 3
 mouse_filter = 2
 theme_override_font_sizes/font_size = 17
@@ -108,7 +108,23 @@ custom_minimum_size = Vector2(0, 32)
 max_value = 100.0
 step = 1.0
 
+[node name="MusicVolumeLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Music"
+mouse_filter = 2
+theme_override_font_sizes/font_size = 17
+metadata/base_font_size = 17
+
+[node name="MusicVolume" type="HSlider" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 32)
+max_value = 100.0
+step = 1.0
+
 [node name="VoiceVolumeLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Voice volume"
 mouse_filter = 2
@@ -116,6 +132,21 @@ theme_override_font_sizes/font_size = 17
 metadata/base_font_size = 17
 
 [node name="VoiceVolume" type="HSlider" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 32)
+max_value = 100.0
+step = 1.0
+
+[node name="EffectsVolumeLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Effects"
+mouse_filter = 2
+theme_override_font_sizes/font_size = 17
+metadata/base_font_size = 17
+
+[node name="EffectsVolume" type="HSlider" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(0, 32)

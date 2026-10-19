@@ -89,7 +89,7 @@ func _ready() -> void:
 		player.playback_type = playback_type
 		player.name = String(kind).to_pascal_case()
 		player.stream = _cues[kind].stream
-		player.bus = &"Time" if _cues[kind].responsive else &"World"
+		player.bus = &"Time" if _cues[kind].responsive else &"Effects"
 		player.process_mode = Node.PROCESS_MODE_ALWAYS if _cues[kind].responsive else Node.PROCESS_MODE_PAUSABLE
 		player.volume_db = -80.0
 		add_child(player)
@@ -174,7 +174,7 @@ func cue(kind: StringName, point: Vector3, strength: float = 1.0) -> void:
 	var player: AudioStreamPlayer3D = chosen.player
 	player.stream = entry.stream
 	player.global_position = point
-	player.bus = &"Responsive" if entry.responsive else &"World"
+	player.bus = &"Responsive" if entry.responsive else &"Effects"
 	player.process_mode = Node.PROCESS_MODE_ALWAYS if entry.responsive else Node.PROCESS_MODE_PAUSABLE
 	player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED if entry.responsive else AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
 	player.panning_strength = 0.0 if entry.responsive else 0.45

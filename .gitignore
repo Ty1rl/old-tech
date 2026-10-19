@@ -11,3 +11,6 @@
 /COORDINATION*.txt
 /*-BRIEF.txt
 /RUNBOOK.txt
+
+# Python tool caches
+__pycache__/

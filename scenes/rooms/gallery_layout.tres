@@ -30,33 +30,33 @@ lighting = {
 }
 cover = Array[Rect2]([Rect2(-15.6, -11.8, 3.2, 2.2), Rect2(12.4, -11.8, 3.2, 2.2), Rect2(-16.2, -2, 2.2, 3.8), Rect2(14, -2, 2.2, 3.8), Rect2(-13.8, 7.6, 1.8, 1.8), Rect2(12, 7.6, 1.8, 1.8)])
 cover_pieces = Array[Dictionary]([{
-"height": 1.45,
+"height": 1.55,
 "kind": &"display_island",
 "label": "North-West Vitrine Island",
 "rect": Rect2(-15.6, -11.8, 3.2, 2.2)
 }, {
-"height": 1.45,
+"height": 1.55,
 "kind": &"display_island",
 "label": "North-East Vitrine Island",
 "rect": Rect2(12.4, -11.8, 3.2, 2.2)
 }, {
-"height": 1.45,
-"kind": &"display_island",
-"label": "West Wall Vitrine",
+"height": 1.25,
+"kind": &"bench",
+"label": "West Gallery Bench",
 "rect": Rect2(-16.2, -2, 2.2, 3.8)
 }, {
-"height": 1.45,
-"kind": &"display_island",
-"label": "East Wall Vitrine",
+"height": 1.25,
+"kind": &"bench",
+"label": "East Gallery Bench",
 "rect": Rect2(14, -2, 2.2, 3.8)
 }, {
-"height": 1.65,
+"height": 1.85,
 "kind": &"plinth",
-"label": "South-West Gallery Plinth",
+"label": "South-West Planet Diorama",
 "rect": Rect2(-13.8, 7.6, 1.8, 1.8)
 }, {
-"height": 1.65,
+"height": 1.85,
 "kind": &"plinth",
-"label": "South-East Gallery Plinth",
+"label": "South-East Planet Diorama",
 "rect": Rect2(12, 7.6, 1.8, 1.8)
 }])

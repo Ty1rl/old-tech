@@ -1,9 +1,16 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/rooms/north_exit_doorway.tscn" id="1_north"]
 [ext_resource type="PackedScene" path="res://scenes/rooms/south_entrance_doorway.tscn" id="2_south"]
 [ext_resource type="PackedScene" path="res://scenes/rooms/display_island.tscn" id="3_island"]
 [ext_resource type="PackedScene" path="res://scenes/rooms/plinth.tscn" id="4_plinth"]
+[ext_resource type="PackedScene" path="res://scenes/rooms/bench.tscn" id="5_bench"]
+[ext_resource type="PackedScene" path="res://scenes/rooms/wall_banner.tscn" id="6_banner"]
+[ext_resource type="PackedScene" path="res://scenes/rooms/exit_floor_arrow.tscn" id="7_arrow"]
+
+[sub_resource type="NavigationMesh" id="NavigationMesh_gallery"]
+vertices = PackedVector3Array(-18.5, 0, -18.5, 18.5, 0, -18.5, 18.5, 0, 18.5, -18.5, 0, 18.5)
+polygons = [PackedInt32Array(0, 1, 2, 3)]
 
 [node name="RoomGallery" type="Node3D"]
 
@@ -21,10 +28,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 0, -10.7)
 [node name="CoverPiece_02" parent="CoverKit" instance=ExtResource("3_island")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -10.7)
 
-[node name="CoverPiece_03" parent="CoverKit" instance=ExtResource("3_island")]
+[node name="CoverPiece_03" parent="CoverKit" instance=ExtResource("5_bench")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15.1, 0, -0.1)
 
-[node name="CoverPiece_04" parent="CoverKit" instance=ExtResource("3_island")]
+[node name="CoverPiece_04" parent="CoverKit" instance=ExtResource("5_bench")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.1, 0, -0.1)
 
 [node name="CoverPiece_05" parent="CoverKit" instance=ExtResource("4_plinth")]
@@ -32,3 +39,35 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.9, 0, 8.5)
 
 [node name="CoverPiece_06" parent="CoverKit" instance=ExtResource("4_plinth")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.9, 0, 8.5)
+
+[node name="WallBanners" type="Node3D" parent="."]
+
+[node name="WestNorthBanner" parent="WallBanners" instance=ExtResource("6_banner")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -19.2, 0, -6.5)
+
+[node name="WestSouthBanner" parent="WallBanners" instance=ExtResource("6_banner")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -19.2, 0, 5.5)
+
+[node name="EastNorthBanner" parent="WallBanners" instance=ExtResource("6_banner")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 19.2, 0, -6.5)
+
+[node name="EastSouthBanner" parent="WallBanners" instance=ExtResource("6_banner")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 19.2, 0, 5.5)
+
+[node name="ExitFloorArrows" type="Node3D" parent="."]
+visible = false
+
+[node name="ExitArrow_01" parent="ExitFloorArrows" instance=ExtResource("7_arrow")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.018, 2.2)
+
+[node name="ExitArrow_02" parent="ExitFloorArrows" instance=ExtResource("7_arrow")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.018, -4.4)
+
+[node name="ExitArrow_03" parent="ExitFloorArrows" instance=ExtResource("7_arrow")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.018, -11.0)
+
+[node name="ExitArrow_04" parent="ExitFloorArrows" instance=ExtResource("7_arrow")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.018, -16.8)
+
+[node name="RoomNavigationRegion" type="NavigationRegion3D" parent="." groups=["museum_navigation"]]
+navigation_mesh = SubResource("NavigationMesh_gallery")

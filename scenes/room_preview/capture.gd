@@ -1,9 +1,9 @@
 extends SceneTree
 
-# Bounded private-display render and verification script for Round O Wave A (JAM-2).
-# Captures all 4 museum rooms + closed vs open north-wall exit opening and verifies data/visual/collision agreement.
+# Bounded private-display render and verification script for Round P Wave A (JAM-2).
+# Captures all 4 museum rooms with partner GLB props, exit floor arrows, and navigation regions.
 
-const OUT_DIR := "/home/mattlongname/game-jams/state/old-tech-jam-2/exports/round-o/"
+const OUT_DIR := "/home/mattlongname/frankenstein/.daedalus-dev-state/game-jams/state/old-tech-jam-2/exports/round-p-a/"
 const Rooms = preload("res://scenes/prototype/rooms.gd")
 const Cover = preload("res://scenes/prototype/cover.gd")
 
@@ -70,7 +70,7 @@ func _run() -> void:
 	var shot_files := [
 		"01-room1-gallery-closed-exit.png",
 		"02-room2-collections-open-exit.png",
-		"03-room3-restoration-closed-exit.png",
+		"03-room3-restoration-open-exit.png",
 		"04-room4-burial-boss-court.png",
 	]
 
@@ -78,10 +78,11 @@ func _run() -> void:
 		var def: Dictionary = preview.apply_room_by_index(i)
 		var room_id: StringName = def["id"]
 		preview.spawn_preview_cohort_for_room(room_id)
+		var is_open := room_id == &"collections" or room_id == &"restoration"
 		if room_id == &"burial":
 			room_env.set_boss_ceremony_phase(&"active")
 		else:
-			room_env.set_exit_open(i % 2 == 1)
+			room_env.set_exit_open(is_open)
 
 		var expected_cover: Array[Rect2] = def["cover"]
 		var visual_cover: Array[Rect2] = room_env.get_cover_world_rectangles()
@@ -100,25 +101,35 @@ func _run() -> void:
 			_rects_match(expected_cover, clip_cover),
 			"%s Cover.rectangles clipping list matches definition['cover']" % String(room_id)
 		)
+		expect(
+			room_env.navigation_region != null
+			and room_env.navigation_region.is_in_group(&"museum_navigation")
+			and room_env.navigation_region.navigation_mesh != null
+			and room_env.navigation_region.navigation_mesh.get_polygon_count() > 0,
+			"%s exposes active museum_navigation NavigationRegion3D" % String(room_id)
+		)
+		if room_id != &"burial":
+			expect(
+				room_env.exit_arrows_root != null and room_env.exit_arrows_root.visible == is_open,
+				"%s exit floor arrows visibility matches exit_open=%s" % [String(room_id), str(is_open)]
+			)
 
-		# Position player in central lane so the open combat floor, edge cover kit, and North-Wall exit opening are framed at gameplay perspective
+		# Position player in central lane using authored perspective camera
 		var cam: Camera3D = arena.player.camera
-		arena.player.position = Vector3(def["player_spawn"].x * 0.35, 0.55, -2.5)
+		arena.player.position = Vector3(def["player_spawn"].x * 0.35, 0.55, -3.5)
 		cam.position = Vector3(0.0, 20.0, 14.0)
 		cam.rotation_degrees = Vector3(-55.0, 0.0, 0.0)
-		cam.size = 22.0
 		arena._update_hud()
 		await _save_shot(shot_files[i])
 
-	# Shot 5: Close inspection of North-Wall Exit Opening (open with subtle green cue & recessed passage) in Gallery
+	# Shot 5: Close inspection of North-Wall Exit Opening (open archway + floor exit arrows) in Gallery
 	preview.apply_room_by_id(&"gallery")
 	room_env.set_exit_open(true)
 	preview.spawn_preview_cohort_for_room(&"gallery")
 	var cam: Camera3D = arena.player.camera
-	arena.player.position = Vector3(0.0, 0.55, -10.5)
-	cam.position = Vector3(0.0, 16.0, 10.5)
+	arena.player.position = Vector3(0.0, 0.55, -8.5)
+	cam.position = Vector3(0.0, 14.5, 10.0)
 	cam.rotation_degrees = Vector3(-55.0, 0.0, 0.0)
-	cam.size = 16.5
 	arena._update_hud()
 	await _save_shot("05-north-wall-exit-open-closeup.png")
 
@@ -129,7 +140,7 @@ func _run() -> void:
 		"shots": [
 			OUT_DIR + "01-room1-gallery-closed-exit.png",
 			OUT_DIR + "02-room2-collections-open-exit.png",
-			OUT_DIR + "03-room3-restoration-closed-exit.png",
+			OUT_DIR + "03-room3-restoration-open-exit.png",
 			OUT_DIR + "04-room4-burial-boss-court.png",
 			OUT_DIR + "05-north-wall-exit-open-closeup.png",
 		],

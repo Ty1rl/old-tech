@@ -1,4 +1,6 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/props/banner_V5_TEMP.001.glb" id="1_banner"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone"]
 albedo_color = Color(0.44, 0.42, 0.39, 1)
@@ -47,3 +49,6 @@ surface_material_override/0 = SubResource("StandardMaterial3D_cap")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.61, 0)
 mesh = SubResource("BoxMesh_ridge")
 surface_material_override/0 = SubResource("StandardMaterial3D_base")
+
+[node name="BannerModel" parent="." instance=ExtResource("1_banner")]
+transform = Transform3D(0, 0, 0.22, 0, 0.22, 0, -0.22, 0, 0, 0, 1.36, 0)

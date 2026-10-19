@@ -30,7 +30,7 @@ lighting = {
 }
 cover = Array[Rect2]([Rect2(-15.8, -11.6, 3.6, 2.2), Rect2(12.2, -10.8, 1.6, 4.6), Rect2(-15.4, -2.4, 2.6, 3.6), Rect2(12.6, -1.6, 3.2, 2.2), Rect2(-14.6, 5.8, 1.8, 1.8), Rect2(12.2, 5.4, 2.8, 2.4)])
 cover_pieces = Array[Dictionary]([{
-"height": 1.45,
+"height": 1.55,
 "kind": &"display_island",
 "label": "North-West Restoration Case",
 "rect": Rect2(-15.8, -11.6, 3.6, 2.2)
@@ -40,22 +40,22 @@ cover_pieces = Array[Dictionary]([{
 "label": "North-East Archive Partition",
 "rect": Rect2(12.2, -10.8, 1.6, 4.6)
 }, {
-"height": 1.45,
+"height": 1.55,
 "kind": &"display_island",
 "label": "West Workbench Case",
 "rect": Rect2(-15.4, -2.4, 2.6, 3.6)
 }, {
-"height": 1.45,
-"kind": &"display_island",
-"label": "East Inspection Vitrine",
+"height": 1.25,
+"kind": &"bench",
+"label": "East Restoration Bench",
 "rect": Rect2(12.6, -1.6, 3.2, 2.2)
 }, {
 "height": 1.85,
-"kind": &"column",
-"label": "South-West Archive Pillar",
+"kind": &"plinth",
+"label": "South-West Planet Diorama",
 "rect": Rect2(-14.6, 5.8, 1.8, 1.8)
 }, {
-"height": 1.45,
+"height": 1.55,
 "kind": &"display_island",
 "label": "South-East Specimen Case",
 "rect": Rect2(12.2, 5.4, 2.8, 2.4)

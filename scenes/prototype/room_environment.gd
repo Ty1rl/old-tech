@@ -1,10 +1,10 @@
 extends "res://scenes/prototype/museum_environment.gd"
 
-# Four-room museum presentation and physical campaign wayfinding (Round O Wave A — JAM-2).
-# Uses authored kit scenes under res://scenes/rooms/ and a real top/north-wall exit opening
-# whose visuals and StaticBody3D colliders agree when closed vs open.
+# Four-room museum presentation, partner prop integration, green floor exit arrows,
+# and per-room NavigationRegion3D in group museum_navigation (Round P Wave A — JAM-2).
 
 const Rooms = preload("res://scenes/prototype/rooms.gd")
+const ToolStyle = preload("res://scenes/prototype/tool_style.gd")
 
 const KIT_SCENES := {
 	&"display_island": preload("res://scenes/rooms/display_island.tscn"),
@@ -19,6 +19,8 @@ const FLOOR_ACCENTS_SCENE := preload("res://scenes/rooms/floor_accents.tscn")
 const BOSS_COURT_RING_SCENE := preload("res://scenes/rooms/boss_court_ring.tscn")
 const PERIMETER_BOUNDARY_SCENE := preload("res://scenes/rooms/perimeter_boundary.tscn")
 const TOOL_PICKUP_SCENE := preload("res://scenes/rooms/tool_pickup_pedestal.tscn")
+const WALL_BANNER_SCENE := preload("res://scenes/rooms/wall_banner.tscn")
+const EXIT_FLOOR_ARROW_SCENE := preload("res://scenes/rooms/exit_floor_arrow.tscn")
 
 signal exit_state_changed(open: bool)
 signal room_completed(room_id: StringName)
@@ -33,6 +35,8 @@ var floor_accents_root: Node3D
 var doors_root: Node3D
 var ceremony_root: Node3D
 var boundary_root: Node3D
+var banners_root: Node3D
+var exit_arrows_root: Node3D
 
 var active_room_id: StringName = &"gallery"
 var active_definition: Dictionary = {}
@@ -60,6 +64,7 @@ var _boss_core_mat: StandardMaterial3D
 var _north_door_width: float = 4.4
 var _south_door_width: float = 4.4
 var _exit_label: Label3D
+var _prepared_archway_mesh: ArrayMesh
 
 var pickup_root: Node3D
 var pickup_tool := 0
@@ -71,16 +76,16 @@ const PICKUP_MODELS = [
 	preload("res://assets/equipment/time_device.glb"),
 ]
 const PICKUP_NAMES := [
-	"BLUE · DRAWING CUTTER",
-	"YELLOW · FLASH CAMERA",
-	"ORANGE · HEAT BELLOWS",
-	"PURPLE · TIME DEVICE",
+	"DRAWING CUTTER",
+	"FLASH CAMERA",
+	"HEAT BELLOWS",
+	"TIME DEVICE",
 ]
 const PICKUP_COLORS := [
-	Color("60dbde"),
-	Color("f0d77b"),
-	Color("ed9966"),
-	Color("ba9ce9"),
+	ToolStyle.RING,
+	ToolStyle.BEAM,
+	ToolStyle.CONE,
+	ToolStyle.CLOCK,
 ]
 
 
@@ -92,6 +97,19 @@ func _ready() -> void:
 	if not _built:
 		build(false)
 		apply_room(Rooms.definitions()[0])
+	if get_world_3d() != null:
+		NavigationServer3D.map_set_active(get_world_3d().navigation_map, true)
+
+
+func apply_to_arena(arena: Node3D, hide_placeholder_meshes: bool = true) -> void:
+	if is_instance_valid(arena):
+		for child in arena.get_children():
+			if child != self and child is Node3D:
+				for sub in child.find_children("*", "NavigationRegion3D", true, false):
+					if sub is NavigationRegion3D:
+						(sub as NavigationRegion3D).remove_from_group(&"museum_navigation")
+						(sub as NavigationRegion3D).enabled = false
+	super.apply_to_arena(arena, hide_placeholder_meshes)
 
 
 func show_tool_pickup(tool: int, point: Vector3) -> void:
@@ -124,11 +142,11 @@ func show_tool_pickup(tool: int, point: Vector3) -> void:
 	prop_parent.add_child(prop)
 
 	var label := Label3D.new()
-	label.text = "%s\nWalk into the light to collect" % PICKUP_NAMES[clampi(tool - 1, 0, PICKUP_NAMES.size() - 1)]
-	label.position = Vector3(0.0, 2.7, 0.0)
+	label.text = PICKUP_NAMES[clampi(tool - 1, 0, PICKUP_NAMES.size() - 1)]
+	label.position = Vector3(0.0, 2.55, 0.0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.font_size = 32
-	label.pixel_size = 0.009
+	label.font_size = 30
+	label.pixel_size = 0.0085
 	label.modulate = col
 	pickup_root.add_child(label)
 
@@ -196,6 +214,8 @@ func apply_room(definition: Dictionary, cover_ref: RefCounted = null, arena_node
 		exit_open = false
 		_update_gate_and_cue_visuals()
 
+	_sync_navigation_region()
+
 
 func set_exit_open(open: bool) -> void:
 	var was_open := exit_open
@@ -205,6 +225,7 @@ func set_exit_open(open: bool) -> void:
 	elif not open and boss_ceremony_state == &"inactive":
 		gates_closed_ratio = 1.0
 	_update_gate_and_cue_visuals()
+	_sync_navigation_region()
 	exit_state_changed.emit(exit_open)
 	if exit_open and not was_open:
 		var exit_pos: Vector3 = active_definition.get("exit_door", {}).get("position", Vector3(0.0, 0.0, -19.5))
@@ -220,6 +241,7 @@ func start_boss_entrance() -> void:
 	gates_closed_ratio = 0.0
 	boss_activation_glow = 0.08
 	_update_gate_and_cue_visuals()
+	_sync_navigation_region()
 
 
 func is_boss_active() -> bool:
@@ -246,6 +268,7 @@ func set_boss_ceremony_phase(phase: StringName) -> void:
 			gates_closed_ratio = 1.0
 			boss_activation_glow = 1.0
 	_update_gate_and_cue_visuals()
+	_sync_navigation_region()
 
 
 func step_ceremony(world_delta: float) -> Dictionary:
@@ -349,6 +372,14 @@ func _ensure_room_roots() -> void:
 		boundary_root = Node3D.new()
 		boundary_root.name = "PerimeterBoundaryRoot"
 		add_child(boundary_root)
+	if banners_root == null or not is_instance_valid(banners_root):
+		banners_root = Node3D.new()
+		banners_root.name = "WallBanners"
+		add_child(banners_root)
+	if exit_arrows_root == null or not is_instance_valid(exit_arrows_root):
+		exit_arrows_root = Node3D.new()
+		exit_arrows_root.name = "ExitFloorArrows"
+		add_child(exit_arrows_root)
 
 
 func _clear_node_children(node: Node3D) -> void:
@@ -408,6 +439,7 @@ func _apply_floor_and_lighting(def: Dictionary, target_arena: Node3D) -> void:
 
 func _rebuild_room_cover(def: Dictionary) -> void:
 	_clear_node_children(cover_root)
+	_clear_node_children(banners_root)
 	var pieces: Array = def.get("cover_pieces", [])
 	var rects: Array[Rect2] = active_cover_rectangles
 
@@ -421,16 +453,88 @@ func _rebuild_room_cover(def: Dictionary) -> void:
 		kit_node.position = Vector3(rect.get_center().x, 0.0, rect.get_center().y)
 		var scale_root := kit_node.get_node_or_null("ScaleRoot") as Node3D
 		if scale_root != null:
-			scale_root.scale = Vector3(rect.size.x, 1.0, rect.size.y)
+			if kind == &"bench":
+				# Keep the partner bench's long backrest aligned with the longer dimension of rect
+				# and facing inward toward the central combat floor while preserving the exact Rect2 footprint.
+				if rect.size.x > rect.size.y:
+					scale_root.rotation_degrees = Vector3(0.0, -90.0 if rect.get_center().y < 0.0 else 90.0, 0.0)
+					scale_root.scale = Vector3(rect.size.y, 1.0, rect.size.x)
+				else:
+					scale_root.rotation_degrees = Vector3(0.0, 180.0 if rect.get_center().x > 0.0 else 0.0, 0.0)
+					scale_root.scale = Vector3(rect.size.x, 1.0, rect.size.y)
+			else:
+				scale_root.scale = Vector3(rect.size.x, 1.0, rect.size.y)
 		else:
 			kit_node.scale = Vector3(rect.size.x, 1.0, rect.size.y)
+
+		var part_banner := kit_node.get_node_or_null("BannerModel") as Node3D
+		if part_banner != null:
+			# Mount partition banner facing inward toward the room center
+			var inward_sign: float = 1.0 if rect.get_center().x < 0.0 else -1.0
+			part_banner.position = Vector3(inward_sign * (rect.size.x * 0.5 + 0.14), 1.36, 0.0)
+			part_banner.rotation_degrees = Vector3(0.0, 90.0 if inward_sign > 0.0 else -90.0, 0.0)
+
+		_prepare_partner_prop_materials(kit_node)
 		cover_root.add_child(kit_node)
+
+	# Place perimeter wall banners along West and East colonnade bays
+	var banner_slots := [
+		{"name": "WestNorthBanner", "pos": Vector3(-19.2, 0.0, -6.5), "rot_y": 90.0},
+		{"name": "WestSouthBanner", "pos": Vector3(-19.2, 0.0, 5.5), "rot_y": 90.0},
+		{"name": "EastNorthBanner", "pos": Vector3(19.2, 0.0, -6.5), "rot_y": -90.0},
+		{"name": "EastSouthBanner", "pos": Vector3(19.2, 0.0, 5.5), "rot_y": -90.0},
+	]
+	for slot in banner_slots:
+		var wb := WALL_BANNER_SCENE.instantiate() as Node3D
+		wb.name = String(slot["name"])
+		wb.position = slot["pos"] as Vector3
+		wb.rotation_degrees = Vector3(0.0, float(slot["rot_y"]), 0.0)
+		_prepare_partner_prop_materials(wb)
+		banners_root.add_child(wb)
+
+
+func _prepare_partner_prop_materials(root_node: Node) -> void:
+	for child in root_node.find_children("*", "MeshInstance3D", true, false):
+		var mi := child as MeshInstance3D
+		if mi == null or mi.mesh == null:
+			continue
+		if mi.get_surface_override_material_count() > 0 and mi.get_surface_override_material(0) != null:
+			continue
+		for s in range(mi.mesh.get_surface_count()):
+			var src_mat: Material = mi.mesh.surface_get_material(s)
+			if src_mat is StandardMaterial3D:
+				var dup := (src_mat as StandardMaterial3D).duplicate() as StandardMaterial3D
+				dup.cull_mode = BaseMaterial3D.CULL_DISABLED
+				dup.roughness = clampf(dup.roughness, 0.45, 0.82)
+				mi.set_surface_override_material(s, dup)
+
+
+func _prepare_archway_visuals(door_node: Node3D) -> void:
+	if door_node == null:
+		return
+	var arch_root := door_node.get_node_or_null("ArchwayModel") as Node3D
+	if arch_root != null:
+		for child in arch_root.find_children("*", "MeshInstance3D", true, false):
+			var mi := child as MeshInstance3D
+			if mi == null or mi.mesh == null:
+				continue
+			if _prepared_archway_mesh == null:
+				_prepared_archway_mesh = _prepare_mesh(
+					mi.mesh,
+					true,
+					Color(1.42, 1.32, 1.18),
+					0.68,
+					false
+				)
+			mi.mesh = _prepared_archway_mesh
+	_prepare_partner_prop_materials(door_node)
 
 
 func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	_clear_node_children(doors_root)
 	_clear_node_children(ceremony_root)
 	_clear_node_children(boundary_root)
+	_clear_node_children(exit_arrows_root)
 
 	var exit_cfg: Dictionary = def.get("exit_door", {"position": Vector3(0.0, 0.0, -19.5), "width": 4.4})
 	var exit_pos: Vector3 = exit_cfg.get("position", Vector3(0.0, 0.0, -19.5))
@@ -447,6 +551,7 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	_north_door_node = NORTH_EXIT_SCENE.instantiate() as Node3D
 	_north_door_node.name = "NorthExitDoorway"
 	_north_door_node.position = exit_pos
+	_prepare_archway_visuals(_north_door_node)
 	doors_root.add_child(_north_door_node)
 
 	_north_gate_left = _north_door_node.get_node_or_null("NorthGateLeft") as MeshInstance3D
@@ -461,6 +566,7 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	_south_door_node = SOUTH_ENTRANCE_SCENE.instantiate() as Node3D
 	_south_door_node.name = "SouthEntranceDoorway"
 	_south_door_node.position = entrance_pos
+	_prepare_archway_visuals(_south_door_node)
 	doors_root.add_child(_south_door_node)
 
 	_south_gate_left = _south_door_node.get_node_or_null("SouthGateLeft") as MeshInstance3D
@@ -473,6 +579,9 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	boundary_root.add_child(boundary)
 	_configure_north_wall_collider_gap(boundary, exit_pos.x, _north_door_width)
 
+	# Build modest green floor arrows guiding toward the actual open north door
+	_rebuild_exit_floor_arrows(def, exit_pos)
+
 	# Boss court ring in Burial Exhibition
 	if bool(def.get("is_boss_room", false)):
 		var court_ring := BOSS_COURT_RING_SCENE.instantiate() as Node3D
@@ -484,6 +593,118 @@ func _rebuild_doorways_and_ceremony(def: Dictionary) -> void:
 	else:
 		_boss_ring_mat = null
 		_boss_core_mat = null
+
+
+func _rebuild_exit_floor_arrows(def: Dictionary, exit_pos: Vector3) -> void:
+	_clear_node_children(exit_arrows_root)
+	var waypoints := _compute_exit_arrow_waypoints(def, exit_pos)
+	for i in range(waypoints.size()):
+		var pt: Vector3 = waypoints[i]
+		var next_pt: Vector3 = waypoints[i + 1] if (i + 1) < waypoints.size() else Vector3(exit_pos.x, 0.018, exit_pos.z)
+		var arrow := EXIT_FLOOR_ARROW_SCENE.instantiate() as Node3D
+		arrow.name = "ExitArrow_%02d" % (i + 1)
+		arrow.position = Vector3(pt.x, 0.018, pt.z)
+		var dir := Vector3(next_pt.x - pt.x, 0.0, next_pt.z - pt.z)
+		if dir.length_squared() > 0.0001:
+			# Local -Z points along dir toward the next waypoint / open north doorway
+			arrow.rotation = Vector3(0.0, atan2(-dir.x, -dir.z), 0.0)
+		for sub in arrow.find_children("*", "MeshInstance3D", true, false):
+			var mi := sub as MeshInstance3D
+			if mi != null:
+				var mat := mi.get_surface_override_material(0) as StandardMaterial3D
+				if mat != null:
+					mat.albedo_color = ToolStyle.EXIT
+					mat.emission = ToolStyle.EXIT
+		exit_arrows_root.add_child(arrow)
+	exit_arrows_root.visible = exit_open
+
+
+func _compute_exit_arrow_waypoints(def: Dictionary, exit_pos: Vector3) -> Array[Vector3]:
+	var spawn: Vector3 = def.get("player_spawn", Vector3(0.0, 0.55, 8.5))
+	var start_x: float = clampf(spawn.x * 0.12 + exit_pos.x * 0.12, -3.5, 3.5)
+	var z_steps: Array[float] = [2.2, -4.4, -11.0, -16.8]
+	var pts: Array[Vector3] = []
+	var prev_x: float = start_x
+	for idx in range(z_steps.size()):
+		var t: float = float(idx + 1) / float(z_steps.size() + 1)
+		var z_val: float = z_steps[idx]
+		var desired_x: float = lerpf(start_x, exit_pos.x, t)
+		var clear_x: float = _resolve_clear_arrow_x(desired_x, z_val, prev_x, z_steps[idx - 1] if idx > 0 else 5.0)
+		pts.append(Vector3(clear_x, 0.018, z_val))
+		prev_x = clear_x
+	return pts
+
+
+func _resolve_clear_arrow_x(desired_x: float, z_val: float, prev_x: float, prev_z: float) -> float:
+	if not _segment_hits_any_cover(Vector2(prev_x, prev_z), Vector2(desired_x, z_val), 0.85):
+		return desired_x
+	for offset in [0.0, -2.5, 2.5, -5.0, 5.0, -7.5, 7.5, -9.5, 9.5]:
+		var cand_x: float = clampf(desired_x + offset, -10.5, 10.5)
+		if not _segment_hits_any_cover(Vector2(prev_x, prev_z), Vector2(cand_x, z_val), 0.85):
+			return cand_x
+	return desired_x
+
+
+func _segment_hits_any_cover(a: Vector2, b: Vector2, margin: float = 0.65) -> bool:
+	for rect in active_cover_rectangles:
+		var grown: Rect2 = rect.grow(margin)
+		if grown.has_point(a) or grown.has_point(b):
+			return true
+		for s_i in range(1, 16):
+			var p: Vector2 = a.lerp(b, float(s_i) / 16.0)
+			if grown.has_point(p):
+				return true
+	return false
+
+
+func get_exit_arrow_nodes() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	if exit_arrows_root == null or not is_instance_valid(exit_arrows_root):
+		return out
+	for child in exit_arrows_root.get_children():
+		if child is Node3D:
+			out.append(child as Node3D)
+	return out
+
+
+func _sync_navigation_region() -> void:
+	var exit_cfg: Dictionary = active_definition.get("exit_door", {"position": Vector3(0.0, 0.0, -19.5), "width": 4.4})
+	var exit_pos: Vector3 = exit_cfg.get("position", Vector3(0.0, 0.0, -19.5))
+	var exit_w: float = float(exit_cfg.get("width", 4.4))
+	_ensure_navigation_region(active_cover_rectangles, exit_open, exit_pos, exit_w)
+
+
+func find_navigation_path(from_point: Vector3, to_point: Vector3) -> PackedVector3Array:
+	if navigation_region == null or not is_instance_valid(navigation_region):
+		_sync_navigation_region()
+	if get_world_3d() == null:
+		return PackedVector3Array()
+	var map_rid: RID = navigation_region.get_navigation_map()
+	NavigationServer3D.map_set_active(map_rid, true)
+	return NavigationServer3D.map_get_path(map_rid, from_point, to_point, true)
+
+
+func get_placed_partner_asset_counts() -> Dictionary:
+	var counts := {
+		"archway": 0,
+		"bench": 0,
+		"displaycase": 0,
+		"planetDiorama": 0,
+		"banner": 0,
+	}
+	for node in find_children("*", "Node3D", true, false):
+		var path: String = node.scene_file_path
+		if path == "res://assets/archway/archway.glb" or node.name == "ArchwayModel":
+			counts["archway"] += 1
+		elif path == "res://assets/props/bench.glb" or node.name == "BenchModel":
+			counts["bench"] += 1
+		elif path == "res://assets/props/displaycase.glb" or node.name == "DisplayCaseModel":
+			counts["displaycase"] += 1
+		elif path == "res://assets/props/planetDiorama.glb" or node.name == "PlanetDioramaModel":
+			counts["planetDiorama"] += 1
+		elif path == "res://assets/props/banner_V5_TEMP.001.glb" or node.name == "BannerModel":
+			counts["banner"] += 1
+	return counts
 
 
 func _configure_north_wall_collider_gap(boundary: Node3D, gap_x: float, gap_width: float) -> void:
@@ -527,6 +748,12 @@ func _update_gate_and_cue_visuals() -> void:
 	if _exit_cue_root != null:
 		_exit_cue_root.visible = exit_open
 
+	if exit_arrows_root != null and is_instance_valid(exit_arrows_root):
+		exit_arrows_root.visible = exit_open
+
+	if _exit_label != null:
+		_exit_label.modulate = ToolStyle.EXIT
+
 	if _south_gate_left != null and _south_gate_right != null:
 		var s_half_w := _south_door_width * 0.5
 		var s_open_offset := (1.0 - south_closed) * (s_half_w * 0.92)
@@ -537,10 +764,10 @@ func _update_gate_and_cue_visuals() -> void:
 
 	if _exit_beacon_mat != null:
 		if exit_open:
-			var ready_col := Color(0.24, 0.84, 0.52)
+			var ready_col: Color = ToolStyle.EXIT
 			_exit_beacon_mat.albedo_color = ready_col
 			_exit_beacon_mat.emission = ready_col
-			_exit_beacon_mat.emission_energy_multiplier = 1.15
+			_exit_beacon_mat.emission_energy_multiplier = 0.95
 		else:
 			var locked_col := Color(0.32, 0.28, 0.24)
 			_exit_beacon_mat.albedo_color = locked_col

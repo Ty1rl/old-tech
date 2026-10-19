@@ -1,4 +1,7 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=20 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/archway/archway.glb" id="1_archway"]
+[ext_resource type="PackedScene" path="res://scenes/rooms/wall_banner.tscn" id="2_banner"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vestibule_floor"]
 albedo_color = Color(0.15, 0.16, 0.17, 1)
@@ -17,33 +20,10 @@ size = Vector3(4.8, 3.3, 0.35)
 [sub_resource type="BoxMesh" id="BoxMesh_vestibule_side"]
 size = Vector3(0.45, 3.3, 3.0)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone_wing"]
-albedo_color = Color(0.42, 0.4, 0.37, 1)
-roughness = 0.82
-
-[sub_resource type="BoxMesh" id="BoxMesh_wing_wall"]
-size = Vector3(1.95, 3.25, 0.68)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone_pier"]
-albedo_color = Color(0.48, 0.45, 0.41, 1)
-roughness = 0.76
-
-[sub_resource type="BoxMesh" id="BoxMesh_pier"]
-size = Vector3(0.86, 3.3, 1.58)
-
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_brass_trim"]
 albedo_color = Color(0.58, 0.46, 0.26, 1)
 metallic = 0.65
 roughness = 0.38
-
-[sub_resource type="BoxMesh" id="BoxMesh_pier_cap"]
-size = Vector3(0.96, 0.24, 1.68)
-
-[sub_resource type="BoxMesh" id="BoxMesh_lintel"]
-size = Vector3(5.6, 0.52, 1.64)
-
-[sub_resource type="BoxMesh" id="BoxMesh_cornice"]
-size = Vector3(8.2, 0.2, 1.76)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gate_door"]
 albedo_color = Color(0.28, 0.26, 0.23, 1)
@@ -51,37 +31,34 @@ metallic = 0.38
 roughness = 0.56
 
 [sub_resource type="BoxMesh" id="BoxMesh_gate_leaf"]
-size = Vector3(1.92, 2.96, 0.36)
+size = Vector3(1.92, 2.24, 0.36)
 
 [sub_resource type="BoxMesh" id="BoxMesh_gate_band"]
-size = Vector3(1.84, 0.16, 0.42)
+size = Vector3(1.84, 0.14, 0.42)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_exit_threshold"]
 resource_local_to_scene = true
-albedo_color = Color(0.2, 0.68, 0.42, 1)
-emission_enabled = true
-emission = Color(0.22, 0.78, 0.48, 1)
-emission_energy_multiplier = 0.72
+albedo_color = Color(0.513726, 0.788235, 0.635294, 1)
 roughness = 0.48
+emission_enabled = true
+emission = Color(0.513726, 0.788235, 0.635294, 1)
+emission_energy_multiplier = 0.55
 
 [sub_resource type="BoxMesh" id="BoxMesh_threshold_strip"]
-size = Vector3(3.72, 0.04, 0.88)
-
-[sub_resource type="BoxMesh" id="BoxMesh_chevron"]
-size = Vector3(0.76, 0.03, 0.24)
+size = Vector3(3.72, 0.04, 0.64)
 
 [sub_resource type="BoxMesh" id="BoxMesh_jamb_glow"]
-size = Vector3(0.09, 2.8, 0.18)
+size = Vector3(0.09, 2.15, 0.18)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_exit_beacon"]
 resource_local_to_scene = true
-albedo_color = Color(0.28, 0.86, 0.54, 1)
+albedo_color = Color(0.513726, 0.788235, 0.635294, 1)
 emission_enabled = true
-emission = Color(0.3, 0.92, 0.58, 1)
-emission_energy_multiplier = 1.25
+emission = Color(0.513726, 0.788235, 0.635294, 1)
+emission_energy_multiplier = 0.95
 
 [sub_resource type="BoxMesh" id="BoxMesh_beacon"]
-size = Vector3(2.6, 0.2, 0.18)
+size = Vector3(2.4, 0.16, 0.16)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_passage_floor"]
 size = Vector3(6.8, 1, 5.6)
@@ -117,63 +94,32 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.2, 1.65, -1.4)
 mesh = SubResource("BoxMesh_vestibule_side")
 surface_material_override/0 = SubResource("StandardMaterial3D_vestibule_dark")
 
-[node name="LeftWingWall" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.15, 1.625, -0.68)
-mesh = SubResource("BoxMesh_wing_wall")
-surface_material_override/0 = SubResource("StandardMaterial3D_stone_wing")
+[node name="ArchwayModel" parent="." instance=ExtResource("1_archway")]
+transform = Transform3D(0, 0, 0.285, 0, 0.115, 0, -0.28, 0, 0, 0, 1.6, 0.05)
 
-[node name="RightWingWall" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.15, 1.625, -0.68)
-mesh = SubResource("BoxMesh_wing_wall")
-surface_material_override/0 = SubResource("StandardMaterial3D_stone_wing")
+[node name="LeftExitBanner" parent="." instance=ExtResource("2_banner")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.85, 0, 0.35)
 
-[node name="LeftPier" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.32, 1.65, -0.28)
-mesh = SubResource("BoxMesh_pier")
-surface_material_override/0 = SubResource("StandardMaterial3D_stone_pier")
-
-[node name="RightPier" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.32, 1.65, -0.28)
-mesh = SubResource("BoxMesh_pier")
-surface_material_override/0 = SubResource("StandardMaterial3D_stone_pier")
-
-[node name="LeftPierCap" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.32, 2.9, -0.28)
-mesh = SubResource("BoxMesh_pier_cap")
-surface_material_override/0 = SubResource("StandardMaterial3D_brass_trim")
-
-[node name="RightPierCap" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.32, 2.9, -0.28)
-mesh = SubResource("BoxMesh_pier_cap")
-surface_material_override/0 = SubResource("StandardMaterial3D_brass_trim")
-
-[node name="LintelBeam" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, -0.28)
-mesh = SubResource("BoxMesh_lintel")
-surface_material_override/0 = SubResource("StandardMaterial3D_stone_pier")
-
-[node name="LintelCornice" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.52, -0.35)
-mesh = SubResource("BoxMesh_cornice")
-surface_material_override/0 = SubResource("StandardMaterial3D_brass_trim")
+[node name="RightExitBanner" parent="." instance=ExtResource("2_banner")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.85, 0, 0.35)
 
 [node name="NorthGateLeft" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.95, 1.48, -0.24)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.95, 1.12, -0.18)
 mesh = SubResource("BoxMesh_gate_leaf")
 surface_material_override/0 = SubResource("StandardMaterial3D_gate_door")
 
 [node name="BrassBand" type="MeshInstance3D" parent="NorthGateLeft"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
 mesh = SubResource("BoxMesh_gate_band")
 surface_material_override/0 = SubResource("StandardMaterial3D_brass_trim")
 
 [node name="NorthGateRight" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.95, 1.48, -0.24)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.95, 1.12, -0.18)
 mesh = SubResource("BoxMesh_gate_leaf")
 surface_material_override/0 = SubResource("StandardMaterial3D_gate_door")
 
 [node name="BrassBand" type="MeshInstance3D" parent="NorthGateRight"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
 mesh = SubResource("BoxMesh_gate_band")
 surface_material_override/0 = SubResource("StandardMaterial3D_brass_trim")
 
@@ -181,54 +127,38 @@ surface_material_override/0 = SubResource("StandardMaterial3D_brass_trim")
 visible = false
 
 [node name="ThresholdStrip" type="MeshInstance3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, 0.2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, 0.28)
 mesh = SubResource("BoxMesh_threshold_strip")
 surface_material_override/0 = SubResource("StandardMaterial3D_exit_threshold")
 
-[node name="ExitChevron_1" type="MeshInstance3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0.028, 1.05)
-mesh = SubResource("BoxMesh_chevron")
-surface_material_override/0 = SubResource("StandardMaterial3D_exit_threshold")
-
-[node name="ExitChevron_2" type="MeshInstance3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.028, 1.05)
-mesh = SubResource("BoxMesh_chevron")
-surface_material_override/0 = SubResource("StandardMaterial3D_exit_threshold")
-
-[node name="ExitChevron_3" type="MeshInstance3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0.028, 1.05)
-mesh = SubResource("BoxMesh_chevron")
-surface_material_override/0 = SubResource("StandardMaterial3D_exit_threshold")
-
 [node name="LeftInnerGlow" type="MeshInstance3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.84, 1.44, -0.24)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.84, 1.08, 0.05)
 mesh = SubResource("BoxMesh_jamb_glow")
 surface_material_override/0 = SubResource("StandardMaterial3D_exit_threshold")
 
 [node name="RightInnerGlow" type="MeshInstance3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.84, 1.44, -0.24)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.84, 1.08, 0.05)
 mesh = SubResource("BoxMesh_jamb_glow")
 surface_material_override/0 = SubResource("StandardMaterial3D_exit_threshold")
 
 [node name="ExitBeacon" type="MeshInstance3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.16, 0.56)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.48, 0.62)
 mesh = SubResource("BoxMesh_beacon")
 surface_material_override/0 = SubResource("StandardMaterial3D_exit_beacon")
 
 [node name="ExitLight" type="OmniLight3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, -0.35)
-light_color = Color(0.32, 0.92, 0.58, 1)
-light_energy = 1.35
-omni_range = 7.5
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.85, -0.15)
+light_color = Color(0.513726, 0.788235, 0.635294, 1)
+light_energy = 1.15
+omni_range = 7.0
 
 [node name="ExitLabel" type="Label3D" parent="ExitCueRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0.75)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.85, 0.68)
 billboard = 1
-modulate = Color(0.57, 0.95, 0.74, 1)
-text = "NEXT GALLERY →
-Walk through the open doorway"
-font_size = 32
-pixel_size = 0.01
+modulate = Color(0.513726, 0.788235, 0.635294, 1)
+text = "EXIT"
+font_size = 30
+pixel_size = 0.009
 
 [node name="PassageFloorBody" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, -1.2)

@@ -28,6 +28,7 @@ var floor_root: Node3D
 var walls_root: Node3D
 var columns_root: Node3D
 var cover_root: Node3D
+var navigation_region: NavigationRegion3D
 
 var _built := false
 var _shared_meshes: Dictionary = {}
@@ -36,9 +37,16 @@ var _floor_shader_material: ShaderMaterial
 var _wall_materials: Array[StandardMaterial3D] = []
 
 
+func _enter_tree() -> void:
+	if get_world_3d() != null:
+		NavigationServer3D.map_set_active(get_world_3d().navigation_map, true)
+
+
 func _ready() -> void:
 	if not _built:
 		build()
+	if get_world_3d() != null:
+		NavigationServer3D.map_set_active(get_world_3d().navigation_map, true)
 
 
 func build(include_cover_decorations: bool = true) -> Node3D:
@@ -65,9 +73,114 @@ func build(include_cover_decorations: bool = true) -> Node3D:
 	_build_perimeter_walls_and_columns()
 	if include_cover_decorations:
 		_build_cover_decorations()
+		_ensure_navigation_region(Cover.RECTANGLES, false, Vector3(0.0, 0.0, -19.5), 4.4)
 
 	_built = true
 	return self
+
+
+func get_navigation_region() -> NavigationRegion3D:
+	return navigation_region
+
+
+func _ensure_navigation_region(rects: Array[Rect2], include_north_exit: bool, exit_pos: Vector3, exit_width: float) -> NavigationRegion3D:
+	if navigation_region == null or not is_instance_valid(navigation_region):
+		navigation_region = NavigationRegion3D.new()
+		navigation_region.name = "RoomNavigationRegion"
+		navigation_region.process_mode = Node.PROCESS_MODE_ALWAYS
+		navigation_region.navigation_layers = 1
+		navigation_region.use_edge_connections = true
+		add_child(navigation_region)
+	if not navigation_region.is_in_group(&"museum_navigation"):
+		navigation_region.add_to_group(&"museum_navigation")
+	navigation_region.enabled = true
+	var nm := build_room_navigation_mesh(rects, 0.55, include_north_exit, exit_pos, exit_width)
+	navigation_region.navigation_mesh = nm
+	if is_inside_tree() and get_world_3d() != null:
+		var map_rid: RID = get_world_3d().navigation_map
+		NavigationServer3D.map_set_active(map_rid, true)
+		NavigationServer3D.region_set_map(navigation_region.get_rid(), map_rid)
+		NavigationServer3D.region_set_navigation_mesh(navigation_region.get_rid(), nm)
+	return navigation_region
+
+
+static func build_room_navigation_mesh(rects: Array[Rect2], clearance: float = 0.55, include_north_exit: bool = false, exit_pos: Vector3 = Vector3(0.0, 0.0, -19.5), exit_width: float = 4.4) -> NavigationMesh:
+	var floor_rect := Rect2(-18.5, -18.5, 37.0, 37.0)
+	var grown_rects: Array[Rect2] = []
+	for r in rects:
+		grown_rects.append(r.grow(clearance))
+
+	var exit_half_w: float = maxf(1.25, snappedf(exit_width * 0.42, 0.25))
+	var raw_xs: Array[float] = [floor_rect.position.x, floor_rect.end.x]
+	var raw_zs: Array[float] = [floor_rect.position.y, floor_rect.end.y]
+	raw_xs.append(clampf(snappedf(exit_pos.x - exit_half_w, 0.25), floor_rect.position.x, floor_rect.end.x))
+	raw_xs.append(clampf(snappedf(exit_pos.x + exit_half_w, 0.25), floor_rect.position.x, floor_rect.end.x))
+
+	for gr in grown_rects:
+		raw_xs.append(clampf(snappedf(gr.position.x, 0.25), floor_rect.position.x, floor_rect.end.x))
+		raw_xs.append(clampf(snappedf(gr.end.x, 0.25), floor_rect.position.x, floor_rect.end.x))
+		raw_zs.append(clampf(snappedf(gr.position.y, 0.25), floor_rect.position.y, floor_rect.end.y))
+		raw_zs.append(clampf(snappedf(gr.end.y, 0.25), floor_rect.position.y, floor_rect.end.y))
+
+	raw_xs.sort()
+	raw_zs.sort()
+
+	var xs: Array[float] = []
+	for x in raw_xs:
+		if xs.is_empty() or absf(x - xs[xs.size() - 1]) > 0.1:
+			xs.append(x)
+	var zs: Array[float] = []
+	for z in raw_zs:
+		if zs.is_empty() or absf(z - zs[zs.size() - 1]) > 0.1:
+			zs.append(z)
+
+	var nx: int = xs.size()
+	var nz: int = zs.size()
+	var verts := PackedVector3Array()
+	verts.resize(nx * nz)
+	for j in range(nz):
+		for i in range(nx):
+			verts[j * nx + i] = Vector3(xs[i], 0.0, zs[j])
+
+	var nav_mesh := NavigationMesh.new()
+	var polys: Array[PackedInt32Array] = []
+
+	for j in range(nz - 1):
+		var z_mid: float = 0.5 * (zs[j] + zs[j + 1])
+		for i in range(nx - 1):
+			var x_mid: float = 0.5 * (xs[i] + xs[i + 1])
+			var pt := Vector2(x_mid, z_mid)
+			var blocked := false
+			for gr in grown_rects:
+				if gr.has_point(pt):
+					blocked = true
+					break
+			if blocked:
+				continue
+			var v00: int = j * nx + i
+			var v10: int = j * nx + (i + 1)
+			var v11: int = (j + 1) * nx + (i + 1)
+			var v01: int = (j + 1) * nx + i
+			polys.append(PackedInt32Array([v00, v10, v11, v01]))
+
+	if include_north_exit:
+		var z_north_vestibule: float = snappedf(exit_pos.z - 1.5, 0.25)
+		var base_idx: int = verts.size()
+		for i in range(nx):
+			verts.append(Vector3(xs[i], 0.0, z_north_vestibule))
+		for i in range(nx - 1):
+			var x_mid: float = 0.5 * (xs[i] + xs[i + 1])
+			if absf(x_mid - exit_pos.x) <= exit_half_w + 0.05:
+				var v_north_0: int = base_idx + i
+				var v_north_1: int = base_idx + (i + 1)
+				var v_south_1: int = i + 1
+				var v_south_0: int = i
+				polys.append(PackedInt32Array([v_north_0, v_north_1, v_south_1, v_south_0]))
+
+	nav_mesh.set_vertices(verts)
+	for p in polys:
+		nav_mesh.add_polygon(p)
+	return nav_mesh
 
 
 func apply_to_arena(arena: Node3D, hide_placeholder_meshes: bool = true) -> void:
@@ -102,6 +215,7 @@ func _clear_built_children() -> void:
 	walls_root = null
 	columns_root = null
 	cover_root = null
+	navigation_region = null
 	_built = false
 
 

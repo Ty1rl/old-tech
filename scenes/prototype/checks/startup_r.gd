@@ -1,6 +1,6 @@
 extends SceneTree
 ## Real SceneManager/campaign transitions; no stub start_play or loader path.
-const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-5/exports/round-r/"
+const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-1/exports/round-r/integration/"
 var checks := 0
 var failures: Array[String] = []
 var profiles: Array[Dictionary] = []
@@ -49,6 +49,9 @@ func run() -> void:
 	popup.hard.button_pressed=true
 	popup.start_button.grab_focus()
 	popup._on_start()
+	await settle()
+	popup.intro._on_skip()
+	await settle()
 	expect(manager.is_transitioning(),"Existing New Game callback starts a real transition")
 	expect(not manager.start_play(false,&"easy",false),"Duplicate starts are rejected")
 	expect(not manager.reload_current_scene(),"Reload cannot race an active start")
@@ -69,9 +72,9 @@ func run() -> void:
 	await done()
 	expect(current_scene==main and main.process_mode!=Node.PROCESS_MODE_DISABLED,"Cancellation restores original scene processing")
 	expect(state.is_in_menu() and not paused,"Cancellation restores pre-start GameState and pause state")
-	expect(manager.get_popup(&"NewGame")==popup and manager.params=={"sentinel":17},"Cancellation keeps popup and previous params")
+	expect(manager.get_popup(&"NewGame")==null and manager.params=={"sentinel":17},"Cancelling post-story loading returns to menu with previous params")
 	expect(not manager._loading.visible and not manager._fade_rect.visible,"Cancellation removes loading/fade blockers")
-	expect(not popup.start_button.disabled and root.gui_get_focus_owner()==popup.start_button,"Cancelled New Game restores enabled Start and focus")
+	expect(root.gui_get_focus_owner()!=null and root.gui_get_focus_owner().is_visible_in_tree(),"Cancelled New Game restores visible menu focus")
 	expect(changed.is_empty(),"Cancelled request emits no scene_changed")
 	expect(manager.start_play(true),"Different-path retry accepted after cancellation")
 	expect(manager.cancel_transition(),"Different-path transition can cancel before resource work")
@@ -129,6 +132,8 @@ func run() -> void:
 	for i in range(5): await process_frame
 	expect(manager._loading_path.is_empty(),"Completed/cancelled resource work releases transition state")
 	root.get_node("AudioManager").stop_dialogue()
+	root.get_node("AudioManager").set_music_context(&"intro")
+	call_group(&"world_audio", &"reset_state")
 	manager.clear_popups()
 	if current_scene: current_scene.queue_free()
 	await settle()

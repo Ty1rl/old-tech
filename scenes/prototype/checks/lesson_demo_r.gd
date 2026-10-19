@@ -348,10 +348,11 @@ func _run() -> void:
 	demo.ready_for_practice.disconnect(on_ready)
 	for key in saved_prefs:
 		state.set_setting(key, saved_prefs[key])
+	real_audio.set_music_context(&"intro")
 	call_group(&"world_audio", &"reset_state")
 	arena.queue_free()
 	await _settle(2)
-	await create_timer(0.15, true).timeout
+	await create_timer(0.3, true).timeout
 
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)

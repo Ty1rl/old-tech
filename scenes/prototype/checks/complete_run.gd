@@ -134,6 +134,8 @@ func run() -> void:
 	await execute_full_run(&"easy")
 	await execute_full_run(&"hard")
 	root.get_node("SceneManager").clear_popups();state.start_game();state.set_setting("tutorial",old)
+	root.get_node("AudioManager").stop_dialogue()
+	root.get_node("AudioManager").set_music_context(&"intro")
 	arena.feedback.reset_state();arena.queue_free();await process_frame
 	# Allow the native audio mixer to release compressed playback before exit.
 	await create_timer(.3).timeout

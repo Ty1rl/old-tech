@@ -492,6 +492,8 @@ func run() -> void:
 		"Completing pause transitions to active boss state and emits boss_activated"
 	)
 
+	root.get_node("AudioManager").stop_dialogue()
+	root.get_node("AudioManager").set_music_context(&"intro")
 	preview.arena.feedback.reset_state()
 	preview.queue_free()
 	await process_frame

@@ -1,5 +1,5 @@
 extends SceneTree
-const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-7/exports/round-r"
+const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-1/exports/round-r/integration/views"
 var pictures: Array[String] = []
 var checks := 0
 var failures: Array[String] = []
@@ -18,9 +18,6 @@ func run() -> void:
 	var state=root.get_node("GameState");var scenes=root.get_node("SceneManager");var audio=root.get_node("AudioManager")
 	var saved: Dictionary=state.preferences()
 	state.set_setting("sound",true);state.set_setting("volume",.8);state.set_setting("voice_volume",.9);state.set_setting("fullscreen",false);state.set_setting("skip_tutorials",false)
-	var fixture:=FileAccess.open(OUT+"/audio_contract_fixture.gd",FileAccess.WRITE)
-	fixture.store_string(FileAccess.get_file_as_string("res://scenes/prototype/checks/ui_r_audio_contract.gd.txt"));fixture.close()
-	audio.set_script(load(OUT+"/audio_contract_fixture.gd"));audio.install()
 	var main=load("res://scenes/main.tscn").instantiate();root.add_child(main);current_scene=main;state.open_menu();await settle()
 	for view_size in [Vector2i(1280,800),Vector2i(640,360)]:
 		root.size=view_size;await settle()

@@ -1,7 +1,6 @@
 extends SceneTree
 ## Real GameState/config + authored controls; no SceneManager transport stub.
 ## Cross-seat start_play third-argument verification requires JAM-5's delivery.
-const OUT := "/home/mattlongname/game-jams/state/old-tech-jam-7/exports/round-r"
 var checks := 0
 var failures: Array[String] = []
 func _initialize() -> void: call_deferred("run")
@@ -21,9 +20,6 @@ func run() -> void:
 	expect(config.save(state.SETTINGS_PATH)==OK,"Can create genuine pre-flag preference file in isolated seat userdata")
 	state._preferences.skip_tutorials=true;state.reload_preferences()
 	expect(not state.preferences().skip_tutorials,"Older saves default Skip tutorials off")
-	var fixture:=FileAccess.open(OUT+"/audio_contract_fixture.gd",FileAccess.WRITE)
-	fixture.store_string(FileAccess.get_file_as_string("res://scenes/prototype/checks/ui_r_audio_contract.gd.txt"));fixture.close()
-	audio.set_script(load(OUT+"/audio_contract_fixture.gd"));audio.install()
 	var main=load("res://scenes/main.tscn").instantiate();root.add_child(main);current_scene=main;state.open_menu();await settle()
 	var popup=scenes.push_popup(&"NewGame");await settle()
 	expect(not popup.skip_tutorials.button_pressed and popup.selected_difficulty()==&"easy","Authored checkbox defaults off independently of Easy")
@@ -53,5 +49,5 @@ func run() -> void:
 	expect(not popup.skip_tutorials.button_pressed,"Unchecking persists independently for the next New Game")
 	scenes.close_popup(&"NewGame");await settle()
 	for setting in saved:state.set_setting(setting,saved[setting])
-	audio.stop_dialogue();audio.voice.stream=null;await create_timer(.25,true).timeout
+	audio.stop_dialogue();audio.set_music_context(&"intro");audio.voice.stream=null;await create_timer(.25,true).timeout
 	print(JSON.stringify({"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures,"scope":"real preference/controls; JAM-5 third-argument transport requires integration, never stubbed"}));quit(0 if failures.is_empty() else 1)

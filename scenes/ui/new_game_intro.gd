@@ -24,6 +24,8 @@ func _ready() -> void:
 	resized.connect(_fit)
 	get_window().size_changed.connect(_fit)
 	get_window().close_requested.connect(_window_closed)
+	SceneManager.transition_cancelled.connect(_loading_cancelled)
+	SceneManager.transition_failed.connect(_loading_failed)
 	_fit.call_deferred()
 
 func begin(difficulty: StringName, skip_tutorials: bool = false) -> void:
@@ -121,6 +123,18 @@ func _on_quit() -> void:
 func _window_closed() -> void:
 	cancel()
 
+func _loading_failed(_key: StringName, _reason: String) -> void:
+	_loading_cancelled(_key)
+
+func _loading_cancelled(_key: StringName) -> void:
+	if phase != Phase.TRANSITION: return
+	phase = Phase.IDLE
+	_restore_scene()
+	AudioManager.set_music_context(&"menu")
+	hide()
+	set_process(false)
+	cancelled.emit()
+
 func _start_game() -> void:
 	if SceneManager.is_transitioning(): return
 	Input.flush_buffered_events()
@@ -129,6 +143,8 @@ func _start_game() -> void:
 	active = false
 	phase = Phase.TRANSITION
 	_cleanup(false)
+	# Hand scene ownership back before the loader captures its rollback state.
+	_restore_scene()
 	# JAM-5 owns the compatible third argument; this dispatch keeps the UI
 	# delivery importable before that independent manager commit is integrated.
 	var accepted: bool = SceneManager.call(&"start_play", false, _difficulty, _skip_tutorials)

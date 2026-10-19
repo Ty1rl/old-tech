@@ -428,8 +428,17 @@ func _run() -> void:
 	# Verify GameState preference transport for skip_tutorials
 	scenes.params = {"difficulty": &"easy"}
 	game.set_setting("tutorial", false)
+	game.set_setting("skip_tutorials", false)
 	arena.start_new_run(&"easy")
-	expect(arena.skip_tutorials and arena._is_skip_tutorials_active(), "GameState tutorial=false preference activates skip_tutorials on start_new_run")
+	expect(not arena.skip_tutorials, "Hiding hints does not skip teaching when the checkbox is off")
+	expect(not arena.tutorial.is_learned(&"shot"), "A fresh taught run re-enables contextual teaching instead of silently marking lessons learned")
+	game.set_setting("skip_tutorials", true)
+	arena.start_new_run(&"easy")
+	expect(arena.skip_tutorials, "Saved Skip tutorials preference is used when no run flag is supplied")
+	scenes.params["skip_tutorials"] = false
+	arena.start_new_run(&"easy")
+	expect(not arena.skip_tutorials, "Explicit unchecked start selection overrides a saved true preference")
+	game.set_setting("skip_tutorials", false)
 	game.set_setting("tutorial", true)
 
 	Input.action_release(&"move_up")
@@ -437,6 +446,8 @@ func _run() -> void:
 	game.start_game()
 	for key in saved_prefs:
 		game.set_setting(key, saved_prefs[key])
+	root.get_node("AudioManager").stop_dialogue()
+	root.get_node("AudioManager").set_music_context(&"intro")
 	arena.feedback.reset_state()
 	arena.queue_free()
 	await process_frame

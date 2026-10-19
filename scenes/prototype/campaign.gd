@@ -73,34 +73,17 @@ func set_skip_tutorials(value: bool) -> void:
 
 
 func _prefs_skip_tutorials() -> bool:
-	if GameState == null:
-		return false
-	var direct_prop: Variant = GameState.get("skip_tutorials")
-	if direct_prop != null and bool(direct_prop):
-		return true
-	if GameState.has_method("preferences"):
-		var prefs: Dictionary = GameState.preferences()
-		if bool(prefs.get("skip_tutorials", false)) or bool(prefs.get("skip_tutorial", false)):
-			return true
-		if prefs.has("tutorial") and not bool(prefs.get("tutorial", true)):
-			return true
-	return false
+	return bool(GameState.preferences().get("skip_tutorials", false))
 
 
 func _params_skip_tutorials() -> Variant:
-	if SceneManager == null:
-		return null
 	if SceneManager.params.has("skip_tutorials"):
 		return bool(SceneManager.params.get("skip_tutorials", false))
-	if SceneManager.params.has("skip_tutorial"):
-		return bool(SceneManager.params.get("skip_tutorial", false))
-	if SceneManager.params.has("tutorial"):
-		return not bool(SceneManager.params.get("tutorial", true))
 	return null
 
 
 func _is_skip_tutorials_active() -> bool:
-	return skip_tutorials or _prefs_skip_tutorials()
+	return skip_tutorials
 
 
 func _set_music_context(context: StringName) -> void:
@@ -231,6 +214,9 @@ func start_new_run(new_difficulty: Variant = null, new_skip_tutorials: Variant =
 	_apply_time_capabilities()
 	lesson = &""
 	_practice_stage = &""
+	# The new-run checkbox is authoritative; an older contextual-teaching
+	# preference must not silently bypass an explicitly requested taught run.
+	if not skip_tutorials: GameState.set_setting("tutorial", true)
 	enter_room(0)
 
 
@@ -268,6 +254,7 @@ func _ready() -> void:
 	_rewind_unlocked = false
 	_apply_time_capabilities()
 	_campaign_ready = true
+	if not skip_tutorials: GameState.set_setting("tutorial", true)
 	enter_room(0)
 	if SceneManager.params.has("debug_room"):
 		debug_start(

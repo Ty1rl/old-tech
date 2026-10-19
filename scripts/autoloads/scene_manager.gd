@@ -5,6 +5,7 @@ signal popup_opened(key: StringName, popup: Node)
 signal popup_closed(key: StringName)
 signal restart_room_requested
 signal transition_failed(key: StringName, reason: String)
+signal transition_cancelled(key: StringName)
 signal _transition_tick
 
 # &"scene_name": "res://path/to/scene_name.tscn",
@@ -410,6 +411,7 @@ func _change(key: StringName, path: String, new_params: Dictionary, fade: bool) 
 	profile.total_usec = Time.get_ticks_usec() - started
 	last_transition_profile = profile
 	_transitioning = false
+	if _cancel_requested: transition_cancelled.emit(key)
 	if not failure.is_empty(): transition_failed.emit(key, failure)
 
 

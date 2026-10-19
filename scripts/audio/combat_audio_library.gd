@@ -4,6 +4,6 @@ extends Resource
 @export_group("Sound effects")
 @export var cues: Array[CombatAudioCue] = []
 @export_group("Music")
-## Optional licensed compressed music. Null leaves a ready but silent music slot.
-@export var music: AudioStream
+## Context streams are played only by AudioManager. Intro intentionally has none.
+@export var music_tracks: Dictionary[StringName, AudioStream] = {}
 @export_range(-50, -10, 0.5) var music_volume_db: float = -30.0

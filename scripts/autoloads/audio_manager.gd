@@ -1,9 +1,16 @@
 extends Node
-## Recorded speech only. CombatFeedback owns world effects and music.
+## Recorded speech lifetime + ONE contextual music player. Presentation belongs
+## to the intro/tutorial owners; world effects/time motors stay in CombatFeedback.
+signal speech_finished(event: StringName, interrupted: bool)
+
+const MAX_QUEUE := 3
+@export var music_library: CombatAudioLibrary = preload("res://audio/music/contexts.tres")
 @onready var voice: AudioStreamPlayer = $Voice
-@onready var skip_intro: Button = $Overlay/SkipIntro
+@onready var music: AudioStreamPlayer = $Music
 var library: DialogueLibrary
 var current_event: StringName = &""
+var music_context: StringName:
+	get: return _music_context
 var _priority := 0
 var _queue: Array[Dictionary] = []
 var _variants: Dictionary = {}
@@ -11,81 +18,137 @@ var _once: Dictionary = {}
 var _bark_cooldown := 0.0
 var _intro_played := false
 var _duck := 0.0
-var played_events: Array[StringName] = [] # Bounded diagnostic evidence.
+var played_events: Array[StringName] = []
 var _speaker_scene: Node
 var _quitting := false
+var _cancelling := false
+var _speech_elapsed := 0.0
+var _speech_serial := 0
+var _music_context: StringName = &"intro"
+var _music_gain := 0.0
+var _music_pending := false
+var _music_completed := false
+var _world_pitch := 1.0
+var _world_frozen := false
+var _foreground_gain := 1.0
+var _world_muted := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	library = load("res://audio/voice/library.tres") as DialogueLibrary
 	voice.finished.connect(_on_finished)
-	skip_intro.pressed.connect(stop_dialogue)
+	music.finished.connect(func(): _music_completed = true)
 	SceneManager.scene_changed.connect(_on_scene_changed)
 	get_tree().auto_accept_quit = false
 	get_tree().root.close_requested.connect(request_quit)
 
-func play_intro() -> void:
-	if _intro_played: return
-	_intro_played = true
-	say(&"narration.intro", 2)
+func instruction_busy() -> bool:
+	if not _speech_available(): return false
+	if String(current_event).begins_with("tutorial."): return true
+	for item in _queue:
+		if String(item.event).begins_with("tutorial."): return true
+	return false
+
+func is_speaking(event: StringName) -> bool:
+	if event.is_empty() or not _speech_available(): return false
+	return current_event == event or _queue.any(func(item): return item.event == event)
+
+func play_intro() -> bool:
+	if _intro_played: return false
+	var accepted := say(&"narration.intro", 2)
+	if accepted: _intro_played = true
+	return accepted
 
 func begin_run() -> void:
 	stop_dialogue()
 	_once.clear()
 	_bark_cooldown = 0
+	_intro_played = false # Next explicit New Game may present its intro again.
 
 func lesson(id: StringName) -> void:
 	stop_dialogue()
 	say(StringName("tutorial." + String(id)), 3)
 	if id == &"shot": say(&"tutorial.time_meter", 2, true)
 
+func _bus_audible(name: StringName) -> bool:
+	var index := AudioServer.get_bus_index(name)
+	return index >= 0 and not AudioServer.is_bus_mute(index) and AudioServer.get_bus_volume_db(index) > -70
+
+func _speech_available() -> bool:
+	return not _quitting and library != null and is_instance_valid(voice) and _bus_audible(&"Master") and _bus_audible(&"Voice")
+
 func say(event: StringName, priority: int = 1, once: bool = false) -> bool:
-	if library == null or not library.clips.has(event): return false
+	if event.is_empty() or _cancelling or not _speech_available() or not library.clips.has(event): return false
+	if not library.clips[event] is Array: return false
 	if once and _once.has(event): return false
 	if event == current_event or _queue.any(func(item): return item.event == event): return false
+	var variants: Array = library.clips[event]
+	var clips: Array[AudioStream] = []
+	for clip in variants:
+		if clip is AudioStream and clip.get_length() > 0: clips.append(clip)
+	if clips.is_empty(): return false
+	if priority == 1 and (_bark_cooldown > 0 or not current_event.is_empty()): return false
+	var variant := int(_variants.get(event, 0)) % clips.size()
+	var item := {"event":event, "priority":priority, "once":once, "stream":clips[variant]}
 	_bind_speaker_scene()
-	# Incidental speech never accumulates or talks over teaching/boss entrances.
-	if priority == 1 and (_bark_cooldown > 0 or voice.playing): return false
-	var item := {"event": event, "priority": priority, "once": once}
-	if voice.playing and priority <= _priority:
-		if priority == 1 or _queue.size() >= 3: return false
+	if not current_event.is_empty() and priority <= _priority:
+		if priority == 1 or _queue.size() >= MAX_QUEUE: return false
 		_queue.append(item)
 		return true
-	if voice.playing:
-		voice.stop()
-		_queue.clear()
+	if not current_event.is_empty(): stop_dialogue()
 	_start(item)
 	return true
 
 func stop_dialogue() -> void:
-	voice.stop()
+	if _cancelling: return
+	_cancelling = true
+	var cancelled: Array[StringName] = []
+	if not current_event.is_empty(): cancelled.append(current_event)
+	for item in _queue: cancelled.append(item.event)
+	# Clear before callbacks; a terminal listener cannot see stale busy state or
+	# enqueue a new scene's request in the middle of this cancellation batch.
 	_queue.clear()
 	current_event = &""
 	_priority = 0
-	skip_intro.hide()
+	_speech_elapsed = 0
+	_speech_serial += 1
+	if is_instance_valid(voice): voice.stop()
+	for event in cancelled: speech_finished.emit(event, true)
+	_cancelling = false
 
 func _start(item: Dictionary) -> void:
-	var variants: Array = library.clips[item.event]
-	if variants.is_empty(): return
-	var index := int(_variants.get(item.event, 0)) % variants.size()
-	_variants[item.event] = index + 1
-	voice.stream = variants[index]
-	# Restrained boss register; instructional speech never slows or reverses.
+	_speech_serial += 1
+	voice.stream = item.stream
 	voice.pitch_scale = .86 if String(item.event).begins_with("boss.") else 1.0
 	current_event = item.event
 	_priority = item.priority
+	_speech_elapsed = 0
+	_variants[item.event] = int(_variants.get(item.event, 0)) + 1
 	if item.once: _once[item.event] = true
 	if _priority == 1: _bark_cooldown = 18
 	played_events.append(current_event)
 	if played_events.size() > 64: played_events.pop_front()
-	skip_intro.visible = current_event == &"narration.intro"
 	voice.play()
 
-func _on_finished() -> void:
+func _finish_current(interrupted: bool) -> void:
+	if current_event.is_empty(): return
+	var event := current_event
 	current_event = &""
 	_priority = 0
-	skip_intro.hide()
-	if not _queue.is_empty(): _start(_queue.pop_front())
+	_speech_elapsed = 0
+	# Handoff before notification keeps instruction_busy true across a queued
+	# tutorial chain; consumers can proceed immediately after its final line.
+	if not _queue.is_empty() and _speech_available(): _start(_queue.pop_front())
+	speech_finished.emit(event, interrupted)
+
+func _on_finished() -> void:
+	_finish_current(false)
+
+func _check_stopped_speech(serial: int) -> void:
+	# The player's native finished signal is processed after its parent's tick.
+	# Give it that turn before treating stopped playback as an interruption.
+	if serial == _speech_serial and not current_event.is_empty() and not voice.playing:
+		_finish_current(true)
 
 func _on_scene_changed(_key: StringName) -> void:
 	stop_dialogue()
@@ -98,26 +161,94 @@ func _bind_speaker_scene() -> void:
 	_speaker_scene = scene
 	if is_instance_valid(scene): scene.tree_exiting.connect(stop_dialogue)
 
+func set_music_context(context: StringName) -> bool:
+	if _quitting: return false
+	if context != &"intro" and not music_library.music_tracks.has(context): return false
+	if context == _music_context: return true
+	_music_context = context
+	music.stop()
+	music.stream = null
+	_music_gain = 0
+	_music_completed = false
+	if context == &"intro": return true
+	music.stream = music_library.music_tracks[context]
+	music.process_mode = Node.PROCESS_MODE_ALWAYS if context in [&"menu", &"victory"] else Node.PROCESS_MODE_PAUSABLE
+	music.stream_paused = context in [&"encounter", &"boss"] and (GameState.is_paused() or get_tree().paused)
+	if context in [&"menu", &"victory"]:
+		_world_pitch = 1
+		_world_frozen = false
+		_foreground_gain = 1
+		_world_muted = false
+	_queue_music_start()
+	return true
+
+func set_world_audio_state(pitch: float, frozen: bool, foreground_gain: float, muted: bool = false) -> void:
+	_world_pitch = clampf(pitch, .05, 4)
+	_world_frozen = frozen
+	_foreground_gain = clampf(foreground_gain, 0, 1)
+	_world_muted = muted
+
+func _queue_music_start() -> void:
+	if not _music_pending:
+		_music_pending = true
+		call_deferred("_flush_music")
+
+func _flush_music() -> void:
+	_music_pending = false
+	if _quitting or is_queued_for_deletion() or _music_completed or _music_context == &"intro": return
+	# A paused player reports !playing; starting it again would reset its cursor.
+	if not music.can_process(): return
+	if _bus_audible(&"Master") and not (_music_context in [&"encounter", &"boss"] and (_world_muted or _world_frozen)) and not music.playing and music.stream != null: music.play()
+
 func request_quit() -> void:
 	if _quitting: return
 	_quitting = true
-	get_tree().paused = true
 	stop_dialogue()
+	music.stop()
+	_music_context = &"intro"
+	get_tree().paused = true
 	get_tree().call_group(&"world_audio", &"reset_state")
 	await get_tree().create_timer(.25, true).timeout
 	get_tree().quit()
 
 func _exit_tree() -> void:
-	voice.stop()
+	_quitting = true
+	stop_dialogue()
 	voice.stream = null
+	music.stop()
+	music.stream = null
 	library = null
-	_queue.clear()
+	var index := AudioServer.get_bus_index(&"World")
+	if index >= 0: AudioServer.set_bus_volume_db(index, 0)
 
 func _process(delta: float) -> void:
 	_bark_cooldown = maxf(0, _bark_cooldown - delta)
-	voice.stream_paused = GameState.is_paused()
-	var target := -8.0 if voice.playing else 0.0
+	var paused := GameState.is_paused() or get_tree().paused
+	voice.stream_paused = paused
+	if not _speech_available() and (not current_event.is_empty() or not _queue.is_empty()):
+		stop_dialogue()
+	elif not current_event.is_empty():
+		if not paused:
+			_speech_elapsed += maxf(0, delta)
+			# Native completion normally owns the terminal event. This bounded
+			# fallback cancels an externally stopped/failed/looping stream too.
+			if voice.stream == null or _speech_elapsed > voice.stream.get_length() / maxf(.01, voice.pitch_scale) + 1:
+				voice.stop()
+				_finish_current(true)
+			elif not voice.playing and _speech_elapsed > .2:
+				_check_stopped_speech.call_deferred(_speech_serial)
+	var target := -8.0 if not current_event.is_empty() else 0.0
 	_duck = move_toward(_duck, target, delta * 24)
 	var index := AudioServer.get_bus_index(&"World")
-	# Music routes through World, so duck it once. Voice routes to Master.
 	if index >= 0: AudioServer.set_bus_volume_db(index, _duck)
+	var world_music := _music_context in [&"encounter", &"boss"]
+	music.stream_paused = world_music and paused
+	var audible := _bus_audible(&"Master") and _music_context != &"intro" and not _quitting and not (world_music and _world_muted)
+	var gain_target := _foreground_gain if world_music else 1.0
+	if not audible or (world_music and _world_frozen): gain_target = 0
+	_music_gain = lerpf(_music_gain, gain_target, 1 - exp(-maxf(0, delta) / .2))
+	music.pitch_scale = _world_pitch if world_music else 1.0
+	music.volume_db = -80 if _music_gain < .0001 else music_library.music_volume_db + linear_to_db(_music_gain)
+	if not audible or (world_music and _world_frozen and _music_gain < .001):
+		if music.playing: music.stop()
+	elif music.can_process() and not (world_music and _world_frozen) and not _music_completed and music.stream != null and not music.playing: _queue_music_start()

@@ -5,17 +5,6 @@ script = ExtResource("script")
 [node name="Voice" type="AudioStreamPlayer" parent="."]
 bus = &"Voice"
 volume_db = -3.0
-[node name="Overlay" type="CanvasLayer" parent="."]
-layer = 110
-[node name="SkipIntro" type="Button" parent="Overlay"]
-visible = false
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -190.0
-offset_top = -52.0
-offset_right = -18.0
-offset_bottom = -16.0
-text = "Skip narration"
+[node name="Music" type="AudioStreamPlayer" parent="."]
+bus = &"Music"
+volume_db = -80.0

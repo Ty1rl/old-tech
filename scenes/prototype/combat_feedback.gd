@@ -13,7 +13,7 @@ class PlaybackShutdown extends Node:
 		players.clear()
 
 const DEFAULT_LIBRARY: CombatAudioLibrary = preload("res://audio/combat/palette.tres")
-const MAX_VOICES := 16 # six loops, one music slot, nine bounded transient players
+const MAX_VOICES := 15 # six loops + nine transients; music belongs to AudioManager
 const MAX_EFFECTS := 24
 const RESERVED_IMPORTANT := 2
 const SETTINGS_PATH := "user://combat-audio.cfg"
@@ -26,7 +26,6 @@ const CONE := Color("ed9966")
 const CLOCK := Color("ba9ce9")
 
 @export var cue_library: CombatAudioLibrary = DEFAULT_LIBRARY
-@export var music_enabled := false
 var muted := false
 var world_pitch := 1.0
 var world_pitch_target := 1.0
@@ -44,8 +43,6 @@ var _inspecting := false
 var _audio_flush_pending := false
 var _mesh := ImmediateMesh.new()
 var _visual: MeshInstance3D
-var _music: AudioStreamPlayer
-var _music_gain := 0.0
 
 func _ready() -> void:
 	add_to_group(&"world_audio")
@@ -65,7 +62,7 @@ func _ready() -> void:
 		player.volume_db = -80.0
 		add_child(player)
 		_loops[kind] = {"player": player, "gain": 0.0, "target": 0.0, "pitch": 1.0}
-	for index in range(MAX_VOICES - LOOP_KINDS.size() - 1):
+	for index in range(MAX_VOICES - LOOP_KINDS.size()):
 		var player := AudioStreamPlayer3D.new()
 		player.name = "Cue%d" % index
 		player.volume_db = -80.0
@@ -76,13 +73,6 @@ func _ready() -> void:
 		add_child(player)
 		_voices.append({"player": player, "remaining": 0.0, "gain": 0.0, "strength": 1.0,
 			"responsive": false, "pending": false, "priority": 0, "cue": &"", "base_pitch": 1.0, "volume_db": -12.0})
-	_music = AudioStreamPlayer.new()
-	_music.name = "Music"
-	_music.stream = cue_library.music
-	_music.bus = &"Music"
-	_music.process_mode = Node.PROCESS_MODE_PAUSABLE
-	_music.volume_db = -80.0
-	add_child(_music)
 	_visual = MeshInstance3D.new()
 	_visual.mesh = _mesh
 	var material := StandardMaterial3D.new()
@@ -96,7 +86,6 @@ func _ready() -> void:
 	var shutdown := PlaybackShutdown.new()
 	for loop in _loops.values(): shutdown.players.append(loop.player)
 	for voice in _voices: shutdown.players.append(voice.player)
-	shutdown.players.append(_music)
 	add_child(shutdown)
 
 func _exit_tree() -> void:
@@ -175,7 +164,11 @@ func enemy_cue(enemy_kind: StringName, event: StringName, point: Vector3, streng
 	cue(StringName("enemy_%s_%s" % [enemy_kind, event]), point, strength)
 
 func set_music_playing(playing: bool) -> void:
-	music_enabled = playing
+	# Legacy arena hook. Explicit campaign boss/victory contexts take precedence.
+	if playing and get_node("/root/AudioManager").music_context in [&"intro", &"menu", &"encounter"]:
+		get_node("/root/AudioManager").set_music_context(&"encounter")
+	elif not playing and get_node("/root/AudioManager").music_context in [&"encounter", &"boss"]:
+		get_node("/root/AudioManager").set_music_context(&"intro")
 
 func step(real_delta: float, world_delta: float, world_scale: float, inspecting: bool, scrub_speed: float, weapons: Node3D, _equipment: RefCounted) -> void:
 	var dt := maxf(0.0, real_delta)
@@ -227,12 +220,8 @@ func step(real_delta: float, world_delta: float, world_scale: float, inspecting:
 	var scrub_gain := clampf(absf(scrub_speed) * 0.3, 0, 0.7) if frozen else 0.0
 	_set_loop(&"scrub_older", scrub_gain if scrub_speed > 0 else 0.0, clock_pitch, dt)
 	_set_loop(&"scrub_newer", scrub_gain if scrub_speed < 0 else 0.0, clock_pitch, dt)
-	var music_target := bed_gain if music_enabled and not frozen and cue_library.music != null else 0.0
-	_music_gain = lerpf(_music_gain, music_target, 1.0 - exp(-dt / 0.20))
-	_music.pitch_scale = world_pitch # World policy applied ONCE here, never on a bus.
-	_music.volume_db = _volume(_music_gain, cue_library.music_volume_db)
-	if music_target > 0 and not _music.playing: _queue_audio_flush()
-	elif music_target == 0 and _music_gain < 0.001 and _music.playing: _music.stop()
+	# Send the smoothed world policy once; music has no second pitch/bus clock.
+	get_node("/root/AudioManager").set_world_audio_state(world_pitch, frozen, bed_gain, muted)
 	for voice in _voices:
 		if float(voice.remaining) <= 0: continue
 		var player: AudioStreamPlayer3D = voice.player
@@ -279,7 +268,6 @@ func _flush_audio() -> void:
 		if voice.pending and float(voice.remaining) > 0:
 			voice.pending = false
 			voice.player.play()
-	if music_enabled and _music.stream != null and _music_gain > 0.001 and not _music.playing: _music.play()
 
 func _volume(gain: float, base_db: float) -> float:
 	return -80.0 if muted or gain <= 0.0001 else maxf(-80.0, base_db + linear_to_db(gain))
@@ -289,13 +277,13 @@ func toggle_mute() -> void:
 	var config := ConfigFile.new()
 	config.set_value("audio", "muted", muted)
 	config.save(SETTINGS_PATH)
+	get_node("/root/AudioManager").set_world_audio_state(world_pitch, _inspecting, 1.0, muted)
 	if muted:
 		for loop in _loops.values(): loop.player.volume_db = -80.0
 		for voice in _voices:
 			voice.player.volume_db = -80.0
 			voice.pending = false
 			voice.remaining = 0.0
-		_music.volume_db = -80.0
 
 func clear_effects() -> void:
 	_effects.clear()
@@ -308,14 +296,16 @@ func clear_effects() -> void:
 
 func reset_state() -> void:
 	clear_effects()
+	# Restart/quit is a native teardown boundary, not just an inaudible tail.
+	# Release compressed transients before AudioManager's mixer drain expires.
+	for voice in _voices:
+		voice.player.stop()
+		voice.player.stream = null
 	for loop in _loops.values():
 		loop.gain = 0.0
 		loop.target = 0.0
 		loop.player.volume_db = -80.0
 		loop.player.stop()
-	_music.stop()
-	_music_gain = 0.0
-	_music.volume_db = -80.0
 	_cooldowns.clear()
 	_inspecting = false
 	world_pitch = 1.0
@@ -332,7 +322,6 @@ func metrics() -> Dictionary:
 		var loop: Dictionary = _loops[kind]
 		if float(loop.gain) > 0.001: active += 1
 		loop_metrics[kind] = {"gain": loop.gain, "target": loop.target, "pitch": loop.pitch}
-	if _music_gain > 0.001: active += 1
 	return {"voices": active, "voice_cap": MAX_VOICES, "effects": _effects.size(), "effect_cap": MAX_EFFECTS,
 		"world_pitch": world_pitch, "world_pitch_target": world_pitch_target,
 		"clock_pitch": clock_pitch, "clock_pitch_target": clock_pitch_target,

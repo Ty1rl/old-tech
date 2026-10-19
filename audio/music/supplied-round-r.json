@@ -1,0 +1,33 @@
+{
+  "provenance": "Four music files supplied by Matt in the shared project audio folder, 2026-10-19. Imported unchanged; no conversion, normalization or generation.",
+  "tracks": [
+    {
+      "context": "menu",
+      "source": "/home/mattlongname/game-jams/projects/old-tech/audio/menu.mp3",
+      "asset": "audio/music/menu.mp3",
+      "bytes": 1457642,
+      "sha256": "f42013fbd453e4744cef39b10d4d1610d228e60b445e775237b81e76a9aee325"
+    },
+    {
+      "context": "encounter",
+      "source": "/home/mattlongname/game-jams/projects/old-tech/audio/regular_combat.mp3",
+      "asset": "audio/music/regular_combat.mp3",
+      "bytes": 2897720,
+      "sha256": "c2da882ec4e1c7c5f6144fdfba01549a6daa76a854b32749fce57490b9436711"
+    },
+    {
+      "context": "boss",
+      "source": "/home/mattlongname/game-jams/projects/old-tech/audio/boss.mp3",
+      "asset": "audio/music/boss.mp3",
+      "bytes": 1457642,
+      "sha256": "bb3652e98516a8970067c1be59894c5b0c811768007ba5833c01443ccf832dcc"
+    },
+    {
+      "context": "victory",
+      "source": "/home/mattlongname/game-jams/projects/old-tech/audio/victory.mp3",
+      "asset": "audio/music/victory.mp3",
+      "bytes": 737916,
+      "sha256": "3ae1c18f8d908ef563ba4e26289242191d0ce09e547c8dbdf05dd3a8179dffdc"
+    }
+  ]
+}

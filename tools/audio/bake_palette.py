@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bake the softer Round P museum SFX; no runtime sample synthesis or source audio.
+"""Bake museum SFX with Round R effect gains; no runtime sample synthesis.
 Requires numpy for offline authoring only. Run from any directory. Deterministic.
 """
 from pathlib import Path
@@ -53,7 +53,7 @@ def bake(name, duration, make, looping=False):
     ASSETS[name]={'path':str(path.relative_to(ROOT)),'duration':duration,'loop':looping,'peak':float(np.max(np.abs(pcm)))/32768,'rms':float(np.sqrt(np.mean((pcm.astype(float)/32768)**2))),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
 
 def cue(name, asset=None, gain=-12, priority=2, responsive=False, cooldown=.08, pitch=1, effect=''):
-    CUES.append(dict(id=name,asset=asset or name,gain=gain,priority=priority,responsive=responsive,cooldown=cooldown,pitch=pitch,effect=effect))
+    CUES.append(dict(id=name,asset=asset or name,gain=min(-6,gain+6),priority=priority,responsive=responsive,cooldown=cooldown,pitch=pitch,effect=effect))
 
 def build():
     BANK.mkdir(parents=True,exist_ok=True)
@@ -123,8 +123,7 @@ def build():
     return kinds
 
 def write_library():
-    assets=sorted(ASSETS);resources=['[gd_resource type="Resource" script_class="CombatAudioLibrary" load_steps=%d format=3]'%(len(assets)+len(CUES)+4),'','[ext_resource type="Script" path="res://scripts/audio/combat_audio_library.gd" id="1"]','[ext_resource type="Script" path="res://scripts/audio/combat_audio_cue.gd" id="2"]']
-    resources.append('[ext_resource type="AudioStream" path="res://audio/music/glow.ogg" id="music"]')
+    assets=sorted(ASSETS);resources=['[gd_resource type="Resource" script_class="CombatAudioLibrary" load_steps=%d format=3]'%(len(assets)+len(CUES)+3),'','[ext_resource type="Script" path="res://scripts/audio/combat_audio_library.gd" id="1"]','[ext_resource type="Script" path="res://scripts/audio/combat_audio_cue.gd" id="2"]']
     for i,name in enumerate(assets):
         # User recordings win; rebuilding fallbacks must never discard their wiring.
         supplied=BANK/'supplied'/(name+'.mp3')
@@ -133,7 +132,6 @@ def write_library():
     for i,c in enumerate(CUES):
         resources += ['',f'[sub_resource type="Resource" id="Cue{i}"]','script = ExtResource("2")',f'id = &"{c["id"]}"',f'stream = ExtResource("s{assets.index(c["asset"])}")',f'volume_db = {float(c["gain"])}',f'priority = {c["priority"]}',f'responsive = {str(c["responsive"]).lower()}',f'cooldown = {c["cooldown"]}',f'pitch = {float(c["pitch"])}',f'looping = {str(ASSETS[c["asset"]]["loop"]).lower()}',f'effect = &"{c["effect"]}"']
     resources += ['','[resource]','script = ExtResource("1")','cues = Array[ExtResource("2")](['+', '.join(f'SubResource("Cue{i}")' for i in range(len(CUES)))+'])','']
-    resources += ['music = ExtResource("music")','music_volume_db = -26.0','']
     (BANK/'palette.tres').write_text('\n'.join(resources))
 
 def reel(out):

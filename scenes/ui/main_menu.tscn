@@ -1,62 +1,195 @@
-[gd_scene format=3 uid="uid://cb25v8pyc2pe1"]
+[gd_scene load_steps=10 format=3 uid="uid://cb25v8pyc2pe1"]
+[ext_resource type="Script" path="res://scenes/ui/main_menu.gd" id="1"]
+[ext_resource type="Theme" path="res://scenes/ui/museum_theme.tres" id="2"]
+[ext_resource type="Texture2D" path="res://assets/ui/menu_background.png" id="3"]
 
-[ext_resource type="Script" uid="uid://dmei3rw5iansg" path="res://scenes/ui/main_menu.gd" id="1_sl1te"]
+[sub_resource type="Gradient" id="Gradient_shade"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(0, 0, 0, 0.16, 0, 0, 0, 0)
 
-[node name="MainMenu" type="Control" unique_id=1271498089]
-layout_mode = 3
+[sub_resource type="GradientTexture2D" id="Texture_shade"]
+gradient = SubResource("Gradient_shade")
+fill_from = Vector2(0, 0)
+fill_to = Vector2(0.7, 0)
+
+[sub_resource type="StyleBoxFlat" id="Frame"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.945, 0.918, 0.859, 0.16)
+
+[sub_resource type="StyleBoxFlat" id="Primary"]
+bg_color = Color(0.914, 0.725, 0.329, 1)
+content_margin_left = 22.0
+content_margin_right = 22.0
+content_margin_top = 10.0
+content_margin_bottom = 10.0
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_left = 3
+corner_radius_bottom_right = 3
+[sub_resource type="StyleBoxFlat" id="PrimaryHover"]
+bg_color = Color(1, 0.84, 0.51, 1)
+content_margin_left = 22.0
+content_margin_right = 22.0
+content_margin_top = 10.0
+content_margin_bottom = 10.0
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_left = 3
+corner_radius_bottom_right = 3
+[sub_resource type="StyleBoxFlat" id="PrimaryFocus"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(0.98, 0.95, 0.86, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+
+[node name="MainMenu" type="Control"]
+layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_sl1te")
-
-[node name="CenterVBox" type="VBoxContainer" parent="." unique_id=1584724884]
+script = ExtResource("1")
+theme = ExtResource("2")
+[node name="MuseumBackdrop" type="TextureRect" parent="."]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -20.0
-offset_right = 20.0
-offset_bottom = 20.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("3")
+expand_mode = 1
+stretch_mode = 6
+[node name="Shade" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = SubResource("Texture_shade")
+expand_mode = 1
+
+[node name="Frame" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Frame")
+[node name="Margin" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="TitleLabel" type="Label" parent="CenterVBox" unique_id=427797194]
+[node name="Scroll" type="ScrollContainer" parent="Margin"]
+layout_mode = 2
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="Column" type="VBoxContainer" parent="Margin/Scroll"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="TopSpace" type="Control" parent="Margin/Scroll/Column"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Heading" type="Label" parent="Margin/Scroll/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SOME ASSEMBLY\nREQUIRED"
+autowrap_mode = 0
+theme_type_variation = &"MuseumTitle"
+mouse_filter = 2
 theme_override_font_sizes/font_size = 48
-text = "Old Tech"
+metadata/base_font_size = 48
 
-[node name="HSeparator" type="HSeparator" parent="CenterVBox" unique_id=1675007993]
-layout_mode = 2
-
-[node name="ButtonMargin" type="MarginContainer" parent="CenterVBox" unique_id=146721637]
-layout_mode = 2
-theme_override_constants/margin_left = 60
-theme_override_constants/margin_right = 60
-
-[node name="ButtonVBox" type="VBoxContainer" parent="CenterVBox/ButtonMargin" unique_id=1806043784]
-layout_mode = 2
-
-[node name="PlayButton" type="Button" parent="CenterVBox/ButtonMargin/ButtonVBox" unique_id=1186531768]
+[node name="Tagline" type="Label" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Play"
+text = "Old tech. Borrowed time."
+modulate = Color(0.7, 0.69, 0.65, 1)
+autowrap_mode = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 20
+metadata/base_font_size = 20
 
-[node name="SettingsButton" type="Button" parent="CenterVBox/ButtonMargin/ButtonVBox" unique_id=567546274]
+[node name="PlayButton" type="Button" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Settings"
+text = "NEW GAME"
+theme_type_variation = &"MuseumMenuButton"
+size_flags_horizontal = 0
+alignment = 0
+metadata/base_button_font = 24
+theme_override_colors/font_color = Color(0.09, 0.075, 0.045, 1)
+theme_override_colors/font_hover_color = Color(0.09, 0.075, 0.045, 1)
+theme_override_colors/font_focus_color = Color(0.09, 0.075, 0.045, 1)
+theme_override_colors/font_pressed_color = Color(0.09, 0.075, 0.045, 1)
+theme_override_styles/normal = SubResource("Primary")
+theme_override_styles/hover = SubResource("PrimaryHover")
+theme_override_styles/pressed = SubResource("PrimaryHover")
+theme_override_styles/focus = SubResource("PrimaryFocus")
 
-[node name="ExitButton" type="Button" parent="CenterVBox/ButtonMargin/ButtonVBox" unique_id=22128580]
+
+[node name="SettingsButton" type="Button" parent="Margin/Scroll/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Exit"
+text = "SETTINGS"
+theme_type_variation = &"MuseumMenuButton"
+size_flags_horizontal = 0
+alignment = 0
+metadata/base_button_font = 24
 
-[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/PlayButton" to="." method="_on_play_button_pressed"]
-[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/SettingsButton" to="." method="_on_settings_button_pressed"]
-[connection signal="pressed" from="CenterVBox/ButtonMargin/ButtonVBox/ExitButton" to="." method="_on_exit_button_pressed"]
+[node name="ExitButton" type="Button" parent="Margin/Scroll/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "QUIT"
+theme_type_variation = &"MuseumMenuButton"
+size_flags_horizontal = 0
+alignment = 0
+metadata/base_button_font = 24
+
+
+[node name="BottomSpace" type="Control" parent="Margin/Scroll/Column"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Footer" type="Label" parent="Margin/Scroll/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "WASD MOVE     MOUSE AIM"
+modulate = Color(0.7, 0.69, 0.65, 1)
+autowrap_mode = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+metadata/base_font_size = 14
+
+[connection signal="pressed" from="Margin/Scroll/Column/PlayButton" to="." method="_on_play_button_pressed"]
+
+[connection signal="pressed" from="Margin/Scroll/Column/SettingsButton" to="." method="_on_settings_button_pressed"]
+
+[connection signal="pressed" from="Margin/Scroll/Column/ExitButton" to="." method="_on_exit_button_pressed"]

@@ -1,0 +1,62 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/rooms/room_layout.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+room_id = &"collections"
+layout_scene_path = "res://scenes/rooms/room_collections.tscn"
+player_spawn = Vector3(0, 0.55, 8.5)
+entrance_door = {
+"position": Vector3(0, 0, 19.2),
+"width": 4.4
+}
+exit_door = {
+"position": Vector3(0, 0, -19.5),
+"width": 4.4
+}
+floor_palette = {
+"accent": Color(0.26, 0.23, 0.2, 1),
+"base": Color(0.23, 0.21, 0.19, 1),
+"border": Color(0.18, 0.16, 0.15, 1),
+"style": &"cross_hall"
+}
+lighting = {
+"ambient_color": Color(0.95, 0.88, 0.8, 1),
+"ambient_energy": 0.64,
+"light_color": Color(1, 0.92, 0.82, 1),
+"light_energy": 1.08,
+"wall_tint": Color(1.24, 1.1, 0.96, 1)
+}
+cover = Array[Rect2]([Rect2(-14.6, -11.5, 2.6, 1.6), Rect2(12, -11.5, 2.6, 1.6), Rect2(-13.6, -3.2, 1.4, 4.4), Rect2(12.2, -3.2, 1.4, 4.4), Rect2(-16.8, 3.8, 2.8, 3.2), Rect2(14, 3.8, 2.8, 3.2)])
+cover_pieces = Array[Dictionary]([{
+"height": 1.25,
+"kind": &"bench",
+"label": "North-West Archive Bench",
+"rect": Rect2(-14.6, -11.5, 2.6, 1.6)
+}, {
+"height": 1.25,
+"kind": &"bench",
+"label": "North-East Archive Bench",
+"rect": Rect2(12, -11.5, 2.6, 1.6)
+}, {
+"height": 1.5,
+"kind": &"partition",
+"label": "West Colonnade Screen",
+"rect": Rect2(-13.6, -3.2, 1.4, 4.4)
+}, {
+"height": 1.5,
+"kind": &"partition",
+"label": "East Colonnade Screen",
+"rect": Rect2(12.2, -3.2, 1.4, 4.4)
+}, {
+"height": 1.55,
+"kind": &"display_island",
+"label": "South-West Collection Case",
+"rect": Rect2(-16.8, 3.8, 2.8, 3.2)
+}, {
+"height": 1.85,
+"kind": &"plinth",
+"label": "South-East Orrery Diorama",
+"rect": Rect2(14, 3.8, 2.8, 3.2)
+}])

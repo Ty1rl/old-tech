@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="CombatAudioLibrary" load_steps=6 format=3]
+[ext_resource type="Script" path="res://scripts/audio/combat_audio_library.gd" id="1"]
+[ext_resource type="AudioStream" path="res://audio/music/menu.mp3" id="menu"]
+[ext_resource type="AudioStream" path="res://audio/music/regular_combat.mp3" id="encounter"]
+[ext_resource type="AudioStream" path="res://audio/music/boss.mp3" id="boss"]
+[ext_resource type="AudioStream" path="res://audio/music/victory.mp3" id="victory"]
+
+[resource]
+script = ExtResource("1")
+music_tracks = Dictionary[StringName, AudioStream]({
+&"menu": ExtResource("menu"),
+&"encounter": ExtResource("encounter"),
+&"boss": ExtResource("boss"),
+&"victory": ExtResource("victory")
+})
+music_volume_db = -19.0

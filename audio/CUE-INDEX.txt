@@ -1,0 +1,83 @@
+ROUND P AUDIO — edit audio/combat/palette.tres in Godot's Inspector.
+CombatAudioLibrary contains CombatAudioCue Resources: stream, gain, priority,
+cooldown, base pitch, responsive/loop flags and the existing visual cue name.
+Changing one entry changes that sound without editing a controller. Runtime never
+modifies shared streams/resources. tools/audio/bake_palette.py reproduces the SFX.
+
+PUBLIC CONTRACT (existing CombatFeedback owner; no second audio manager)
+cue(kind, world_point, strength=1) and step(...) remain stable.
+enemy_cue(enemy_kind, event, world_point, strength=1) accepts warning/attack/hurt/death.
+set_music_playing(bool) opts into the single ambient slot; default is OFF.
+
+CUES / PALETTE
+ring_launch / ring_loop / cable_cut / hit / ring_return: short spring/body, soft
+  rotating whirr, brief wire snap, dull contact and a quieter returning latch.
+flash_fire / flash_charged / pierce_hit / flash_ready / charge_loop: short yellow
+  pew, fuller charged thump, quick penetrating contact, ready latch and soft charge.
+  Existing flash_fire + flash_pierce in one update becomes ONE charged launch.
+  link_cut maps to cable_cut; valve_b to flash_ready.
+cone_loop / cone_pulse / vent: baked broadband airflow, short puff, armor/air release.
+Long inharmonic weapon/monster ringing is replaced by short harmonic bodies.
+Enemy hurt/death and recurring beds are quieter; same-kind chatter has longer gaps.
+Warnings retain priority, their family identities and a distinct short motif.
+repair_step / repair_full: short part latch versus ascending completed assembly.
+room_open: low door slide/chime. player_hurt: low warm impact. ui_click: tiny latch.
+recovery_confirm: rising stable chord, separate from repair and cut sounds.
+clock_loop: ticked motor winds down/up. scrub_older / scrub_newer: distinct low/high
+  rotating textures; sign selects direction, speed changes pitch and gain smoothly.
+
+ENEMIES (each has warning, attack, hurt, death; per-kind pitch/cooldown editable)
+Cable/spring: blue, loop, zigzag. Glass/valve: yellow, pair. Steam: orange.
+Shield/wood/metal: brute, warden, side_guard, front_guard. Relay: target, skirmisher,
+ranged. Small pack: swarmer. Low resonant machinery: loop_boss, sequence_boss,
+final_boss. Same-kind events coalesce; no per-frame barks or state/pose polling.
+
+TIME / MIX
+World weapons, monster voices and music share world_pitch = world_scale^0.45,
+with a 0.22s slew, applied ONCE per voice. Native buses have no pitch effect.
+Repair/menu/recovery and time motor remain independent; clock slew is 0.30s.
+World sources use positioned AudioStreamPlayer3D with 64m falloff; confirmations
+have no attenuation/pan. Native pause affects world/music but leaves responsive
+players active. Frozen history discards world transients; exit never replays them.
+16 native players total: 6 loops + music + 9 transients; two transient slots are
+reserved for important cues. Only unheard pending low-priority commands may be
+replaced. Foreground cues duck beds. Master hard limiter ceiling is -1 dB.
+
+PROVENANCE
+51 original procedural SFX WAVs by this project, baked offline (22.05kHz PCM,
+~0.8MB); no external SFX recordings, voice models or startup waveform generation.
+One six-minute track, Glow, by CAPTNPHANTOM: PSX Ambient Pack,
+https://captnphantom.itch.io/psx-ambient-pack (free download, no purchase).
+Actual archive license v1.0 is music/CAPTNPHANTOM-LICENSE.txt. It permits game use
+and editing; copyright remains CAPTNPHANTOM. Only Glow was extracted/compressed,
+not the 870MB pack. Ogg Vorbis q3, loudness target -23 LUFS, 3s/6s edge fades.
+Credit: Ambience by CAPTNPHANTOM. Keep the supplied license with game distributions.
+
+INTEGRATION (jam-1; no arena/campaign/enemy/menu source edited here)
+Keep weapons.combat_event -> feedback.cue. Connect live archetype events to
+feedback.enemy_cue; choose semantic OR generic hostile audio, not both per event.
+Call cue(pierce_hit) for actual piercing CONTACT; flash_pierce is launch-only.
+Call cue(repair_full), cue(room_open), cue(recovery_confirm) on real completion.
+Use ui_click on Responsive at pitch1 through the existing menu/audio owner.
+Pass signed scrub speed (+ older, - newer) through existing step. Opt music in
+with set_music_playing(true). The same licensed Glow track remains; default music
+gain is -26dB (was -22), not a replacement; the music has not had a listening review here.
+Inspector groups label Sound effects and Music; existing master Sound/Volume still
+controls both. Time/scrub streams and responsive confirmations are unchanged.
+Do not emit these from restore/preview/snapshots.
+Listen to state exports/round-p-a/weapon-AB.wav (before0..22s,after23..45s) and
+music-AB.wav (before0..8s,after9..17s); comparison-index.json lists actions;
+Dummy-driver checks validate content/routing/lifecycle, not subjective sound quality.
+
+ROUND Q — SUPPLIED RECORDINGS AND PLAYABLE DIALOGUE
+22 Matt-supplied MP3 effects in combat/supplied override matching generated WAVs.
+bake_palette.py preserves these overrides when rebuilding. Their source bytes are
+unchanged;native MP3 import metadata enables the seven repeating textures.
+Five new offline-generated fallbacks cover emergency lock,low-time motor and
+spin/connect/trace repair touches. Other missing creature/UI/repair confirmations
+retain the existing generated palette. No runtime synthesis or external service.
+Speech belongs to the existing AudioManager autoload;CombatFeedback still owns
+world effects/music. Voices map through voice/library.tres and voice/EVENTS.tsv.
+Low time shares the existing clock player,keeping 16 world native players bounded.
+Emergency activation is a responsive cue and survives world freeze.
+The Linux playtest preset excludes prototype checks and preview/sampler content.

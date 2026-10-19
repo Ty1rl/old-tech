@@ -1,0 +1,89 @@
+[gd_resource type="Resource" script_class="DialogueLibrary" load_steps=42 format=3]
+
+[ext_resource type="Script" path="res://scripts/audio/dialogue_library.gd" id="script"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/shot.mp3" id="v0"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/charge.mp3" id="v1"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/heat.mp3" id="v2"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/repair.mp3" id="v3"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/slow.mp3" id="v4"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/cut.mp3" id="v5"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/opening.mp3" id="v6"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/rewind.mp3" id="v7"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/loop.mp3" id="v8"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/pair.mp3" id="v9"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/zigzag.mp3" id="v10"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/time_meter.mp3" id="v11"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/rewind_charges.mp3" id="v12"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/repair_spin.mp3" id="v13"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/repair_connect.mp3" id="v14"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/repair_trace.mp3" id="v15"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/your_turn.mp3" id="v16"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/repair_started_give_me_a_second.mp3" id="v17"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/repair_started_i_can_fix_this.mp3" id="v18"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/repair_completed_thatll_hold.mp3" id="v19"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/repair_completed_back_in_working_order.mp3" id="v20"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/under_pressure_too_close.mp3" id="v21"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/under_pressure_need_some_room.mp3" id="v22"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/enemy_exposed_there_it_is.mp3" id="v23"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/enemy_exposed_now.mp3" id="v24"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/multi_kill_that_worked.mp3" id="v25"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/multi_kill_stay_down.mp3" id="v26"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/rewind_recovered_not_that_way.mp3" id="v27"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/rewind_recovered_one_more_chance.mp3" id="v28"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/room_cleared_quiet_finally.mp3" id="v29"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/room_cleared_lets_keep_moving.mp3" id="v30"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/boss_defeated_some_assembly_required_again.mp3" id="v31"]
+[ext_resource type="AudioStream" path="res://audio/voice/protagonist/boss_defeated_leave_that_one_in_pieces.mp3" id="v32"]
+[ext_resource type="AudioStream" path="res://audio/voice/bosses/loop_curator_entrance.mp3" id="v33"]
+[ext_resource type="AudioStream" path="res://audio/voice/bosses/sequence_warden_entrance.mp3" id="v34"]
+[ext_resource type="AudioStream" path="res://audio/voice/bosses/burial_device_entrance.mp3" id="v35"]
+[ext_resource type="AudioStream" path="res://audio/voice/narration/intro.mp3" id="v36"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/pickup.mp3" id="pickup"]
+
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/movement.mp3" id="movement"]
+[ext_resource type="AudioStream" path="res://audio/voice/tutorial/tool_switch.mp3" id="tool_switch"]
+
+[resource]
+script = ExtResource("script")
+clips = {
+&"tutorial.movement": [ExtResource("movement")],
+&"tutorial.tool_switch": [ExtResource("tool_switch")],
+&"tutorial.shot": [ExtResource("v0")],
+&"tutorial.charge": [ExtResource("v1")],
+&"tutorial.heat": [ExtResource("v2")],
+&"tutorial.repair": [ExtResource("v3")],
+&"tutorial.slow": [ExtResource("v4")],
+&"tutorial.cut": [ExtResource("v5")],
+&"tutorial.opening": [ExtResource("v6")],
+&"tutorial.rewind": [ExtResource("v7")],
+&"tutorial.loop": [ExtResource("v8")],
+&"tutorial.pair": [ExtResource("v9")],
+&"tutorial.zigzag": [ExtResource("v10")],
+&"tutorial.time_meter": [ExtResource("v11")],
+&"tutorial.pickup": [ExtResource("pickup")],
+&"tutorial.rewind_charges": [ExtResource("v12")],
+&"tutorial.repair.spin": [ExtResource("v13")],
+&"tutorial.repair.connect": [ExtResource("v14")],
+&"tutorial.repair.trace": [ExtResource("v15")],
+&"tutorial.practice_ready": [ExtResource("v16")],
+&"protagonist.repair_started": [ExtResource("v17"), ExtResource("v18")],
+&"protagonist.repair_completed": [ExtResource("v19"), ExtResource("v20")],
+&"protagonist.under_pressure": [ExtResource("v21"), ExtResource("v22")],
+&"protagonist.enemy_exposed": [ExtResource("v23"), ExtResource("v24")],
+&"protagonist.multi_kill": [ExtResource("v25"), ExtResource("v26")],
+&"protagonist.rewind_recovered": [ExtResource("v27"), ExtResource("v28")],
+&"protagonist.room_cleared": [ExtResource("v29"), ExtResource("v30")],
+&"protagonist.boss_defeated": [ExtResource("v31"), ExtResource("v32")],
+&"boss.loop_boss.entrance": [ExtResource("v33")],
+&"boss.sequence_boss.entrance": [ExtResource("v34")],
+&"boss.final_boss.entrance": [ExtResource("v35")],
+&"narration.intro": [ExtResource("v36")],
+}
+transcripts = Dictionary[StringName, String]({
+&"tutorial.movement": "Mouse aims. WASD moves.",
+&"tutorial.tool_switch": "Press Tab, one, two, or three; to select tools.",
+&"tutorial.rewind": "When your reserve runs out, a rewind charge gives you another chance. Scroll down to choose an earlier moment. Press Enter to confirm.",
+&"narration.intro": "An ancient device has turned exhibits into monsters. Survive with cobbled-together old tech and time borrowed from your future self.",
+&"tutorial.time_meter": "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge.",
+&"tutorial.pickup": "Walk towards the new item."
+})

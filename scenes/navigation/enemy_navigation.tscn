@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://scenes/navigation/enemy_navigation.gd" id="1"]
+[node name="Navigation" type="NavigationAgent3D"]
+script = ExtResource("1")
+avoidance_enabled = false
+path_desired_distance = 0.16
+target_desired_distance = 0.1
+path_max_distance = 0.8

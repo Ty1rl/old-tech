@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/weapons/focused_flash.gd" id="1"]
+[ext_resource type="Resource" path="res://scenes/weapons/settings/focused_flash.tres" id="2"]
+
+[node name="FocusedFlash" type="Node3D"]
+script = ExtResource("1")
+settings = ExtResource("2")

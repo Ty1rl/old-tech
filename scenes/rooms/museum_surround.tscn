@@ -1,0 +1,15 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Shader" path="res://scenes/rooms/museum_surround.gdshader" id="1_stone"]
+
+[sub_resource type="ShaderMaterial" id="Material_stone"]
+shader = ExtResource("1_stone")
+
+[sub_resource type="PlaneMesh" id="Plane_surround"]
+size = Vector2(240, 240)
+
+[node name="MuseumSurround" type="MeshInstance3D"]
+position = Vector3(0, -0.08, 0)
+cast_shadow = 0
+material_override = SubResource("Material_stone")
+mesh = SubResource("Plane_surround")

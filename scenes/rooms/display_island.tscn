@@ -1,0 +1,35 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/props/displaycase.glb" id="1_displaycase"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_base"]
+albedo_color = Color(0.28, 0.25, 0.23, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="BoxMesh_hull"]
+size = Vector3(1, 0.08, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_brass"]
+albedo_color = Color(0.56, 0.48, 0.34, 1)
+metallic = 0.28
+roughness = 0.44
+
+[sub_resource type="BoxMesh" id="BoxMesh_rail_x"]
+size = Vector3(0.98, 0.04, 0.98)
+
+[node name="DisplayIsland" type="Node3D"]
+
+[node name="ScaleRoot" type="Node3D" parent="."]
+
+[node name="BaseHull" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
+mesh = SubResource("BoxMesh_hull")
+surface_material_override/0 = SubResource("StandardMaterial3D_base")
+
+[node name="BrassPlinthRim" type="MeshInstance3D" parent="ScaleRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.09, 0)
+mesh = SubResource("BoxMesh_rail_x")
+surface_material_override/0 = SubResource("StandardMaterial3D_brass")
+
+[node name="DisplayCaseModel" parent="ScaleRoot" instance=ExtResource("1_displaycase")]
+transform = Transform3D(0.079, 0, 0, 0, 0.195, 0, 0, 0, 0.083, 0, 0.82, 0)

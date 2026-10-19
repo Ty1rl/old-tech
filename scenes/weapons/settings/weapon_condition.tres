@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="WeaponConditionSettings" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/weapons/settings/weapon_condition_settings.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+ring_capacity = 24.0
+beam_capacity = 64.0
+cone_capacity = 36.0
+repair_steps = 4

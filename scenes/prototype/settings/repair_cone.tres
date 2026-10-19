@@ -1,0 +1,69 @@
+[gd_resource type="Resource" script_class="RepairToolSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/prototype/repair_tool_spec.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"cone"
+title = "Heat Bellows"
+accent = Color(0.929412, 0.6, 0.4, 1)
+glb = "res://assets/equipment/heat_bellows.glb"
+cam_pos = Vector3(0, 1.15, 1.45)
+cam_target = Vector3(0, 0, 0)
+cam_size = 0.64
+model_pos = Vector3(-0.08, -0.04, -0.06)
+model_rot_deg = Vector3(6, -112, 4)
+open_cover_and_grille = true
+spin_part_pivots = {
+"Intake_Fan_Rotor": {
+"axis": Vector3(0, 1, 0),
+"pivot": Vector3(0, 0, 0),
+"scale": 1.25
+}
+}
+operations = [{
+"badge_pos": Vector2(118, 24),
+"center_local": Vector3(0.065, 0.188, 0.048),
+"dir": 1.0,
+"index": 0,
+"kind": &"spin",
+"part_label": "Intake Fan",
+"part_node": "HeatBellows_Slate_Olive",
+"prompt": "Spin the intake fan",
+"radius": 35.0,
+"short": "Fan Spin",
+"start_angle": -1.88496,
+"tag": "SPIN FAN"
+}, {
+"badge_pos": Vector2(212, 204),
+"index": 1,
+"kind": &"trace",
+"part_label": "Leather Seams",
+"part_node": "Leather_Bellows_Chamber",
+"points_local": [Vector3(0.105, 0.155, -0.15), Vector3(0.105, 0.048, -0.212), Vector3(0.105, 0.155, -0.278), Vector3(0.105, 0.048, -0.342)],
+"prompt": "Trace 1 to 4 across the leather seams",
+"short": "Leather Trace",
+"tag": "TRACE SEAMS"
+}, {
+"badge_pos": Vector2(312, 204),
+"index": 2,
+"kind": &"connect",
+"pairs": [{
+"a_local": Vector3(0.098, 0.152, -0.425),
+"b_local": Vector3(0.088, 0.158, -0.538),
+"label": "A",
+"pair_id": &"A",
+"shape": &"triangle"
+}, {
+"a_local": Vector3(0.098, 0.038, -0.425),
+"b_local": Vector3(0.088, 0.042, -0.538),
+"label": "B",
+"pair_id": &"B",
+"shape": &"square"
+}],
+"part_label": "Heating Coils",
+"part_node": "HeatBellows_Accent_Orange",
+"prompt": "Connect matching heating coils",
+"short": "Coil Contacts",
+"tag": "CONNECT COILS"
+}]

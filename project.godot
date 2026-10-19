@@ -10,16 +10,20 @@ config_version=5
 
 [application]
 
-config/name="Old Tech"
-run/main_scene="uid://dc1k8c1u03wl2"
+config/name="Some Assembly Required"
+run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[audio]
+
+driver/output_latency.web=100
+
 [autoload]
 
-GameState="*uid://rhk582cflle3"
-SceneManager="*uid://4f0s5frrbhrl"
-AudioManager="*uid://clap07gjee5np"
+GameState="*res://scripts/autoloads/game_state.gd"
+SceneManager="*res://scripts/autoloads/scene_manager.gd"
+AudioManager="*res://scripts/audio/dialogue_manager.tscn"
 
 [display]
 
@@ -31,6 +35,11 @@ window/stretch/aspect="expand"
 pause={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194305,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
+slow_time={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":32,"key_label":0,"unicode":32,"location":0,"echo":false,"script":null)
 ]
 }
 move_up={

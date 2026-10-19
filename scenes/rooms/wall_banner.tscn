@@ -1,0 +1,21 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/props/banner_V5_TEMP.001.glb" id="1_banner"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_brass"]
+albedo_color = Color(0.58, 0.48, 0.32, 1)
+metallic = 0.55
+roughness = 0.38
+
+[sub_resource type="BoxMesh" id="BoxMesh_finial"]
+size = Vector3(1.24, 0.07, 0.14)
+
+[node name="WallBanner" type="Node3D"]
+
+[node name="BannerModel" parent="." instance=ExtResource("1_banner")]
+transform = Transform3D(0.24, 0, 0, 0, 0.24, 0, 0, 0, 0.24, 0, 1.479, 0)
+
+[node name="BrassCrossbar" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.94, 0)
+mesh = SubResource("BoxMesh_finial")
+surface_material_override/0 = SubResource("StandardMaterial3D_brass")

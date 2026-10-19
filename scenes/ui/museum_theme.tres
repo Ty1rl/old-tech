@@ -1,0 +1,109 @@
+[gd_resource type="Theme" load_steps=9 format=3]
+
+[ext_resource type="FontVariation" path="res://assets/fonts/inter_regular.tres" id="1_regular"]
+[ext_resource type="FontVariation" path="res://assets/fonts/inter_semibold.tres" id="2_semibold"]
+[ext_resource type="FontFile" path="res://assets/fonts/BarlowCondensed-Black.ttf" id="3_title"]
+
+[sub_resource type="StyleBoxFlat" id="Normal"]
+bg_color = Color(0.16863, 0.15686, 0.12941, 1)
+border_color = Color(0.35686, 0.31765, 0.25098, 1)
+border_width_left = 1
+content_margin_left = 12
+border_width_top = 1
+content_margin_top = 12
+border_width_right = 1
+content_margin_right = 12
+border_width_bottom = 1
+content_margin_bottom = 12
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+
+[sub_resource type="StyleBoxFlat" id="Hover"]
+bg_color = Color(0.28627, 0.2549, 0.2, 1)
+border_color = Color(0.79608, 0.65098, 0.42353, 1)
+border_width_left = 1
+content_margin_left = 12
+border_width_top = 1
+content_margin_top = 12
+border_width_right = 1
+content_margin_right = 12
+border_width_bottom = 1
+content_margin_bottom = 12
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+
+[sub_resource type="StyleBoxFlat" id="Focus"]
+bg_color = Color(0.18824, 0.16863, 0.13333, 1)
+border_color = Color(0.79608, 0.65098, 0.42353, 1)
+border_width_left = 2
+content_margin_left = 12
+border_width_top = 2
+content_margin_top = 12
+border_width_right = 2
+content_margin_right = 12
+border_width_bottom = 2
+content_margin_bottom = 12
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+
+[sub_resource type="StyleBoxFlat" id="Panel"]
+bg_color = Color(0.09804, 0.0902, 0.07451, 1)
+border_color = Color(0.41176, 0.45098, 0.46275, 1)
+border_width_left = 1
+content_margin_left = 22
+border_width_top = 1
+content_margin_top = 22
+border_width_right = 1
+content_margin_right = 22
+border_width_bottom = 1
+content_margin_bottom = 22
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+
+[sub_resource type="StyleBoxEmpty" id="MenuNormal"]
+content_margin_left = 22.0
+content_margin_right = 18.0
+content_margin_top = 7.0
+content_margin_bottom = 7.0
+
+[resource]
+default_font = ExtResource("1_regular")
+default_font_size = 19
+Button/fonts/font = ExtResource("2_semibold")
+CheckBox/fonts/font = ExtResource("2_semibold")
+CheckButton/fonts/font = ExtResource("2_semibold")
+OptionButton/fonts/font = ExtResource("2_semibold")
+PopupMenu/fonts/font = ExtResource("1_regular")
+RichTextLabel/fonts/normal_font = ExtResource("1_regular")
+RichTextLabel/fonts/bold_font = ExtResource("2_semibold")
+MuseumTitle/base_type = &"Label"
+MuseumTitle/fonts/font = ExtResource("3_title")
+MuseumHeading/base_type = &"Label"
+MuseumHeading/fonts/font = ExtResource("2_semibold")
+Label/colors/font_color = Color(0.945, 0.918, 0.859, 1)
+Button/colors/font_color = Color(0.945, 0.918, 0.859, 1)
+Button/colors/font_focus_color = Color(0.914, 0.725, 0.329, 1)
+Button/colors/font_hover_color = Color(0.914, 0.725, 0.329, 1)
+Button/colors/font_hover_pressed_color = Color(0.914, 0.725, 0.329, 1)
+Button/styles/normal = SubResource("Normal")
+Button/styles/hover = SubResource("Hover")
+Button/styles/pressed = SubResource("Hover")
+Button/styles/hover_pressed = SubResource("Hover")
+Button/styles/focus = SubResource("Focus")
+PanelContainer/styles/panel = SubResource("Panel")
+MuseumMenuButton/base_type = &"Button"
+MuseumMenuButton/font_sizes/font_size = 24
+MuseumMenuButton/styles/normal = SubResource("MenuNormal")
+MuseumMenuButton/styles/hover = SubResource("MenuNormal")
+MuseumMenuButton/styles/pressed = SubResource("MenuNormal")
+MuseumMenuButton/styles/hover_pressed = SubResource("MenuNormal")
+
+MuseumMenuButton/styles/focus = SubResource("MenuNormal")

@@ -1,0 +1,111 @@
+[gd_scene load_steps=11 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+resource_local_to_scene = true
+albedo_color = Color(0.28, 0.27, 0.25, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+size = Vector3(39.6, 0.1, 39.6)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_trim"]
+resource_local_to_scene = true
+albedo_color = Color(0.21, 0.2, 0.19, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_trim_ns"]
+size = Vector3(40.2, 0.12, 1.2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_trim_ew"]
+size = Vector3(1.2, 0.12, 40.2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_inlay"]
+resource_local_to_scene = true
+albedo_color = Color(0.38, 0.34, 0.26, 1)
+metallic = 0.25
+roughness = 0.65
+
+[sub_resource type="BoxMesh" id="BoxMesh_inlay_x"]
+size = Vector3(38.4, 0.02, 0.08)
+
+[sub_resource type="BoxMesh" id="BoxMesh_inlay_z"]
+size = Vector3(0.08, 0.02, 38.4)
+
+[node name="FloorSlabKit" type="Node3D"]
+
+[node name="MainFloorSlab" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0)
+mesh = SubResource("BoxMesh_floor")
+surface_material_override/0 = SubResource("StandardMaterial3D_floor")
+
+[node name="BorderTrimNorth" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, -19.5)
+mesh = SubResource("BoxMesh_trim_ns")
+surface_material_override/0 = SubResource("StandardMaterial3D_trim")
+
+[node name="BorderTrimSouth" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 19.5)
+mesh = SubResource("BoxMesh_trim_ns")
+surface_material_override/0 = SubResource("StandardMaterial3D_trim")
+
+[node name="BorderTrimWest" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -19.5, -0.04, 0)
+mesh = SubResource("BoxMesh_trim_ew")
+surface_material_override/0 = SubResource("StandardMaterial3D_trim")
+
+[node name="BorderTrimEast" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19.5, -0.04, 0)
+mesh = SubResource("BoxMesh_trim_ew")
+surface_material_override/0 = SubResource("StandardMaterial3D_trim")
+
+[node name="InlayGroup" type="Node3D" parent="."]
+
+[node name="InlayX_01" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.012, -16)
+mesh = SubResource("BoxMesh_inlay_x")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayX_02" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.012, -8)
+mesh = SubResource("BoxMesh_inlay_x")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayX_03" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.012, 0)
+mesh = SubResource("BoxMesh_inlay_x")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayX_04" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.012, 8)
+mesh = SubResource("BoxMesh_inlay_x")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayX_05" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.012, 16)
+mesh = SubResource("BoxMesh_inlay_x")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayZ_01" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 0.012, 0)
+mesh = SubResource("BoxMesh_inlay_z")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayZ_02" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0.012, 0)
+mesh = SubResource("BoxMesh_inlay_z")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayZ_03" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.012, 0)
+mesh = SubResource("BoxMesh_inlay_z")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayZ_04" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0.012, 0)
+mesh = SubResource("BoxMesh_inlay_z")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")
+
+[node name="InlayZ_05" type="MeshInstance3D" parent="InlayGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0.012, 0)
+mesh = SubResource("BoxMesh_inlay_z")
+surface_material_override/0 = SubResource("StandardMaterial3D_inlay")

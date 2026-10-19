@@ -1,0 +1,929 @@
+{
+  "description": "Derived game MP3s; original uploads remain in shared audio and Git history. No gain normalization.",
+  "files": {
+    "audio/voice/bosses/burial_device_entrance.mp3": {
+      "source_sha256": "af5f926fa9117f949d7a17b93d2a9e08b37e93254e2b42c01cf74ac45098e244",
+      "source_bytes": 121005,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "3732de01d491473ef8380f12fa9c2d7fde8c7ab93e91220caf1cad9e381d9773",
+      "encoded_bytes": 40652
+    },
+    "audio/voice/bosses/loop_curator_entrance.mp3": {
+      "source_sha256": "53dab0da49185244e3a2e19ed6d439b4c10332be8bf2b9200f24b1ba4e6e675c",
+      "source_bytes": 75501,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "3546ab5c4e4bfccf3753a3829b5f8cb151b5473bdd68f8b1d25b1fd46aec9556",
+      "encoded_bytes": 25388
+    },
+    "audio/voice/bosses/sequence_warden_entrance.mp3": {
+      "source_sha256": "fd825ed7a9e3946c08220bc68f9c96fc484e34c94ac24a8d3c18f9a32517650f",
+      "source_bytes": 74349,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "41492d280f99fdc6059378b83b26fb25007ab2a9a28bf33a9da6196de8af06dc",
+      "encoded_bytes": 25100
+    },
+    "audio/voice/narration/intro.mp3": {
+      "source_sha256": "1cd40394f20970db9d873de2cf2fb9b5fae6905b78545db3aa2439d132bb2982",
+      "source_bytes": 163640,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "864094918421235c0be0d959db772a05a9b3007ce083e53211569fac164283ff",
+      "encoded_bytes": 74060
+    },
+    "audio/voice/protagonist/boss_defeated_leave_that_one_in_pieces.mp3": {
+      "source_sha256": "540ccc956e0eb6b90dae5b01461765863a3fb50b6f4da0537beca6681f7006f8",
+      "source_bytes": 54553,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "283099d929c3b9f30c74c4c1d38ab6febf53d7190d5a92112828156f940d993a",
+      "encoded_bytes": 19628
+    },
+    "audio/voice/protagonist/boss_defeated_some_assembly_required_again.mp3": {
+      "source_sha256": "2e53762dfe4f9310f5fb6868f2b6fbd07f4175885c7d53bf95bb7f4010e247f4",
+      "source_bytes": 63748,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "648d463ff4c9a7cbb4eaca65debec353893abb74c3abaac7cd368ca0a0be7997",
+      "encoded_bytes": 24236
+    },
+    "audio/voice/protagonist/enemy_exposed_now.mp3": {
+      "source_sha256": "30e823ffa5b22a6f87e2dcbeaeb34f501364e0197aab8a4b83af951bbc1c4488",
+      "source_bytes": 34073,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "4cdec89d6a58a3b765afb5b5bd324a3c06bd9006ee38724da2a2bdbb2a2030c6",
+      "encoded_bytes": 9260
+    },
+    "audio/voice/protagonist/enemy_exposed_there_it_is.mp3": {
+      "source_sha256": "412193a9aaa25cb8ac3354128e3c1eacaa8f934f0eeae128b9c8e57f0eb2b61e",
+      "source_bytes": 35327,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "c1a19b4e6747685dc5e12f7d46f0c425cfae0dadcec22af516c7a3094cffc323",
+      "encoded_bytes": 9836
+    },
+    "audio/voice/protagonist/multi_kill_stay_down.mp3": {
+      "source_sha256": "4af65e811f487f4d2cf43f2bbf913db3f6ddb73892afeee156360f4302f583aa",
+      "source_bytes": 42014,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "45eb06b953f793c212f9c9ce98f32125673f2203b248605232faeedc59e4d1dc",
+      "encoded_bytes": 13292
+    },
+    "audio/voice/protagonist/multi_kill_that_worked.mp3": {
+      "source_sha256": "5140b4c6c2e96a5dbaee84f46349b41b7b014eb883a06270702fbccbfb0afb65",
+      "source_bytes": 40760,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "e69ff1c40bbfb1ae7fc2832f00ca831a26c8d9629cf48b63d80a56371f013d24",
+      "encoded_bytes": 12716
+    },
+    "audio/voice/protagonist/repair_completed_back_in_working_order.mp3": {
+      "source_sha256": "3ec47a30d5e5bff3fef3d863cae23b4b3aa1d7204d561bf4e4de3381d150942a",
+      "source_bytes": 49537,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "43f80b98a1caac6e80635f9568a12a99ad960b02b1f206109074154b1d29b99f",
+      "encoded_bytes": 17036
+    },
+    "audio/voice/protagonist/repair_completed_thatll_hold.mp3": {
+      "source_sha256": "898ee1a1824f71721d7f362ebd92aaf3e3f17bc47116068aee8b107c9f6b9fb1",
+      "source_bytes": 36581,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "0d223952a1b3efcf507681b5314b390c100c9bb798b7ba1426da3d6e653c213a",
+      "encoded_bytes": 10700
+    },
+    "audio/voice/protagonist/repair_started_give_me_a_second.mp3": {
+      "source_sha256": "bfdb01ef4ea3feb1ee4c7a882263ebecffcf9f8e354987b97cf6724734c44250",
+      "source_bytes": 43268,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "817e537eb6341dab6b59ad2f211b350c5affae685d768f54286b27d9d2f7e970",
+      "encoded_bytes": 13868
+    },
+    "audio/voice/protagonist/repair_started_i_can_fix_this.mp3": {
+      "source_sha256": "f123da72874bb0704860307824215641095f81e0834cc3c30e8a9d0fea56b7a9",
+      "source_bytes": 45776,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "d82907e6d19ec87c4f446a7aceef6ea3d7de92814bf9608ea99635c63df9f65a",
+      "encoded_bytes": 15308
+    },
+    "audio/voice/protagonist/rewind_recovered_not_that_way.mp3": {
+      "source_sha256": "624b1f8341bee3303d5631c66f1ac9da586a5a04d9d7a0ae5f14169a907000fe",
+      "source_bytes": 43268,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "d08a389d85f821ee4249ef6e9efd1b63d15fdf479c828e89ac370f69cda90ed2",
+      "encoded_bytes": 13868
+    },
+    "audio/voice/protagonist/rewind_recovered_one_more_chance.mp3": {
+      "source_sha256": "2969ed4a0ac757e6096870f1f533420a30fbf0d59c7cfdc149275590679d096f",
+      "source_bytes": 40760,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "3670b1d132df9572ef1d6f9d8e7bddeea739dbecc9a0648c6e4975269a4dd87a",
+      "encoded_bytes": 12716
+    },
+    "audio/voice/protagonist/room_cleared_lets_keep_moving.mp3": {
+      "source_sha256": "51113790b3e165475baa55bb9565ffd92869633db0e0ba2ec2c8835ac4ff203c",
+      "source_bytes": 42014,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "45e5f583ec1b5e17c3b69769fc14ea8749442fbec5dc6a917a314c3712f547ba",
+      "encoded_bytes": 13292
+    },
+    "audio/voice/protagonist/room_cleared_quiet_finally.mp3": {
+      "source_sha256": "384d345026c3f437b0e7a216bc9186d7cb2e4530bff9776f730ea50905057ad6",
+      "source_bytes": 53299,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "907ded03abf781b1194d043bc01f250a1fa7914e2a0d769104fe20b4afdf2b92",
+      "encoded_bytes": 19052
+    },
+    "audio/voice/protagonist/under_pressure_need_some_room.mp3": {
+      "source_sha256": "8ed57e4d172ef0ed805bd62d0d0f3815bbbb4fcee6bc6e642cc8af5470738dc3",
+      "source_bytes": 42014,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "52004417abaa2704d3c102bb1ccc4c025350b94c0b7469b6a1405be684529737",
+      "encoded_bytes": 13292
+    },
+    "audio/voice/protagonist/under_pressure_too_close.mp3": {
+      "source_sha256": "b7d721be8e7e1ac0071f90c329fa7a0da15c961b4623b5878720cc66484d3daa",
+      "source_bytes": 42014,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "0b3d42021a93f8d3c9673e0a1457bfc77ba4d337f4c09f75d5a86ce36935a35d",
+      "encoded_bytes": 13292
+    },
+    "audio/voice/tutorial/charge.mp3": {
+      "source_sha256": "d23c0e8f8114063cd757b6b8c4eb1941ae89357751a9b2c433ed4243c8816e92",
+      "source_bytes": 72525,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "efb8a1c52287fda744853cd2d8b9bcdf3f75a8624f3286afe5a74a13bde176ac",
+      "encoded_bytes": 28556
+    },
+    "audio/voice/tutorial/cut.mp3": {
+      "source_sha256": "818919b60ceebefe2892ebeaae8f62949ee06fd1adea21afd2347773ea2473c2",
+      "source_bytes": 87990,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "82cdc59b83d6dbd48b8d4deede133e6610e6b526ceda483e1db4459d9eb63e06",
+      "encoded_bytes": 36332
+    },
+    "audio/voice/tutorial/heat.mp3": {
+      "source_sha256": "3504c1f6db7f645a86ae8483c71a219c43bd83bc1281105427166634f9e42707",
+      "source_bytes": 77541,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "e27834f5d6aa55f32f0fab8841229093f2167437b9e102bf486e2a29f7759e07",
+      "encoded_bytes": 31148
+    },
+    "audio/voice/tutorial/loop.mp3": {
+      "source_sha256": "9c15a92f9caf322ce22a4efab610665c712c9d03f8f9f3055b22ade197c18e85",
+      "source_bytes": 109723,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "6a6a841ffa7b595b05d847df0e23051ca149bab66b728aae50d9fa67cad56c75",
+      "encoded_bytes": 47276
+    },
+    "audio/voice/tutorial/movement.mp3": {
+      "source_sha256": "0ff0a04a3fbda2c5df5bced13cd49ca52ee56ed2731bcb97b9aa18fcd58e47bc",
+      "source_bytes": 81720,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "9c5c1bd9c73aedf307c298c6578d197eddc93ecf88fd40d29e775ee7c1d765fb",
+      "encoded_bytes": 33164
+    },
+    "audio/voice/tutorial/opening.mp3": {
+      "source_sha256": "1d7e1c75353feb08100e1bbd9137851b59dd6166946d9630fe93b2160979cd37",
+      "source_bytes": 102200,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "a6b531625ced243118b8b6a0eff99e2f08182b8fe5d44b2353a85d073f8045de",
+      "encoded_bytes": 43532
+    },
+    "audio/voice/tutorial/pair.mp3": {
+      "source_sha256": "37ddf8f513f7e62f5c3f0af838f04f075cac6cb3fffb82a0c23e476464c83c48",
+      "source_bytes": 81720,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "592abd136728d1591a9f15382014eff519f5be01b35c129b75df3a91e74921a5",
+      "encoded_bytes": 33164
+    },
+    "audio/voice/tutorial/pickup.mp3": {
+      "source_sha256": "136b2ffc9cd663a2b6171114c672698929d45300ddba852943e6795d68ac7113",
+      "source_bytes": 49537,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "8fa6f21d15dd621018d978afd4043ec3a24d2e13bc57a7c754561023853eeb5b",
+      "encoded_bytes": 17036
+    },
+    "audio/voice/tutorial/repair.mp3": {
+      "source_sha256": "5e3512b0d38c7ec2c93a9f4541a06583101315d591dbdd19df34da8c093c1357",
+      "source_bytes": 66256,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "eecb9a68e419ae5d3147b3429d765d5c0838ce0307f2924d75da0dd6b07c7ad9",
+      "encoded_bytes": 25388
+    },
+    "audio/voice/tutorial/repair_connect.mp3": {
+      "source_sha256": "2ea55c09bfeddc8041585137d521a20429460ce3484b7cf4e045cc1d87c7ed98",
+      "source_bytes": 57061,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "15e4a22a833533cce2d9a4ddd610ca961ccbb0655dff575b25e385f7e2037d0f",
+      "encoded_bytes": 20780
+    },
+    "audio/voice/tutorial/repair_spin.mp3": {
+      "source_sha256": "bddc23dc0a9b4c295b0a9f61406fe5fb87934a94ebfd28b86d16bdf31166b198",
+      "source_bytes": 58314,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "984bf45c625d8516c36b48a157595cf76b87c6638dee5cc47ccb6ded4bdd887f",
+      "encoded_bytes": 21356
+    },
+    "audio/voice/tutorial/repair_trace.mp3": {
+      "source_sha256": "ed70721f9f2673eab02d8b31686cf890a48776810b89ee1450e2fc14d003115e",
+      "source_bytes": 58314,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "81da4f474e03b726b598f1853e5f254fd232285e1019731b224d490c9c869180",
+      "encoded_bytes": 21356
+    },
+    "audio/voice/tutorial/rewind.mp3": {
+      "source_sha256": "6368f9648c473f95f11a6077bd8ffbc327fe2a3c8b2c5df8bb47a8b0bd15e842",
+      "source_bytes": 168656,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "1973946ba3ae5db83bef244ec35d28d89bc7e11bef58049a41c4d6c2d5b66437",
+      "encoded_bytes": 76652
+    },
+    "audio/voice/tutorial/rewind_charges.mp3": {
+      "source_sha256": "7ce0ff9c29ee467e00879aa5c8bf53cac98a8df400b0e5d55e6a9e275e6f9e6e",
+      "source_bytes": 59986,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "a782a31e1ddeddc24f74933d29e52021735494a1bf36761a0309183249c8f088",
+      "encoded_bytes": 22220
+    },
+    "audio/voice/tutorial/shot.mp3": {
+      "source_sha256": "0d089cb173f28b66efc77042b440299200588298193c22a2c35deec6a489af2f",
+      "source_bytes": 68763,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "d0d8cf7bf0ea49109915b919ef2785fddb1601b04e1b9ff29e012c30f8769f1d",
+      "encoded_bytes": 26540
+    },
+    "audio/voice/tutorial/slow.mp3": {
+      "source_sha256": "f569ce1e61add0479e231232f538b539babf36419662ff40a237e8e578842562",
+      "source_bytes": 82974,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "6ebcd505e8c32cf29e6ae29aa3d167527a5360c7e2e31e7ecea2583fca384889",
+      "encoded_bytes": 33740
+    },
+    "audio/voice/tutorial/time_meter.mp3": {
+      "source_sha256": "d8866ff7d29ed299fe076495b384115d6abb2c505d38b9befae356685ca37263",
+      "source_bytes": 133965,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "4d35144557a3baa98a30d05069c8bc6fc42f8b1ac011f1bbe874f6eaabc10c9e",
+      "encoded_bytes": 59372
+    },
+    "audio/voice/tutorial/tool_switch.mp3": {
+      "source_sha256": "18d22ce1e2271cd88d649e6302188010c4413e28c8dddeb4613b908622149031",
+      "source_bytes": 90497,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "c4fe50473fc7685e6bea0da8d6bf4681030ea90e459dafa9fcb66a82f841401e",
+      "encoded_bytes": 37484
+    },
+    "audio/voice/tutorial/your_turn.mp3": {
+      "source_sha256": "a5cb37e6cdfa7d1822881292d156e30d61e635e35f290625405f9b4be8deb1ae",
+      "source_bytes": 31565,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "735465961bcd1abe360f7fac0b79fbfdfc1116bbad2ff7f0f8e4d6a9837822fc",
+      "encoded_bytes": 8108
+    },
+    "audio/voice/tutorial/zigzag.mp3": {
+      "source_sha256": "abc66d095f9ded33a29e396ef5d0782c6d128dcdcc3ecd54e7f8bd5c432cd47e",
+      "source_bytes": 107216,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "32000",
+        "-b:a",
+        "64k"
+      ],
+      "encoded_sha256": "7c281c8b3c4763deaf94a47e01ad53cf130cd0ecc6cfea91dcff388fdb0d0591",
+      "encoded_bytes": 45836
+    },
+    "audio/combat/supplied/cable_cut.mp3": {
+      "source_sha256": "3336156c8b42f979e1000aa80bdc77a0253f1be4ed3e100835a7b118aa0dc5fa",
+      "source_bytes": 13293,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "910d62326ad626cd8dfa68bbafac47e2b83674c3eef07d623a6a1cb4604f871d",
+      "encoded_bytes": 6626
+    },
+    "audio/combat/supplied/charge_loop.mp3": {
+      "source_sha256": "f568cfd652e67c0bfb76ac9912eb922d7f5c34a6c3a2cf9be333005a498112a0",
+      "source_bytes": 57069,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "59a3669c92f7f05632f5891832a5cf44bb6e22fa51def1d3e96a4e64d431cda0",
+      "encoded_bytes": 28569
+    },
+    "audio/combat/supplied/clock_loop.mp3": {
+      "source_sha256": "5f4218d3b614a993fba9d85a7a488921a955a48d5023a6a0605509d7060a1c55",
+      "source_bytes": 82989,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "6996be570df76776b8f900eb236fc4d3a18cec1a5b2904b37341f43821cbafb7",
+      "encoded_bytes": 41735
+    },
+    "audio/combat/supplied/cone_loop.mp3": {
+      "source_sha256": "0877d6d762907f7944cebd45241049f81d355e2d5f56439184e68cf1a1ac9a3d",
+      "source_bytes": 57069,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "18149f4de900cc66dddeced392cc72bf21bb9bb1d6f7ea7c4e9a59330b400814",
+      "encoded_bytes": 28569
+    },
+    "audio/combat/supplied/cone_pulse.mp3": {
+      "source_sha256": "fc8ec518a7b7e96570fdb5b424b47a538ee89b8ef137c823e72eae45a66d8138",
+      "source_bytes": 17901,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "f15f1187a94fdc3778c00a6c89954e5f7d867234f4877b3c346a0002ed7c0493",
+      "encoded_bytes": 9134
+    },
+    "audio/combat/supplied/core_break.mp3": {
+      "source_sha256": "95f8e92a67ebd0f58d69ba0d54d09cf6842557a526d3bdedb25dc6c207fb8918",
+      "source_bytes": 25389,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "3df519e474a80e06a9dfd853cd949925332130235a00bd0a9c65ac3101a17373",
+      "encoded_bytes": 12896
+    },
+    "audio/combat/supplied/emergency_start.mp3": {
+      "source_sha256": "3b9ccf6ebf51bba898751b164a93c0857c99957140bbe42dacd6d1da7776432c",
+      "source_bytes": 16173,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "1e0540b8d9ee6cdab57380a3d4c65a73ee6df113e61d2ee7d56b11760bd144ac",
+      "encoded_bytes": 8194
+    },
+    "audio/combat/supplied/flash_charged.mp3": {
+      "source_sha256": "7e8ad88fa24d51a04b7d545ce564a9609759bc4e4b75a778b792ab0ba6e201d6",
+      "source_bytes": 16173,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "29a901fa5d5a85ca129d038b1ec97bb1a13a5eeb995bc445f4b334397fc25021",
+      "encoded_bytes": 8194
+    },
+    "audio/combat/supplied/flash_fire.mp3": {
+      "source_sha256": "58e6e123ceab717bf2a62e84575da2a5bb8c20377fd2f0c685c2d3c33e9259e9",
+      "source_bytes": 16173,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "24af42e02aec6ee55058707b2bb3f4dfa3b634d32a4e4f24e1d4208c3435c789",
+      "encoded_bytes": 8194
+    },
+    "audio/combat/supplied/flash_ready.mp3": {
+      "source_sha256": "2494f9206f3aa017107397c3fdd57e16f5f84c3e269dcb82fcc6305fe103864a",
+      "source_bytes": 16173,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "7905ad867164f29d4020258951f7e98383c0df8ba758b21892905c44ec232f63",
+      "encoded_bytes": 8194
+    },
+    "audio/combat/supplied/hit.mp3": {
+      "source_sha256": "a3f6625221e4efd229e1f408c0f157ab771c57fcac5708df7af4e76d1d6d73bd",
+      "source_bytes": 25389,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "1fec3e8350168bf7226c6baf94f72a3fa999e25f2c58c16fffef1467bcf21615",
+      "encoded_bytes": 12896
+    },
+    "audio/combat/supplied/pierce_hit.mp3": {
+      "source_sha256": "059cbf0451a06751a43a6fd741bb9d82f5def5c5368c0df90df69a4c7839c389",
+      "source_bytes": 16173,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "73b1d342d9c8c0d36277cab15affc74f164d480e38671a01178c1d406cc0ce0a",
+      "encoded_bytes": 8194
+    },
+    "audio/combat/supplied/player_hurt.mp3": {
+      "source_sha256": "74975f83638cf34cbd599d1fb7e5fd76a767753bb67dcc4c223cfd0e64e82ccd",
+      "source_bytes": 16173,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "5ded9fc642fe9529667a44670e6bd1c5a72e4ef6d66a460979f117cb0cfc5bf6",
+      "encoded_bytes": 8194
+    },
+    "audio/combat/supplied/recovery_confirm.mp3": {
+      "source_sha256": "f7af156b4e42284c99b5aef2095682f8e7468cf6f20a259cdcb4ca31dbd66b88",
+      "source_bytes": 25389,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "a3caf6643f7a0c7ad9fc6de42878e38ccdf3f8ee76e4857831ba6117408bd7df",
+      "encoded_bytes": 12896
+    },
+    "audio/combat/supplied/ring_launch.mp3": {
+      "source_sha256": "4dfcb31def891d9cf57ea1cd95e72804db1396c544325df8c064dd45cb682cd3",
+      "source_bytes": 17901,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "b4789a91ea3dc4c8bd20fc320d06395b0cc31b07410a6054e231c190c41fbf58",
+      "encoded_bytes": 9134
+    },
+    "audio/combat/supplied/ring_loop.mp3": {
+      "source_sha256": "219eee19f099cdbf0bfdec6987a4d0248a4d63c34020f00c7dc59af6dd63a474",
+      "source_bytes": 37485,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "d85935048e215867b940bdb6d339c0121762b8047498837d34a4a96e952c45b7",
+      "encoded_bytes": 18852
+    },
+    "audio/combat/supplied/ring_return.mp3": {
+      "source_sha256": "d320ba37931d3e3e0ebb18db6c09496259e35513e4f11f6aa32e8c6b304a6485",
+      "source_bytes": 17901,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "119a30d13912fc889d995cbdc58eb696cd8380705dcc3c419657cd1ebbab3389",
+      "encoded_bytes": 9134
+    },
+    "audio/combat/supplied/room_open.mp3": {
+      "source_sha256": "a02d994e3604aba384ca2cfa541c55a4fd1b416aa9a99f9adbfb68fe136c029e",
+      "source_bytes": 214317,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "079287a57a2471725d619197060f8ceba9d643e84aa5b3bf5f15d485558d15f3",
+      "encoded_bytes": 107250
+    },
+    "audio/combat/supplied/scrub_newer.mp3": {
+      "source_sha256": "6dc0e4a94e983f149fdbc869ed1ebf2570380a27cc7b449275b668b0acccfd2f",
+      "source_bytes": 84717,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "c3fd5b292fdf21b6219b36660c8d8ee7e2b50687906161e2a15f1e4c071734f1",
+      "encoded_bytes": 42675
+    },
+    "audio/combat/supplied/scrub_older.mp3": {
+      "source_sha256": "bf3e0e3b43e305e47f6ec1f2b3d5bf496f057e192a5e6d9a5cc88a5678db4937",
+      "source_bytes": 82989,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "f7ac65352554240a7805bfa7e4e075a19ef678916502170ad52acf144f3720b3",
+      "encoded_bytes": 41735
+    },
+    "audio/combat/supplied/time_low_loop.mp3": {
+      "source_sha256": "16ae0b2a09ffe68055c992816c65feb7031a1d306cf9c51acec177feff180493",
+      "source_bytes": 82989,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "8be0eda20567caa92fd43199a2b6c13e810ee3a8436438f0e47822b0f95673b9",
+      "encoded_bytes": 41735
+    },
+    "audio/combat/supplied/vent.mp3": {
+      "source_sha256": "612eea963834eb50243c4daaa975d7433dc81c10280dda2cffd4193463106625",
+      "source_bytes": 22509,
+      "settings": [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "96k"
+      ],
+      "encoded_sha256": "c5ab019176f65d70e51e2a1f9624256e9b77a1109a6cc3afb24de92bdfcd9384",
+      "encoded_bytes": 11328
+    },
+    "audio/music/boss.mp3": {
+      "source_sha256": "bb3652e98516a8970067c1be59894c5b0c811768007ba5833c01443ccf832dcc",
+      "source_bytes": 1457642,
+      "settings": [
+        "-ac",
+        "2",
+        "-ar",
+        "44100",
+        "-b:a",
+        "128k"
+      ],
+      "encoded_sha256": "6fa55047d8f181f0304f29c19b36a0b477dc18e1e5504278de0fd5d647d300b9",
+      "encoded_bytes": 961349
+    },
+    "audio/music/menu.mp3": {
+      "source_sha256": "f42013fbd453e4744cef39b10d4d1610d228e60b445e775237b81e76a9aee325",
+      "source_bytes": 1457642,
+      "settings": [
+        "-ac",
+        "2",
+        "-ar",
+        "44100",
+        "-b:a",
+        "128k"
+      ],
+      "encoded_sha256": "d4125409c9d1995f10f14f91b1a75ba4af8a9f297961eadf2131cb03271c461f",
+      "encoded_bytes": 961349
+    },
+    "audio/music/regular_combat.mp3": {
+      "source_sha256": "c2da882ec4e1c7c5f6144fdfba01549a6daa76a854b32749fce57490b9436711",
+      "source_bytes": 2897720,
+      "settings": [
+        "-ac",
+        "2",
+        "-ar",
+        "44100",
+        "-b:a",
+        "128k"
+      ],
+      "encoded_sha256": "d85a04cc7455caa715c347b0601ad534d98f84d504440136d0fd31ed36b3a744",
+      "encoded_bytes": 1921401
+    },
+    "audio/music/victory.mp3": {
+      "source_sha256": "3ae1c18f8d908ef563ba4e26289242191d0ce09e547c8dbdf05dd3a8179dffdc",
+      "source_bytes": 737916,
+      "settings": [
+        "-ac",
+        "2",
+        "-ar",
+        "44100",
+        "-b:a",
+        "128k"
+      ],
+      "encoded_sha256": "a3cf5e9e081c53afca7bd2e3a327472c975893ce57535312d8ef8e32f5b04d1c",
+      "encoded_bytes": 481532
+    }
+  }
+}

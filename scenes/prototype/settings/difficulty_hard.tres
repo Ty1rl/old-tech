@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="CampaignDifficulty" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/prototype/settings/campaign_difficulty.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hard"
+title = "Hard"
+count_scale = 1.35
+count_bonus = 2
+burst_bonus = 1
+early_max_live = 8
+sustained_max_live = 11
+interval_scale = 0.82
+refill_delay_scale = 0.72
+recovery_scale = 0.88
+boss_escort_count = 10
+mixed_reinforcements = true
+enemy_damage_scale = 5.0
+attack_windup_scale = 0.8
+melee_windup_seconds = 0.20
+melee_reach_padding = 0.55
+aim_turn_scale = 2.2
+weapon_wear_scale = 2.0

@@ -1,0 +1,69 @@
+[gd_resource type="Resource" script_class="RepairToolSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/prototype/repair_tool_spec.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"beam"
+title = "Focused Flash"
+accent = Color(0.941176, 0.843137, 0.482353, 1)
+glb = "res://assets/equipment/flash_camera.glb"
+cam_pos = Vector3(0, 1.25, 1.35)
+cam_target = Vector3(0, 0, 0)
+cam_size = 0.58
+model_pos = Vector3(-0.14, -0.03, -0.1)
+model_rot_deg = Vector3(8, 142, 0)
+open_cover_and_grille = false
+spin_part_pivots = {
+"Lens_Glass_Element": {
+"axis": Vector3(0, 0, 1),
+"pivot": Vector3(-0.21, 0.025, -0.3915),
+"scale": 1.0
+}
+}
+operations = [{
+"badge_pos": Vector2(138, 122),
+"center_local": Vector3(-0.21, 0.025, -0.3915),
+"dir": -1.0,
+"index": 0,
+"kind": &"spin",
+"part_label": "Lens Ring",
+"part_node": "Lens_Glass_Element",
+"prompt": "Spin the brass lens ring",
+"radius": 36.0,
+"short": "Lens Spin",
+"start_angle": -1.5708,
+"tag": "SPIN LENS"
+}, {
+"badge_pos": Vector2(182, 18),
+"index": 1,
+"kind": &"connect",
+"pairs": [{
+"a_local": Vector3(-0.065, 0.195, -0.145),
+"b_local": Vector3(-0.165, 0.198, -0.085),
+"label": "A",
+"pair_id": &"A",
+"shape": &"triangle"
+}, {
+"a_local": Vector3(-0.115, 0.155, -0.225),
+"b_local": Vector3(-0.215, 0.168, -0.145),
+"label": "B",
+"pair_id": &"B",
+"shape": &"square"
+}],
+"part_label": "Ceramic Terminals",
+"part_node": "FlashCamera_Porcelain_Ivory",
+"prompt": "Connect matching ceramic terminals",
+"short": "Terminals",
+"tag": "CONNECT TERMINALS"
+}, {
+"badge_pos": Vector2(284, 224),
+"index": 2,
+"kind": &"trace",
+"part_label": "Accordion Bellows",
+"part_node": "Accordion_Bellows",
+"points_local": [Vector3(-0.265, -0.048, -0.215), Vector3(-0.295, 0.008, -0.14), Vector3(-0.325, 0.064, -0.065), Vector3(-0.355, 0.118, 0.01)],
+"prompt": "Trace 1 to 4 along the bellows",
+"short": "Bellows Trace",
+"tag": "DRAW BELLOWS"
+}]

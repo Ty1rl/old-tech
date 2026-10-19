@@ -196,25 +196,53 @@ func _execute_full_run(diff: StringName) -> void:
 	var pressure_waves_seen: Dictionary = {}
 	var pickups_seen: Array[int] = []
 	var lessons_seen: Array[StringName] = []
-	for step in range(950):
+	var saw_movement_cue := false
+	var saw_tool_switch_cue := false
+	for step in range(1100):
 		visited_rooms[arena.room_index] = true
 		if arena.mode == &"won":
 			break
 		if arena.mode in [&"title", &"ceremony"]:
 			_tick(3.0)
 		elif arena.mode == &"pickup":
+			if arena._pickup_stage == &"movement_cue":
+				saw_movement_cue = true
+				expect(
+					not arena.tutorial.blocking
+					and arena.run_hint.text == "Mouse aims. WASD moves."
+					and arena.run_hint.visible,
+					"Movement cue precedes first pickup cue with nonblocking movement on " + String(diff)
+				)
+				_tick(1.0)
+				continue
+			if arena._pickup_stage == &"tool_switch_cue":
+				saw_tool_switch_cue = true
+				expect(
+					not arena.tutorial.blocking
+					and arena.run_hint.text == "Press Tab, one, two, or three; to select tools."
+					and arena.run_hint.visible,
+					"Tool-switch cue precedes second acquired item's explanation on " + String(diff)
+				)
+				_tick(2.4)
+				continue
+			if arena._pickup_stage == &"await_pickup_speech":
+				_tick(2.4)
+				continue
 			var p_tool: int = arena.museum.pickup_tool
-			if not (p_tool in pickups_seen):
+			if p_tool > 0 and not (p_tool in pickups_seen):
 				pickups_seen.append(p_tool)
-			expect(
-				not arena.tutorial.blocking
-				and arena.run_hint.text == "Walk towards the new item."
-				and arena.run_hint.visible
-				and Vector2(arena.player.position.x - arena.museum.pickup_position.x, arena.player.position.z - arena.museum.pickup_position.z).length() >= 2.5,
-				"Pickup for tool %d is nonblocking with 'Walk towards the new item.' cue and walkable distance on %s" % [p_tool, String(diff)]
-			)
-			arena.player.position = arena.museum.pickup_position + Vector3.UP * 0.55
-			_tick(0.01)
+			if p_tool > 0:
+				expect(
+					not arena.tutorial.blocking
+					and arena.run_hint.text == "Walk towards the new item."
+					and arena.run_hint.visible
+					and Vector2(arena.player.position.x - arena.museum.pickup_position.x, arena.player.position.z - arena.museum.pickup_position.z).length() >= 2.5,
+					"Pickup for tool %d is nonblocking with 'Walk towards the new item.' cue and walkable distance on %s" % [p_tool, String(diff)]
+				)
+				arena.player.position = arena.museum.pickup_position + Vector3.UP * 0.55
+				_tick(0.05)
+			else:
+				_tick(2.4)
 		elif arena.mode == &"practice":
 			if not (arena.lesson in lessons_seen):
 				lessons_seen.append(arena.lesson)
@@ -239,12 +267,13 @@ func _execute_full_run(diff: StringName) -> void:
 		if failures.size() > start_failures:
 			break
 	expect(visited_rooms.size() == 4, "Run reaches all 4 museum rooms on " + String(diff))
+	expect(saw_movement_cue and saw_tool_switch_cue, "Run presents both movement cue before first pickup and tool-switch cue before second item explanation on " + String(diff))
 	expect(pickups_seen == [2, 3, 1], "Run presents nonblocking walk-towards-item pickups for tools [2, 3, 1] on " + String(diff))
 	expect(lessons_seen.size() >= 2 and lessons_seen[0] == &"time_meter" and lessons_seen[1] == &"shot", "Run teaches time_meter before shot on " + String(diff))
 	expect(bosses_fought == [&"sequence_boss", &"loop_boss", &"final_boss"], "Run fights all 3 bosses in taught order (sequence_boss -> loop_boss -> final_boss) on " + String(diff))
 	expect(arena.mode == &"won" and arena._last_music_context == &"victory", "Full run reaches victory state and sets victory music context on " + String(diff))
 	expect(arena.acquired == [2, 3, 1] and arena.time_controller.slow_unlocked and arena.time_controller.rewind_unlocked, "Completed run unlocks all 3 weapons and both time capabilities on " + String(diff))
-	expect(pressure_waves_seen.size() == 11, "Run includes all 8 combat waves (including inter-lesson combat in Rooms 1 and 2) and 3 boss encounters on " + String(diff))
+	expect(pressure_waves_seen.size() == 15, "Run includes all 12 combat waves (including escalating pre-boss waves) and 3 boss encounters on " + String(diff))
 
 
 func _execute_skip_tutorials_run(diff: StringName) -> void:
@@ -259,7 +288,7 @@ func _execute_skip_tutorials_run(diff: StringName) -> void:
 	var checked_r0_w4 := false
 	var checked_r0_w8 := false
 	var checked_r1_w5 := false
-	for step in range(650):
+	for step in range(750):
 		visited_rooms[arena.room_index] = true
 		if arena.mode == &"won":
 			break
@@ -269,7 +298,7 @@ func _execute_skip_tutorials_run(diff: StringName) -> void:
 			_tick(3.0)
 		elif arena.mode == &"pickup":
 			arena.player.position = arena.museum.pickup_position + Vector3.UP * 0.55
-			_tick(0.01)
+			_tick(0.001)
 		elif arena.mode == &"pressure":
 			if arena.room_index == 0 and arena.wave_index == 4 and not checked_r0_w4:
 				checked_r0_w4 = true
@@ -299,7 +328,7 @@ func _execute_skip_tutorials_run(diff: StringName) -> void:
 	expect(not practiced_any, "Skip tutorials run executes zero tutorial demos, zero practice stages, and zero RewindLesson scenes on " + String(diff))
 	expect(checked_r0_w4 and checked_r0_w8 and checked_r1_w5, "Skip tutorials run hits all progression checkpoints in order on " + String(diff))
 	expect(visited_rooms.size() == 4 and bosses_fought == [&"sequence_boss", &"loop_boss", &"final_boss"] and arena.mode == &"won", "Skip tutorials run completes all 4 rooms and 3 bosses to victory on " + String(diff))
-	expect(pressure_waves_seen.size() == 11, "Skip tutorials run preserves all 8 combat waves and 3 boss fights on " + String(diff))
+	expect(pressure_waves_seen.size() == 15, "Skip tutorials run preserves all 12 combat waves and 3 boss fights on " + String(diff))
 	root.get_node("SceneManager").params = {}
 	arena.set_skip_tutorials(false)
 
@@ -313,43 +342,80 @@ func _run() -> void:
 
 	var game := root.get_node("GameState")
 	var scenes := root.get_node("SceneManager")
+	var audio_mgr := root.get_node("AudioManager")
 	var saved_prefs: Dictionary = game.preferences().duplicate(true)
+	game.set_setting("sound", true)
+	game.set_setting("volume", 0.8)
+	game.set_setting("voice_volume", 0.9)
 	game.set_setting("tutorial", true)
+	game.set_setting("skip_tutorials", false)
 	scenes.params = {}
 
-	# 1. Verify Target Run room/wave structure, time_meter before shot, and real combat between later lessons in rooms.gd
+	# 1. Verify Target Run room/wave structure, zero ranged in Room 0, slow yellow practice, and escalating pre-boss combat waves in rooms.gd
 	var easy_defs := Rooms.definitions(&"easy")
 	var hard_defs := Rooms.definitions(&"hard")
 	expect(easy_defs.size() == 4 and hard_defs.size() == 4, "Easy and Hard both define 4 museum rooms")
 
-	# Room 0: Basic teaching (time_meter, shot, charge, heat, short interlude, repair, slow, cut) -> Basic combat level
+	# Room 0: Basic teaching (time_meter, shot, charge, heat, short interlude, repair, slow, cut) -> two escalating small-fodder combat waves (zero ranged!)
 	expect(easy_defs[0].lessons == [&"time_meter", &"shot", &"charge", &"heat", &"repair", &"slow", &"cut"], "Room 0 teaches time_meter before shot, then charge, heat, repair, slow, cut")
 	expect(easy_defs[0].waves[0].lesson == &"time_meter" and int(easy_defs[0].waves[0].get("acquire", 0)) == 2, "Room 0 Wave 0 acquires Tool 2 and teaches time_meter before shot")
 	expect(easy_defs[0].waves[1].lesson == &"shot" and int(easy_defs[0].waves[1].get("acquire", 0)) == 0, "Room 0 Wave 1 teaches yellow shot immediately after time_meter")
 	expect(easy_defs[0].waves[4].lesson == &"" and bool(easy_defs[0].waves[4].pressure) and easy_defs[0].waves[4].enemies == [&"yellow", &"orange"], "Room 0 includes short familiar-target interlude before repair")
-	expect(easy_defs[0].waves[8].lesson == &"" and bool(easy_defs[0].waves[8].pressure) and easy_defs[0].waves[8].enemies == [&"yellow", &"orange", &"blue", &"ranged"], "Room 0 ends with Basic Combat Level")
+	expect(easy_defs[0].waves[6].lesson == &"slow" and easy_defs[0].waves[6].enemies == [&"yellow"], "Room 0 slow lesson uses familiar yellow enemy, not ranged or blue")
+	expect(easy_defs[0].waves.size() == 10 and hard_defs[0].waves.size() == 10, "Room 0 has 10 waves ending with two escalating small-fodder combat waves")
+	expect(
+		easy_defs[0].waves[8].lesson == &"" and bool(easy_defs[0].waves[8].pressure)
+		and easy_defs[0].waves[9].lesson == &"" and bool(easy_defs[0].waves[9].pressure)
+		and int(easy_defs[0].waves[9].count) > int(easy_defs[0].waves[8].count),
+		"Room 0 ends with two substantial escalating small-fodder combat waves"
+	)
+	var r0_has_ranged := false
+	for w in easy_defs[0].waves:
+		if &"ranged" in w.enemies:
+			r0_has_ranged = true
+	for w in hard_defs[0].waves:
+		if &"ranged" in w.enemies:
+			r0_has_ranged = true
+	expect(not r0_has_ranged, "Room 0 contains zero ranged enemies across all lessons, practice, and combat waves on Easy and Hard")
 
-	# Room 1: Advanced A teaching with real combat between new lessons (opening -> combat -> pair -> combat -> rewind -> Mixed level -> Boss 1)
+	# Room 1: Advanced A teaching + deliberate ranged introduction + two escalating pre-boss waves -> Boss 1
 	expect(easy_defs[1].lessons == [&"opening", &"pair", &"rewind"], "Room 1 teaches Advanced A: opening, pair, rewind")
-	expect(easy_defs[1].waves[0].lesson == &"opening" and easy_defs[1].waves[1].lesson == &"" and bool(easy_defs[1].waves[1].pressure), "Room 1 places real combat wave between opening and pair")
+	expect(easy_defs[1].waves[0].lesson == &"opening" and easy_defs[1].waves[1].lesson == &"" and bool(easy_defs[1].waves[1].pressure) and (&"ranged" in easy_defs[1].waves[1].enemies), "Room 1 deliberately introduces ranged in Wave 1 combat after Room 0")
 	expect(easy_defs[1].waves[2].lesson == &"pair" and easy_defs[1].waves[3].lesson == &"" and bool(easy_defs[1].waves[3].pressure), "Room 1 places real combat wave between pair and rewind")
-	expect(easy_defs[1].waves[4].lesson == &"rewind" and easy_defs[1].waves[5].lesson == &"" and bool(easy_defs[1].waves[5].pressure) and not bool(easy_defs[1].waves[5].get("boss", false)), "Room 1 Wave 5 is Advanced A Mixed Level after rewind")
-	var boss1_wave: Dictionary = easy_defs[1].waves[6]
-	var boss1_hard: Dictionary = hard_defs[1].waves[6]
-	expect(bool(boss1_wave.get("boss", false)) and boss1_wave.enemies[0] == &"sequence_boss", "Boss 1 is sequence_boss (uses pair + yellow core taught in Basic/Adv A)")
+	expect(easy_defs[1].waves[4].lesson == &"rewind", "Room 1 Wave 4 teaches rewind")
+	expect(
+		easy_defs[1].waves[5].lesson == &"" and bool(easy_defs[1].waves[5].pressure) and not bool(easy_defs[1].waves[5].get("boss", false))
+		and easy_defs[1].waves[6].lesson == &"" and bool(easy_defs[1].waves[6].pressure) and not bool(easy_defs[1].waves[6].get("boss", false))
+		and int(easy_defs[1].waves[6].count) > int(easy_defs[1].waves[5].count),
+		"Room 1 has two escalating pre-boss combat waves (Waves 5 and 6) before sequence_boss"
+	)
+	var boss1_wave: Dictionary = easy_defs[1].waves[7]
+	var boss1_hard: Dictionary = hard_defs[1].waves[7]
+	expect(bool(boss1_wave.get("boss", false)) and boss1_wave.enemies[0] == &"sequence_boss", "Boss 1 is sequence_boss at Room 1 Wave 7")
 	expect(not (&"loop" in boss1_wave.enemies) and not (&"zigzag" in boss1_wave.enemies) and not (&"loop" in boss1_hard.enemies) and not (&"zigzag" in boss1_hard.enemies), "Boss 1 escorts on Easy and Hard contain no untaught Advanced B enemies (loop/zigzag)")
 
-	# Room 2: Advanced B teaching with real combat between new lessons (loop -> combat -> zigzag -> Mixed level -> Boss 2)
+	# Room 2: Advanced B teaching with real combat between new lessons and ordinary pre-boss combat waves -> Boss 2
 	expect(easy_defs[2].lessons == [&"loop", &"zigzag"], "Room 2 teaches Advanced B: loop, zigzag")
 	expect(easy_defs[2].waves[0].lesson == &"loop" and easy_defs[2].waves[1].lesson == &"" and bool(easy_defs[2].waves[1].pressure), "Room 2 places real combat wave between loop and zigzag")
-	expect(easy_defs[2].waves[2].lesson == &"zigzag" and easy_defs[2].waves[3].lesson == &"" and bool(easy_defs[2].waves[3].pressure) and not bool(easy_defs[2].waves[3].get("boss", false)), "Room 2 Wave 3 is Advanced B Mixed Level")
-	var boss2_wave: Dictionary = easy_defs[2].waves[4]
-	expect(bool(boss2_wave.get("boss", false)) and boss2_wave.enemies[0] == &"loop_boss", "Boss 2 is loop_boss (uses loop + yellow core taught in Adv B)")
+	expect(
+		easy_defs[2].waves[2].lesson == &"zigzag"
+		and easy_defs[2].waves[3].lesson == &"" and bool(easy_defs[2].waves[3].pressure) and not bool(easy_defs[2].waves[3].get("boss", false))
+		and easy_defs[2].waves[4].lesson == &"" and bool(easy_defs[2].waves[4].pressure) and not bool(easy_defs[2].waves[4].get("boss", false))
+		and int(easy_defs[2].waves[4].count) > int(easy_defs[2].waves[3].count),
+		"Room 2 has two escalating combat waves before loop_boss"
+	)
+	var boss2_wave: Dictionary = easy_defs[2].waves[5]
+	expect(bool(boss2_wave.get("boss", false)) and boss2_wave.enemies[0] == &"loop_boss", "Boss 2 is loop_boss at Room 2 Wave 5")
 
-	# Room 3: Final combat level -> Final Boss (final_boss)
-	expect(easy_defs[3].lessons.is_empty() and easy_defs[3].waves.size() == 2, "Room 3 has Final Combat Level followed by Final Boss")
-	expect(easy_defs[3].waves[0].lesson == &"" and bool(easy_defs[3].waves[0].pressure) and not bool(easy_defs[3].waves[0].get("boss", false)), "Room 3 Wave 0 is Final Combat Level")
-	expect(bool(easy_defs[3].waves[1].get("boss", false)) and easy_defs[3].waves[1].enemies[0] == &"final_boss", "Room 3 Wave 1 is Final Boss (final_boss)")
+	# Room 3: Two escalating final combat waves -> Final Boss (final_boss)
+	expect(easy_defs[3].lessons.is_empty() and easy_defs[3].waves.size() == 3, "Room 3 has two escalating Final Combat waves followed by Final Boss")
+	expect(
+		easy_defs[3].waves[0].lesson == &"" and bool(easy_defs[3].waves[0].pressure) and not bool(easy_defs[3].waves[0].get("boss", false))
+		and easy_defs[3].waves[1].lesson == &"" and bool(easy_defs[3].waves[1].pressure) and not bool(easy_defs[3].waves[1].get("boss", false))
+		and int(easy_defs[3].waves[1].count) > int(easy_defs[3].waves[0].count),
+		"Room 3 Waves 0 and 1 are escalating Final Combat waves"
+	)
+	expect(bool(easy_defs[3].waves[2].get("boss", false)) and easy_defs[3].waves[2].enemies[0] == &"final_boss", "Room 3 Wave 2 is Final Boss (final_boss)")
 
 	# Verify tutorial waves are identical on Easy and Hard while combat waves scale on Hard
 	for ri in range(4):
@@ -362,7 +428,7 @@ func _run() -> void:
 			elif not bool(ew.get("boss", false)):
 				expect(int(hw.count) > int(ew.count) and int(hw.max_live) >= int(ew.max_live), "Combat wave R%dW%d scales count/max_live on Hard above Easy" % [ri, wi])
 
-	# 2. Instantiate campaign and verify nonblocking walk cue, staged time_meter before shot, orange heat pushback, and skip safety
+	# 2. Instantiate campaign and verify movement cue -> pickup cue -> quick pickup speech guard -> time_meter -> shot
 	arena = load("res://scenes/prototype/campaign.tscn").instantiate()
 	root.add_child(arena)
 	current_scene = arena
@@ -371,37 +437,72 @@ func _run() -> void:
 	arena.set_physics_process(false)
 	game.start_game()
 
-	# Verify 2 stationary + 2 moving quotas for all 9 combat lessons, and 0+0 for time_meter
+	# Ensure tutorial.movement and tutorial.tool_switch have playable streams even before jam-6 library merge
+	var had_move_clip: bool = audio_mgr.library != null and audio_mgr.library.clips.has(&"tutorial.movement")
+	var had_switch_clip: bool = audio_mgr.library != null and audio_mgr.library.clips.has(&"tutorial.tool_switch")
+	if audio_mgr.library != null and audio_mgr.library.clips.has(&"tutorial.pickup"):
+		var sample_stream: Array = audio_mgr.library.clips[&"tutorial.pickup"]
+		if not had_move_clip:
+			audio_mgr.library.clips[&"tutorial.movement"] = sample_stream.duplicate()
+		if not had_switch_clip:
+			audio_mgr.library.clips[&"tutorial.tool_switch"] = sample_stream.duplicate()
+
+	arena.start_new_run(&"easy", false)
 	expect(arena.practice_quotas_for(&"time_meter") == Vector2i.ZERO, "Lesson time_meter has Vector2i.ZERO practice quota")
 	for lid in [&"shot", &"charge", &"heat", &"slow", &"cut", &"opening", &"pair", &"loop", &"zigzag"]:
 		expect(arena.practice_quotas_for(lid) == Vector2i(2, 2), "Lesson %s has Vector2i(2, 2) quota" % String(lid))
 
 	expect(arena._last_music_context == &"regular_combat", "Entering Room 0 sets regular_combat music context")
 
-	# Verify first playable moment: nonblocking "Walk towards the new item." cue -> walk to pickup -> staged time_meter -> shot
+	# Step past title into first playable moment: movement cue BEFORE first pickup cue
 	_tick(2.1)
 	expect(
 		arena.mode == &"pickup"
+		and arena._pickup_stage == &"movement_cue"
 		and arena.museum.pickup_tool == 2
 		and not arena.tutorial.blocking
-		and arena.run_hint.text == "Walk towards the new item."
-		and arena.run_hint.visible,
-		"First playable moment is nonblocking pickup with 'Walk towards the new item.' cue"
+		and arena.run_hint.text == "Mouse aims. WASD moves."
+		and arena.run_hint.visible
+		and audio_mgr.current_event == &"tutorial.movement",
+		"First playable moment starts nonblocking movement cue ('Mouse aims. WASD moves.', tutorial.movement) before first pickup cue"
 	)
 	var start_pos: Vector3 = arena.player.position
 	Input.action_press(&"move_right")
 	_tick(0.1)
 	Input.action_release(&"move_right")
-	expect(arena.player.position.distance_to(start_pos) > 0.1, "Player can move freely during nonblocking pickup cue")
+	expect(arena.player.position.distance_to(start_pos) > 0.1 and arena._pickup_stage == &"movement_cue", "Player can move freely during movement cue without cutting off tutorial.movement")
 
+	# Complete tutorial.movement naturally -> verify transition to tutorial.pickup ('Walk towards the new item.')
+	audio_mgr.voice.stop()
+	audio_mgr._finish_current(false)
+	expect(
+		arena.mode == &"pickup"
+		and arena._pickup_stage == &"pickup_cue"
+		and arena.run_hint.text == "Walk towards the new item."
+		and arena.run_hint.visible
+		and audio_mgr.current_event == &"tutorial.pickup",
+		"Completing tutorial.movement transitions to first pickup cue ('Walk towards the new item.', tutorial.pickup)"
+	)
+
+	# Quick pickup while tutorial.pickup is still speaking must NOT cut off tutorial.pickup or start time_meter over it
 	arena.player.position = arena.museum.pickup_position + Vector3.UP * 0.55
-	_tick(0.02)
+	_tick(0.05)
+	expect(
+		arena.acquired == [2]
+		and arena.mode == &"pickup"
+		and arena._pickup_stage == &"await_pickup_speech"
+		and audio_mgr.current_event == &"tutorial.pickup",
+		"Quick pickup during tutorial.pickup collects tool without cutting off tutorial.pickup or starting time_meter over it"
+	)
+	audio_mgr.voice.stop()
+	audio_mgr._finish_current(false)
 	expect(
 		arena.mode == &"practice"
 		and arena.lesson == &"time_meter"
 		and arena.tutorial.visible
-		and arena.tutorial.body_label.text == "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge.",
-		"Collecting yellow weapon starts staged time_meter teaching before shot with exact reserve caption"
+		and arena.tutorial.body_label.text == "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge."
+		and audio_mgr.current_event == &"tutorial.time_meter",
+		"Once tutorial.pickup finishes, staged time_meter demonstration begins with exact reserve caption"
 	)
 	var min_meter_during_tm := 100.0
 	var max_meter_after_drain := 0.0
@@ -427,14 +528,34 @@ func _run() -> void:
 	_tick(0.5)
 	expect(arena.mode == &"practice" and arena.lesson == &"shot", "Wave 1 begins yellow shot lesson after time_meter")
 
-	# Verify orange Heat Bellows practice uses orange targets only and visibly pushes the orange target back
-	arena.debug_start(0, 3)
+	# Verify second acquired item (Tool 3 in Room 0 Wave 3) plays tutorial.tool_switch BEFORE heat explanation
+	arena.debug_start(0, 2)
 	arena.tutorial.learned.erase(&"heat")
 	arena.lesson_demo.learned_demos.erase(&"heat")
+	arena.acquired.assign([2])
+	arena._tool_switch_cue_done = false
 	arena.director.clear()
 	arena.wave_index = 2
 	arena._begin_wave()
-	expect(arena.lesson == &"heat" and arena.mode == &"practice", "Room 0 Wave 3 starts heat lesson")
+	expect(arena.mode == &"pickup" and arena._pickup_stage == &"pickup_cue" and arena.museum.pickup_tool == 3, "Wave 3 enters pickup mode for second item (Tool 3)")
+	audio_mgr.stop_dialogue()
+	arena.player.position = arena.museum.pickup_position + Vector3.UP * 0.55
+	_tick(0.05)
+	expect(
+		arena.acquired == [2, 3]
+		and arena.mode == &"pickup"
+		and arena._pickup_stage == &"tool_switch_cue"
+		and not arena.tutorial.blocking
+		and arena.run_hint.text == "Press Tab, one, two, or three; to select tools."
+		and arena.run_hint.visible
+		and audio_mgr.current_event == &"tutorial.tool_switch",
+		"Picking up second item triggers nonblocking tool_switch cue ('Press Tab, one, two, or three; to select tools.', tutorial.tool_switch) before heat explanation"
+	)
+	audio_mgr.voice.stop()
+	audio_mgr._finish_current(false)
+	expect(arena.lesson == &"heat" and arena.mode == &"practice" and audio_mgr.current_event == &"tutorial.heat", "Completing tutorial.tool_switch starts second item's explanation (heat)")
+
+	# Verify orange Heat Bellows practice uses orange targets only and visibly pushes the orange target back
 	arena.tutorial.request_practice()
 	expect(
 		arena._practice_stage == &"stationary"
@@ -464,8 +585,24 @@ func _run() -> void:
 		"Orange practice target is visibly pushed back by Heat Bellows before breaking (pushed +%.2fm from %.2fm to %.2fm)" % [max_orange_dist - initial_orange_dist, initial_orange_dist, max_orange_dist]
 	)
 
-	# Skip ends narration only; first repair remains mandatory and resumable.
-	arena.debug_start(0, 5)
+	# Verify slow lesson in Room 0 Wave 6 spawns familiar yellow target (not ranged or blue)
+	arena.debug_start(0, 6)
+	arena.tutorial.learned.erase(&"slow")
+	arena.lesson_demo.learned_demos.erase(&"slow")
+	arena.director.clear()
+	arena.wave_index = 5
+	arena._begin_wave()
+	expect(arena.lesson == &"slow" and arena.mode == &"practice", "Room 0 Wave 6 starts slow lesson")
+	arena.tutorial.request_practice()
+	expect(
+		arena._practice_stage == &"stationary"
+		and arena.specimens.size() == 1
+		and arena.specimens[0].kind == &"yellow"
+		and arena.weapons.selected_tool == 2,
+		"Slow practice in Room 0 spawns familiar yellow target with Tool 2 selected"
+	)
+
+	# Skip ends narration only; first repair remains mandatory and resumable.	arena.debug_start(0, 5)
 	arena.tutorial.learned.erase(&"repair")
 	arena.director.clear()
 	arena.wave_index = 4
@@ -501,6 +638,59 @@ func _run() -> void:
 		_tick(0.01)
 		expect(arena.tutorial.is_learned(&"repair") and arena.mode == &"recovery", "Completing all repair stages, rather than Skip, completes the lesson")
 
+	# Verify post-rewind charge-statement lifetime (tutorial.rewind_charges): not cut off by 0.35s recovery
+	arena.debug_start(1, 4)
+	arena.tutorial.learned.erase(&"rewind")
+	arena.rewind_lesson.reset_for_new_run()
+	arena.director.clear()
+	arena.wave_index = 3
+	arena._begin_wave()
+	expect(arena.lesson == &"rewind" and arena.rewind_lesson.active, "Room 1 Wave 4 starts RewindLesson")
+	for r_tick in range(60):
+		_tick(0.04)
+		if arena.is_emergency_active():
+			break
+	expect(arena.is_emergency_active() and arena.rewind_lesson.phase == RewindLesson.Phase.SCRUB, "RewindLesson enters frozen SCRUB phase")
+	var enter_down := InputEventKey.new()
+	enter_down.physical_keycode = KEY_ENTER
+	enter_down.keycode = KEY_ENTER
+	enter_down.pressed = true
+	arena._input(enter_down)
+	expect(
+		not arena.is_emergency_active()
+		and arena.time_controller.charges_remaining == 3
+		and is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity)
+		and arena.mode == &"recovery"
+		and arena._awaiting_rewind_charges_speech
+		and audio_mgr.current_event == &"tutorial.rewind_charges"
+		and arena.run_hint.text == "Each room gives you three emergency rewinds.",
+		"Confirming RewindLesson with Enter restores 3 charges and 100% reserve and starts tutorial.rewind_charges"
+	)
+	var enter_up := InputEventKey.new()
+	enter_up.physical_keycode = KEY_ENTER
+	enter_up.keycode = KEY_ENTER
+	enter_up.pressed = false
+	arena._input(enter_up)
+	expect(not arena._suppress_enter_release, "Held Enter release after RewindLesson confirm is consumed cleanly without leaking")
+	# Tick 0.6s (past the 0.35s recovery timer) and verify tutorial.rewind_charges is NOT cut off
+	_tick(0.6)
+	expect(
+		arena.mode == &"recovery"
+		and arena.wave_index == 4
+		and arena._awaiting_rewind_charges_speech
+		and audio_mgr.current_event == &"tutorial.rewind_charges",
+		"0.35s recovery timer does NOT cut off tutorial.rewind_charges before it finishes"
+	)
+	# Natural completion of tutorial.rewind_charges advances immediately to Wave 5 without a second confirmation
+	audio_mgr.voice.stop()
+	audio_mgr._finish_current(false)
+	expect(
+		not arena._awaiting_rewind_charges_speech
+		and arena.mode == &"pressure"
+		and arena.wave_index == 5,
+		"Completing tutorial.rewind_charges advances automatically to the next encounter without a second confirmation"
+	)
+
 	# Test opening lesson (Room 1 Wave 0): Demo -> 2 stationary (side_guard, front_guard) -> 2 moving (side_guard, front_guard) -> recovery -> Wave 1 real combat
 	arena.debug_start(1, 0)
 	arena.tutorial.learned.erase(&"opening")
@@ -533,7 +723,7 @@ func _run() -> void:
 	_tick(2.1)
 	expect(arena.room_index == 1 and arena.wave_index == 1 and arena.mode == &"pressure" and arena.lesson == &"", "Retrying Room 1 after learning opening skips Wave 0 opening and starts Wave 1 real combat")
 
-	# 3. Reproduce & verify Exit Carry-Through ("W SKIP") protection across all 5 cases
+	# 3. Verify Round T Reliable Exits: fresh threshold crossing works on first try with W held; standing inside threshold at open requires one step-out and re-entry
 	arena.enter_room(0)
 	arena.wave_index = arena.waves.size() - 2
 	arena._begin_wave()
@@ -543,40 +733,54 @@ func _run() -> void:
 	arena.director._prune_dead_enemies()
 	arena._pending = 0
 
-	# Case A: Player holds W (move_up) BEFORE wave clears and keeps holding W across recovery into open exit doorway
+	# Case A: Player already inside the open exit threshold when the exit opens needs one step-out and re-entry
 	var door_pos: Vector3 = arena.room.exit_door.position
 	arena.player.position = door_pos + Vector3(0.0, 0.55, 1.4)
-	Input.action_press(&"move_up")
 	_tick(0.05)
-	expect(arena.mode == &"recovery" and arena._forward_held_at_wave_clear, "Wave clear records held forward movement")
+	expect(arena.mode == &"recovery", "Wave clear enters recovery")
 	_tick(2.0)
 	expect(arena.mode == &"exit" and arena.museum.exit_open and arena.room_index == 0, "Room 0 enters exit mode with open green doorway")
-	for i in range(15):
-		_tick(1.0 / 30.0)
-	expect(arena.room_index == 0 and arena.mode == &"exit" and arena.museum.player_in_exit(arena.player.position), "Holding W before clear into doorway does NOT skip room clear state even inside player_in_exit")
-
-	# Releasing W while still standing inside the doorway must NOT trigger a mysterious key-release exit
-	Input.action_release(&"move_up")
-	_tick(0.05)
-	expect(arena.room_index == 0 and arena.mode == &"exit" and arena._exit_requires_reentry, "Releasing W inside doorway keeps _exit_requires_reentry active until spatial re-entry")
-
-	# Case B: Standing in exit at clear without W held requires stepping out of approach zone and re-entering
 	arena.player.position = door_pos + Vector3(0.0, 0.55, 0.3)
-	arena._forward_held_at_wave_clear = false
 	arena._arm_room_exit()
 	_tick(0.05)
-	expect(arena.room_index == 0 and arena.mode == &"exit" and arena._exit_requires_reentry, "Standing in exit when doorway opens blocks instant transition")
+	expect(arena.room_index == 0 and arena.mode == &"exit" and arena._exit_requires_reentry, "Player already inside threshold when exit opens requires one step-out before transition")
 
-	# Step south outside exit approach zone (z > door.z + 2.6), then make a fresh intentional approach
-	arena.player.position = door_pos + Vector3(0.0, 0.55, 3.4)
+	# One step-out just outside the threshold (z = door.z + 1.4) clears _exit_requires_reentry even with W held
+	Input.action_press(&"move_up")
+	arena.player.position = door_pos + Vector3(0.0, 0.55, 1.4)
 	_tick(0.05)
-	expect(not arena._exit_requires_reentry and not arena._exit_blocked_by_held_forward, "Stepping outside exit approach zone arms doorway for fresh approach")
+	expect(not arena._exit_requires_reentry, "Stepping just outside the exit threshold arms doorway immediately even with W held")
 
-	# Case C: Fresh intentional approach advances cleanly to next room and places player at next room spawn
+	# Re-entering the threshold with W held transitions on the first try
 	arena.player.position = door_pos + Vector3(0.0, 0.55, 0.4)
 	_tick(0.05)
-	expect(arena.room_index == 1 and arena.mode == &"title" and not arena.museum.exit_open, "Fresh approach into open doorway advances to Room 1 and closes new room exit")
+	expect(arena.room_index == 1 and arena.mode == &"title" and not arena.museum.exit_open, "Re-entering threshold with W held advances to Room 1 on the first try")
 	expect(arena.player.position.is_equal_approx(arena.room.player_spawn) and not arena.museum.player_in_exit(arena.player.position), "Next room places player at room spawn far from north exit")
+
+	# Case B: Approaching from outside threshold with W held before wave clear works on the first try once exit opens
+	arena.enter_room(0)
+	arena.wave_index = arena.waves.size() - 2
+	arena._begin_wave()
+	for e in arena.director.enemies:
+		e.health = 0.0
+	arena.director._prune_dead_enemies()
+	arena._pending = 0
+	door_pos = arena.room.exit_door.position
+	arena.player.position = door_pos + Vector3(0.0, 0.55, 2.2)
+	Input.action_press(&"move_up")
+	_tick(0.05)
+	arena.player.position = door_pos + Vector3(0.0, 0.55, 1.4)
+	_tick(2.0)
+	expect(arena.mode == &"exit" and not arena._exit_requires_reentry, "Opening exit while player is outside threshold arms exit immediately even with W held")
+	for i in range(10):
+		_tick(1.0 / 30.0)
+	expect(arena.room_index == 1 and arena.mode == &"title", "Approaching open threshold with W held transitions to Room 1 on the first try")
+	Input.action_release(&"move_up")
+
+	if not had_move_clip and audio_mgr.library != null:
+		audio_mgr.library.clips.erase(&"tutorial.movement")
+	if not had_switch_clip and audio_mgr.library != null:
+		audio_mgr.library.clips.erase(&"tutorial.tool_switch")
 
 	# 4. Execute full playable runs on both Easy and Hard (normal + skip_tutorials)
 	await _execute_full_run(&"easy")

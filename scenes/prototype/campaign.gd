@@ -67,9 +67,22 @@ var _time_meter_min_meter := 100.0
 var _time_meter_max_after_hit := 0.0
 var _time_meter_sync_steps := 0
 var _time_meter_last_frame := -1
+var _pickup_stage: StringName = &""
+var _movement_cue_done := false
+var _tool_switch_cue_done := false
+var _cue_elapsed := 0.0
+var _cue_speech_accepted := false
+var _pickup_ticks_in_stage := 0
+var _awaiting_rewind_charges_speech := false
+var _rewind_charges_elapsed := 0.0
+var _rewind_charges_speech_accepted := false
+var _suppress_enter_release := false
 
+const MOVEMENT_CUE_LINE := "Mouse aims. WASD moves."
 const PICKUP_WALK_LINE := "Walk towards the new item."
+const TOOL_SWITCH_CUE_LINE := "Press Tab, one, two, or three; to select tools."
 const TIME_METER_LINE := "Taking damage, slowing time, and repairing drain your reserve. Find moments to let it recharge."
+const REWIND_CHARGES_LINE := "Each room gives you three emergency rewinds."
 
 
 static func practice_quotas_for(id: StringName) -> Vector2i:
@@ -96,6 +109,10 @@ func _is_skip_tutorials_active() -> bool:
 	return skip_tutorials
 
 
+func _should_play_teaching_cues() -> bool:
+	return not _is_skip_tutorials_active() and bool(GameState.preferences().get("tutorial", true)) and not _debug_direct_wave
+
+
 func _set_music_context(context: StringName) -> void:
 	_last_music_context = context
 	if AudioManager == null or not AudioManager.has_method("set_music_context"):
@@ -117,7 +134,41 @@ func _is_instruction_speech_busy() -> bool:
 	return false
 
 
-func _on_audio_speech_finished(_event: StringName, _interrupted: bool) -> void:
+func _is_event_speaking(event: StringName) -> bool:
+	if AudioManager == null or event.is_empty():
+		return false
+	if AudioManager.has_method("is_speaking"):
+		return bool(AudioManager.call("is_speaking", event))
+	return StringName(AudioManager.get("current_event")) == event
+
+
+func _play_lesson_speech(id: StringName) -> void:
+	if AudioManager == null or id.is_empty():
+		return
+	var cur := String(AudioManager.get("current_event"))
+	if cur in ["tutorial.movement", "tutorial.pickup", "tutorial.tool_switch", "tutorial.rewind_charges"]:
+		AudioManager.say(StringName("tutorial." + String(id)), 3)
+	else:
+		AudioManager.lesson(id)
+
+
+func _on_audio_speech_finished(event: StringName, interrupted: bool) -> void:
+	if interrupted or not is_inside_tree() or is_queued_for_deletion():
+		return
+	if _awaiting_rewind_charges_speech and (event == &"tutorial.rewind_charges" or not _is_event_speaking(&"tutorial.rewind_charges")):
+		_finish_rewind_charges_speech(false)
+		return
+	if mode == &"pickup":
+		if _pickup_stage == &"movement_cue" and (event == &"tutorial.movement" or not _is_event_speaking(&"tutorial.movement")):
+			_start_pickup_walk_cue(true)
+			return
+		if _pickup_stage == &"await_pickup_speech" and not _is_instruction_speech_busy():
+			_advance_after_pickup_collected()
+			return
+		if _pickup_stage == &"tool_switch_cue" and (event == &"tutorial.tool_switch" or not _is_event_speaking(&"tutorial.tool_switch")):
+			_pickup_stage = &""
+			_spawn_wave()
+			return
 	if mode == &"practice" and _practice_stage == &"await_speech" and not _is_instruction_speech_busy():
 		if lesson == &"time_meter":
 			_finish_time_meter_lesson(false)
@@ -132,38 +183,28 @@ func _is_forward_move_held() -> bool:
 
 
 func _is_in_exit_approach_zone(point: Vector3) -> bool:
-	var door_dict: Dictionary = room.get("exit_door", {})
-	var door: Vector3 = door_dict.get("position", Vector3(0.0, 0.0, -19.5))
-	var width: float = float(door_dict.get("width", 4.4))
-	return absf(point.x - door.x) <= width * 0.65 and point.z >= door.z - 1.5 and point.z <= door.z + 2.6
+	return museum != null and bool(museum.player_in_exit(point))
 
 
 func _arm_room_exit() -> void:
 	var pos := player.position if is_instance_valid(player) else Vector3.ZERO
-	_exit_requires_reentry = _is_in_exit_approach_zone(pos) or (museum != null and bool(museum.player_in_exit(pos)))
-	_exit_blocked_by_held_forward = _forward_held_at_wave_clear or _is_forward_move_held()
-	if _exit_blocked_by_held_forward and _exit_requires_reentry:
-		_exit_requires_reentry = true
+	_exit_requires_reentry = museum != null and bool(museum.player_in_exit(pos))
+	_exit_blocked_by_held_forward = false
+	_forward_held_at_wave_clear = false
 
 
 func _update_exit_gate_state() -> void:
 	if mode != &"exit" or not is_instance_valid(player):
 		return
-	var in_approach: bool = _is_in_exit_approach_zone(player.position) or (museum != null and bool(museum.player_in_exit(player.position)))
-	var forward_held := _is_forward_move_held()
-	if _exit_blocked_by_held_forward and in_approach:
-		_exit_requires_reentry = true
-	if not forward_held:
-		_exit_blocked_by_held_forward = false
-		_forward_held_at_wave_clear = false
-	if _exit_requires_reentry and not in_approach and not _exit_blocked_by_held_forward:
+	var in_exit: bool = museum != null and bool(museum.player_in_exit(player.position))
+	if _exit_requires_reentry and not in_exit:
 		_exit_requires_reentry = false
 
 
 func _can_traverse_open_exit() -> bool:
 	if mode != &"exit" or not is_instance_valid(player) or museum == null or not museum.exit_open:
 		return false
-	if _exit_requires_reentry or _exit_blocked_by_held_forward:
+	if _exit_requires_reentry:
 		return false
 	return bool(museum.player_in_exit(player.position))
 
@@ -198,6 +239,12 @@ func _cancel_active_teaching_controllers() -> void:
 		lesson_demo.cancel()
 	if rewind_lesson != null and rewind_lesson.active:
 		rewind_lesson.cancel()
+	if _awaiting_rewind_charges_speech:
+		_awaiting_rewind_charges_speech = false
+		_rewind_charges_elapsed = 0.0
+		_rewind_charges_speech_accepted = false
+		if rewind_lesson != null:
+			rewind_lesson._sync_banner()
 
 
 func start_new_run(new_difficulty: Variant = null, new_skip_tutorials: Variant = null) -> void:
@@ -226,6 +273,16 @@ func start_new_run(new_difficulty: Variant = null, new_skip_tutorials: Variant =
 		rewind_lesson.reset_for_new_run()
 	_slow_unlocked = false
 	_rewind_unlocked = false
+	_movement_cue_done = false
+	_tool_switch_cue_done = false
+	_pickup_stage = &""
+	_cue_elapsed = 0.0
+	_cue_speech_accepted = false
+	_pickup_ticks_in_stage = 0
+	_awaiting_rewind_charges_speech = false
+	_rewind_charges_elapsed = 0.0
+	_rewind_charges_speech_accepted = false
+	_suppress_enter_release = false
 	_apply_time_capabilities()
 	lesson = &""
 	_practice_stage = &""
@@ -316,15 +373,121 @@ func _pickup_spawn_position() -> Vector3:
 	)
 
 
+func _start_pickup_walk_cue(speak_cue: bool = true) -> void:
+	_pickup_stage = &"pickup_cue"
+	_cue_elapsed = 0.0
+	_pickup_ticks_in_stage = 0
+	run_hint.text = PICKUP_WALK_LINE
+	_cue_speech_accepted = false
+	if speak_cue and AudioManager != null and _should_play_teaching_cues():
+		_cue_speech_accepted = AudioManager.say(&"tutorial.pickup", 3, false)
+	_update_run_hud()
+
+
 func _enter_pickup_mode(tool: int, speak_cue: bool = true) -> void:
 	mode = &"pickup"
 	if tutorial != null:
 		tutorial.dismiss()
 	museum.show_tool_pickup(tool, _pickup_spawn_position())
-	run_hint.text = PICKUP_WALK_LINE
-	if speak_cue and AudioManager != null:
-		AudioManager.say(&"tutorial.pickup", 3, false)
-	_update_run_hud()
+	if speak_cue and not _movement_cue_done and acquired.is_empty() and _should_play_teaching_cues():
+		_movement_cue_done = true
+		_pickup_stage = &"movement_cue"
+		_cue_elapsed = 0.0
+		_pickup_ticks_in_stage = 0
+		run_hint.text = MOVEMENT_CUE_LINE
+		_cue_speech_accepted = AudioManager != null and AudioManager.say(&"tutorial.movement", 3, true)
+		_update_run_hud()
+		return
+	_start_pickup_walk_cue(speak_cue)
+
+
+func _advance_after_pickup_collected() -> void:
+	if acquired.size() == 2 and not _tool_switch_cue_done and _should_play_teaching_cues():
+		_tool_switch_cue_done = true
+		_pickup_stage = &"tool_switch_cue"
+		_cue_elapsed = 0.0
+		_pickup_ticks_in_stage = 0
+		run_hint.text = TOOL_SWITCH_CUE_LINE
+		_cue_speech_accepted = AudioManager != null and AudioManager.say(&"tutorial.tool_switch", 3, true)
+		_update_run_hud()
+		return
+	_pickup_stage = &""
+	_cue_elapsed = 0.0
+	_pickup_ticks_in_stage = 0
+	_spawn_wave()
+
+
+func _step_pickup_mode(delta: float) -> void:
+	_cue_elapsed += maxf(0.0, delta)
+	_pickup_ticks_in_stage += 1
+	var fast_headless := not is_physics_processing() and delta <= 0.002
+	if _pickup_stage == &"movement_cue":
+		var move_speaking := _is_event_speaking(&"tutorial.movement")
+		if fast_headless:
+			if move_speaking and AudioManager != null:
+				AudioManager.stop_dialogue()
+			_start_pickup_walk_cue(true)
+			return
+		if not is_physics_processing() and _cue_elapsed >= 2.2:
+			if move_speaking and AudioManager != null:
+				AudioManager.stop_dialogue()
+			_start_pickup_walk_cue(true)
+			return
+		if not move_speaking and (not _cue_speech_accepted and _cue_elapsed >= 0.85 or _cue_speech_accepted):
+			_start_pickup_walk_cue(true)
+			return
+		return
+	if _pickup_stage == &"await_pickup_speech":
+		var pickup_speaking := _is_event_speaking(&"tutorial.pickup") or _is_event_speaking(&"tutorial.movement")
+		if fast_headless:
+			if pickup_speaking and AudioManager != null:
+				AudioManager.stop_dialogue()
+			_advance_after_pickup_collected()
+			return
+		if not is_physics_processing() and _cue_elapsed >= 2.2:
+			if pickup_speaking and AudioManager != null:
+				AudioManager.stop_dialogue()
+			_advance_after_pickup_collected()
+			return
+		if not pickup_speaking:
+			_advance_after_pickup_collected()
+		return
+	if _pickup_stage == &"tool_switch_cue":
+		var switch_speaking := _is_event_speaking(&"tutorial.tool_switch")
+		if fast_headless:
+			if switch_speaking and AudioManager != null:
+				AudioManager.stop_dialogue()
+			_pickup_stage = &""
+			_spawn_wave()
+			return
+		if not is_physics_processing() and _cue_elapsed >= 2.2:
+			if switch_speaking and AudioManager != null:
+				AudioManager.stop_dialogue()
+			_pickup_stage = &""
+			_spawn_wave()
+			return
+		if not switch_speaking and (not _cue_speech_accepted and _cue_elapsed >= 0.85 or _cue_speech_accepted):
+			_pickup_stage = &""
+			_spawn_wave()
+		return
+	if museum.pickup_tool > 0:
+		var point: Vector3 = museum.pickup_position
+		if Vector2(player.position.x - point.x, player.position.z - point.z).length() <= 1.7:
+			var tool: int = museum.pickup_tool
+			if tool > 0 and tool <= 3 and not tool in acquired:
+				acquired.append(tool)
+			weapons.set_loadout(acquired, _preferred_tool(tool))
+			museum.clear_tool_pickup()
+			var pickup_speaking := _is_event_speaking(&"tutorial.pickup") or _is_event_speaking(&"tutorial.movement")
+			if pickup_speaking and not fast_headless:
+				_pickup_stage = &"await_pickup_speech"
+				_cue_elapsed = 0.0
+				_pickup_ticks_in_stage = 0
+				_update_run_hud()
+				return
+			if pickup_speaking and fast_headless and AudioManager != null:
+				AudioManager.stop_dialogue()
+			_advance_after_pickup_collected()
 
 
 func _reset_room_history() -> void:
@@ -369,6 +532,22 @@ func enter_room(index: int) -> void:
 				_slow_unlocked = true
 			elif taught == &"rewind":
 				_rewind_unlocked = true
+	if room_index == 0 and acquired.is_empty():
+		_movement_cue_done = false
+		_tool_switch_cue_done = false
+	else:
+		if acquired.size() >= 1:
+			_movement_cue_done = true
+		if acquired.size() >= 2:
+			_tool_switch_cue_done = true
+	_pickup_stage = &""
+	_cue_elapsed = 0.0
+	_cue_speech_accepted = false
+	_pickup_ticks_in_stage = 0
+	_awaiting_rewind_charges_speech = false
+	_rewind_charges_elapsed = 0.0
+	_rewind_charges_speech_accepted = false
+	_suppress_enter_release = false
 	weapons.set_loadout(acquired, _preferred_tool(2))
 	museum.apply_room(room, cover, self)
 	museum.sync_cover_colliders(self)
@@ -503,6 +682,9 @@ func _is_slow_held() -> bool:
 
 
 func _on_tutorial_skip_requested(id: StringName) -> void:
+	if _awaiting_rewind_charges_speech and (id.is_empty() or id in [&"rewind", &"rewind_charges"]):
+		_finish_rewind_charges_speech(true)
+		return
 	if mode != &"practice":
 		return
 	var target_id := id if not id.is_empty() else lesson
@@ -561,6 +743,19 @@ func _input(event: InputEvent) -> void:
 		var kcode: int = event.physical_keycode if event.physical_keycode else event.keycode
 		if kcode in [KEY_W, KEY_UP]:
 			_w_key_held = event.pressed
+		if kcode in [KEY_ENTER, KEY_KP_ENTER] and (_suppress_enter_release or _awaiting_rewind_charges_speech):
+			if not event.pressed:
+				_suppress_enter_release = false
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
+	if _awaiting_rewind_charges_speech and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if rewind_lesson != null and is_instance_valid(rewind_lesson.skip_button) and rewind_lesson.skip_button.visible and not rewind_lesson.skip_button.disabled:
+			if rewind_lesson.skip_button.get_global_rect().has_point(event.position):
+				_finish_rewind_charges_speech(true)
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
 	if _campaign_ready and rewind_lesson != null and rewind_lesson.active and rewind_lesson.phase == RewindLesson.Phase.STAGING:
 		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_F10:
 			super._input(event)
@@ -595,6 +790,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if event is InputEventKey and event.pressed and not event.echo:
 			var code: int = event.physical_keycode if event.physical_keycode else event.keycode
+			if code in [KEY_ENTER, KEY_KP_ENTER] and (_suppress_enter_release or _awaiting_rewind_charges_speech):
+				return
 			if code == KEY_R:
 				retry_room()
 				return
@@ -672,16 +869,7 @@ func _physics_process(delta: float) -> void:
 	var world_scale := _world_scale()
 	var world_delta := delta * world_scale
 	if mode == &"pickup":
-		var point: Vector3 = museum.pickup_position
-		if Vector2(player.position.x - point.x, player.position.z - point.z).length() <= 1.7:
-			var tool: int = museum.pickup_tool
-			if tool > 0 and tool <= 3 and not tool in acquired:
-				acquired.append(tool)
-			weapons.set_loadout(acquired, _preferred_tool(tool))
-			museum.clear_tool_pickup()
-			if AudioManager != null and String(AudioManager.get("current_event")) == "tutorial.pickup":
-				AudioManager.stop_dialogue()
-			_spawn_wave()
+		_step_pickup_mode(delta)
 	elif mode == &"practice":
 		if tutorial.is_learned(lesson):
 			if lesson == &"time_meter":
@@ -730,7 +918,8 @@ func _physics_process(delta: float) -> void:
 		if not _is_forward_move_held():
 			_forward_held_at_wave_clear = false
 		timer -= world_delta
-		if timer <= 0.0 and equipment.repairing == &"":
+		_step_rewind_charges_wait(delta)
+		if mode == &"recovery" and timer <= 0.0 and not _awaiting_rewind_charges_speech and equipment.repairing == &"":
 			_begin_wave()
 	elif mode == &"exit":
 		_update_exit_gate_state()
@@ -852,7 +1041,9 @@ func _complete_teaching_wave(custom_hint: String = "") -> void:
 func _begin_wave() -> void:
 	_cancel_active_teaching_controllers()
 	if _is_instruction_speech_busy():
-		AudioManager.stop_dialogue()
+		var cur_ev := String(AudioManager.get("current_event")) if AudioManager != null else ""
+		if not (cur_ev in ["tutorial.movement", "tutorial.pickup", "tutorial.tool_switch", "tutorial.rewind_charges"]):
+			AudioManager.stop_dialogue()
 	_seed_room_checkpoint()
 	wave_index += 1
 	if not _debug_direct_wave:
@@ -931,7 +1122,7 @@ func _desired_tool_for_lesson(id: StringName) -> int:
 		&"repair": 2,
 		&"cut": 1,
 		&"opening": 1,
-		&"slow": 1 if 1 in acquired else 2,
+		&"slow": 2,
 		&"rewind": 2 if 2 in acquired else 1,
 		&"loop": 1,
 		&"pair": 2,
@@ -994,7 +1185,7 @@ func _spawn_wave() -> void:
 	weapons.select_tool(_preferred_tool(_desired_tool_for_lesson(lesson)))
 	if lesson == &"time_meter":
 		_practice_stage = &"demo"
-		AudioManager.lesson(&"time_meter")
+		_play_lesson_speech(&"time_meter")
 		run_hint.text = ""
 		if lesson_demo != null and lesson_demo.begin(self, &"time_meter", tutorial):
 			_update_run_hud()
@@ -1003,7 +1194,7 @@ func _spawn_wave() -> void:
 		return
 	if lesson == &"repair":
 		_practice_stage = &"repair"
-		AudioManager.lesson(&"repair")
+		_play_lesson_speech(&"repair")
 		_spawn_practice()
 		tutorial.show_known_lesson(lesson, _targets())
 		var total_stages := maxi(1, equipment.repair_steps)
@@ -1013,7 +1204,7 @@ func _spawn_wave() -> void:
 		return
 	if lesson == &"rewind":
 		_practice_stage = &"rewind"
-		AudioManager.lesson(&"rewind")
+		_play_lesson_speech(&"rewind")
 		_rewind_unlocked = true
 		_apply_time_capabilities()
 		tutorial.dismiss()
@@ -1023,7 +1214,7 @@ func _spawn_wave() -> void:
 		_update_run_hud()
 		return
 	_practice_stage = &"demo"
-	AudioManager.lesson(lesson)
+	_play_lesson_speech(lesson)
 	run_hint.text = ""
 	if lesson_demo != null and lesson_demo.begin(self, lesson, tutorial):
 		_update_run_hud()
@@ -1201,9 +1392,43 @@ func _start_stationary_practice() -> void:
 	_update_run_hud()
 
 
+func _finish_rewind_charges_speech(skipped: bool = false) -> void:
+	_awaiting_rewind_charges_speech = false
+	_rewind_charges_elapsed = 0.0
+	_rewind_charges_speech_accepted = false
+	if rewind_lesson != null:
+		rewind_lesson._sync_banner()
+	if skipped:
+		if AudioManager != null:
+			AudioManager.stop_dialogue()
+		var lmb_down := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+		if lmb_down:
+			_suppress_next_lmb_release = true
+		weapons.cancel_input()
+		weapons.mouse_held = false
+		weapons.require_fresh_press = true
+	if mode == &"recovery":
+		run_hint.text = "Emergency rewind ready · next exhibit group approaching."
+		_update_run_hud()
+		if timer <= 0.0 and equipment.repairing == &"":
+			_begin_wave()
+
+
+func _step_rewind_charges_wait(delta: float) -> void:
+	if not _awaiting_rewind_charges_speech:
+		return
+	_rewind_charges_elapsed += maxf(0.0, delta)
+	var charges_speaking := _is_event_speaking(&"tutorial.rewind_charges")
+	if not is_physics_processing() and _rewind_charges_elapsed >= 3.2:
+		if charges_speaking and AudioManager != null:
+			AudioManager.stop_dialogue()
+		_finish_rewind_charges_speech(false)
+		return
+	if not charges_speaking and (not _rewind_charges_speech_accepted and _rewind_charges_elapsed >= 0.85 or _rewind_charges_speech_accepted):
+		_finish_rewind_charges_speech(false)
+
+
 func _on_rewind_lesson_completed() -> void:
-	AudioManager.stop_dialogue()
-	AudioManager.say(&"tutorial.rewind_charges", 3, true)
 	tutorial.learned[&"rewind"] = true
 	if lesson_demo != null:
 		lesson_demo.mark_learned(&"rewind")
@@ -1214,10 +1439,45 @@ func _on_rewind_lesson_completed() -> void:
 	lesson = &""
 	tutorial.dismiss()
 	_apply_time_capabilities()
+	if time_controller != null:
+		time_controller.set_capabilities(_slow_unlocked, true)
+		time_controller.begin_attempt()
+	_suppress_enter_release = true
+	var was_skipped := rewind_lesson != null and rewind_lesson.was_skipped
+	if was_skipped:
+		_awaiting_rewind_charges_speech = false
+		_rewind_charges_elapsed = 0.0
+		_rewind_charges_speech_accepted = false
+		if AudioManager != null:
+			AudioManager.stop_dialogue()
+		if _wave_has_post_lesson_pressure():
+			_start_pressure()
+		else:
+			_complete_teaching_wave("Emergency rewind ready · next exhibit group approaching.")
+		_update_run_hud()
+		return
+	if AudioManager != null:
+		AudioManager.stop_dialogue()
+		_rewind_charges_speech_accepted = AudioManager.say(&"tutorial.rewind_charges", 3, true)
+	else:
+		_rewind_charges_speech_accepted = false
+	_awaiting_rewind_charges_speech = true
+	_rewind_charges_elapsed = 0.0
+	if rewind_lesson != null and rewind_lesson.overlay != null:
+		rewind_lesson.overlay.visible = true
+		if is_instance_valid(rewind_lesson.title_label):
+			rewind_lesson.title_label.text = "EMERGENCY REWIND"
+		if is_instance_valid(rewind_lesson.action_label):
+			rewind_lesson.action_label.text = REWIND_CHARGES_LINE
+		if is_instance_valid(rewind_lesson.skip_button):
+			rewind_lesson.skip_button.text = "Skip"
+			rewind_lesson.skip_button.visible = true
+			rewind_lesson.skip_button.disabled = false
+			rewind_lesson.skip_button.focus_mode = Control.FOCUS_NONE
 	if _wave_has_post_lesson_pressure():
 		_start_pressure()
 	else:
-		_complete_teaching_wave("Emergency rewind ready · next exhibit group approaching.")
+		_complete_teaching_wave(REWIND_CHARGES_LINE)
 	_update_run_hud()
 
 
@@ -1251,7 +1511,7 @@ func _spawn_practice() -> void:
 		if lesson == &"cut":
 			kind = &"blue"
 		elif lesson == &"slow":
-			kind = &"blue" if 1 in acquired else &"yellow"
+			kind = &"yellow"
 		elif lesson in [&"shot", &"charge"]:
 			kind = &"yellow"
 		elif lesson == &"heat":
@@ -1676,7 +1936,7 @@ func _update_run_hud() -> void:
 		or (rewind_lesson != null and rewind_lesson.active)
 		or is_emergency_active()
 	)
-	var contextual := mode in [&"pickup", &"practice", &"exit"] or SceneManager.developer_tools
+	var contextual := mode in [&"pickup", &"practice", &"exit"] or (mode == &"recovery" and _awaiting_rewind_charges_speech) or SceneManager.developer_tools
 	run_hint.visible = contextual and not tutorial.visible and not demo_or_scrub and equipment.repairing == &"" and not run_hint.text.is_empty()
 
 

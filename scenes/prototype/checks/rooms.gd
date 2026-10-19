@@ -322,9 +322,8 @@ func run() -> void:
 			"Room %s NavigationRegion3D has baked multi-polygon NavigationMesh (polys=%d)" % [rid_str, nav_reg.navigation_mesh.get_polygon_count() if nav_reg.navigation_mesh != null else 0]
 		)
 
-		await physics_frame
-		await physics_frame
-		await physics_frame
+		for _nav_step in range(5):
+			await physics_frame
 
 		var map_rid: RID = nav_reg.get_navigation_map()
 		# Verify cover obstacle centers are carved out of the navigation mesh
@@ -363,9 +362,8 @@ func run() -> void:
 
 		# Close exit and verify navigation stops at closed north gate
 		room_env.set_exit_open(false)
-		await physics_frame
-		await physics_frame
-		await physics_frame
+		for _nav_step in range(5):
+			await physics_frame
 		var closed_exit_path: PackedVector3Array = room_env.find_navigation_path(
 			Vector3(def["player_spawn"].x, 0.0, def["player_spawn"].z),
 			Vector3(exit_pos.x, 0.0, exit_pos.z - 0.8)

@@ -155,7 +155,7 @@ const BURIAL_LAYOUT := preload("res://scenes/rooms/burial_layout.tres")
 
 static func definitions(difficulty: Variant = &"easy") -> Array[Dictionary]:
 	var spec: CampaignDifficulty = DifficultySpec.load_for(difficulty)
-	# Room 1: Public Galleries — Basic teaching (time_meter before shot, short familiar interlude) -> Basic combat level.
+	# Room 1: Public Galleries — Basic teaching (time_meter before shot, no ranged anywhere in Room 1) -> Two escalating small-fodder combat waves.
 	var gallery_geom: Dictionary = GALLERY_LAYOUT.to_geometry_dict()
 	var gallery_lessons: Array[StringName] = [&"time_meter", &"shot", &"charge", &"heat", &"repair", &"slow", &"cut"]
 	var gallery_waves: Array[Dictionary] = [
@@ -163,43 +163,47 @@ static func definitions(difficulty: Variant = &"easy") -> Array[Dictionary]:
 		_make_wave(&"shot", &"curve", [&"yellow"], 1, 0.35, {"pressure": false, "tier": &"early"}, spec),
 		_make_wave(&"charge", &"line", [&"yellow"], 1, 0.35, {"pressure": false, "max_live": 3, "tier": &"early"}, spec),
 		_make_wave(&"heat", &"cluster", [&"orange"], 1, 0.35, {"acquire": 3, "pressure": false, "tier": &"early"}, spec),
-		_make_wave(&"", &"curve", [&"yellow", &"orange"], 4, 1.0, {"pressure": true, "burst": 2, "max_live": 4, "interval": 3.4, "tier": &"early"}, spec),
+		_make_wave(&"", &"curve", [&"yellow", &"orange"], 5, 0.9, {"pressure": true, "burst": 3, "max_live": 4, "interval": 2.8, "refill_delay": 0.6, "tier": &"early", "hard_enemies": [&"yellow", &"orange"]}, spec),
 		_make_wave(&"repair", &"line", [], 0, 0.35, {"pressure": false}, spec),
-		_make_wave(&"slow", &"line", [&"ranged"], 1, 0.35, {"pressure": false, "tier": &"early"}, spec),
+		_make_wave(&"slow", &"line", [&"yellow"], 1, 0.35, {"pressure": false, "tier": &"early"}, spec),
 		_make_wave(&"cut", &"curve", [&"blue"], 1, 0.35, {"acquire": 1, "pressure": false, "tier": &"early"}, spec),
-		_make_wave(&"", &"mixed", [&"yellow", &"orange", &"blue", &"ranged"], 10, 1.6, {"pressure": true, "burst": 3, "max_live": 5, "interval": 3.6, "tier": &"early"}, spec),
+		_make_wave(&"", &"curve", [&"yellow", &"blue", &"orange"], 10, 1.0, {"pressure": true, "burst": 3, "max_live": 5, "interval": 2.9, "refill_delay": 0.6, "tier": &"early", "hard_enemies": [&"yellow", &"blue", &"orange"]}, spec),
+		_make_wave(&"", &"mixed", [&"blue", &"orange", &"yellow"], 14, 1.2, {"pressure": true, "burst": 4, "max_live": 6, "interval": 2.7, "refill_delay": 0.55, "tier": &"standard", "hard_enemies": [&"blue", &"orange", &"yellow"]}, spec),
 	]
 
-	# Room 2: Connected Collections — Advanced A teaching with real combat between lessons -> Mixed level -> Boss 1 (Sequence Warden).
+	# Room 2: Connected Collections — Advanced A teaching, deliberate ranged introduction, and two escalating small-fodder combat waves before Boss 1 (Sequence Warden).
 	var collections_geom: Dictionary = COLLECTIONS_LAYOUT.to_geometry_dict()
 	var collections_lessons: Array[StringName] = [&"opening", &"pair", &"rewind"]
 	var collections_waves: Array[Dictionary] = [
 		_make_wave(&"opening", &"mixed", [&"side_guard", &"front_guard"], 1, 0.35, {"pressure": false, "max_live": 2}, spec),
-		_make_wave(&"", &"curve", [&"side_guard", &"front_guard", &"yellow", &"orange", &"blue"], 6, 1.2, {"pressure": true, "burst": 3, "max_live": 4, "interval": 3.6, "tier": &"standard", "hard_enemies": [&"ranged"]}, spec),
+		_make_wave(&"", &"curve", [&"yellow", &"blue", &"orange", &"side_guard", &"front_guard", &"ranged"], 8, 1.0, {"pressure": true, "burst": 3, "max_live": 5, "interval": 3.0, "refill_delay": 0.6, "tier": &"standard", "hard_enemies": [&"ranged", &"blue"]}, spec),
 		_make_wave(&"pair", &"line", [&"pair"], 1, 0.35, {"pressure": false}, spec),
-		_make_wave(&"", &"mixed", [&"pair", &"side_guard", &"front_guard", &"ranged"], 6, 1.2, {"pressure": true, "burst": 3, "max_live": 4, "interval": 3.6, "tier": &"standard", "hard_enemies": [&"orange", &"blue"]}, spec),
+		_make_wave(&"", &"mixed", [&"yellow", &"blue", &"orange", &"pair", &"side_guard", &"ranged"], 9, 1.0, {"pressure": true, "burst": 3, "max_live": 5, "interval": 3.0, "refill_delay": 0.6, "tier": &"standard", "hard_enemies": [&"front_guard", &"ranged"]}, spec),
 		_make_wave(&"rewind", &"line", [&"yellow", &"blue", &"side_guard", &"ranged"], 1, 0.35, {"pressure": false, "max_live": 2}, spec),
-		_make_wave(&"", &"mixed", [&"side_guard", &"front_guard", &"pair", &"blue", &"orange", &"ranged"], 10, 1.8, {"pressure": true, "burst": 3, "max_live": 5, "interval": 3.8, "tier": &"standard", "hard_enemies": [&"yellow"]}, spec),
-		_make_wave(&"", &"line", [&"sequence_boss", &"pair", &"front_guard"], 3, 2.0, {"pressure": true, "boss": true, "burst": 1, "max_live": 3, "interval": 6.0, "hard_enemies": [&"side_guard", &"ranged"]}, spec),
+		_make_wave(&"", &"curve", [&"yellow", &"blue", &"orange", &"ranged"], 12, 1.0, {"pressure": true, "burst": 4, "max_live": 6, "interval": 2.8, "refill_delay": 0.55, "tier": &"standard", "hard_enemies": [&"yellow", &"blue", &"orange"]}, spec),
+		_make_wave(&"", &"mixed", [&"blue", &"yellow", &"orange", &"ranged", &"side_guard", &"front_guard", &"pair"], 15, 1.2, {"pressure": true, "burst": 4, "max_live": 6, "interval": 2.8, "refill_delay": 0.55, "tier": &"sustained", "hard_enemies": [&"yellow", &"blue", &"orange"]}, spec),
+		_make_wave(&"", &"line", [&"sequence_boss", &"pair", &"front_guard"], 3, 1.6, {"pressure": true, "boss": true, "burst": 1, "max_live": 3, "interval": 5.0, "hard_enemies": [&"side_guard", &"ranged"]}, spec),
 	]
 
-	# Room 3: Restoration Rooms — Advanced B teaching with real combat between lessons -> Mixed level -> Boss 2 (Loop Curator).
+	# Room 3: Restoration Rooms — Advanced B teaching with ordinary combat waves before Boss 2 (Loop Curator).
 	var restoration_geom: Dictionary = RESTORATION_LAYOUT.to_geometry_dict()
 	var restoration_lessons: Array[StringName] = [&"loop", &"zigzag"]
 	var restoration_waves: Array[Dictionary] = [
 		_make_wave(&"loop", &"curve", [&"loop"], 1, 0.35, {"pressure": false}, spec),
-		_make_wave(&"", &"mixed", [&"loop", &"pair", &"side_guard", &"blue", &"ranged"], 8, 1.4, {"pressure": true, "burst": 3, "max_live": 5, "interval": 3.8, "tier": &"standard", "hard_enemies": [&"front_guard", &"orange"]}, spec),
+		_make_wave(&"", &"mixed", [&"yellow", &"blue", &"orange", &"loop", &"pair", &"side_guard", &"ranged"], 9, 1.0, {"pressure": true, "burst": 3, "max_live": 5, "interval": 3.0, "refill_delay": 0.6, "tier": &"standard", "hard_enemies": [&"front_guard", &"orange"]}, spec),
 		_make_wave(&"zigzag", &"curve", [&"zigzag"], 1, 0.35, {"pressure": false}, spec),
-		_make_wave(&"", &"mixed", [&"loop", &"zigzag", &"pair", &"side_guard", &"ranged", &"blue"], 12, 2.0, {"pressure": true, "burst": 3, "max_live": 6, "interval": 4.0, "tier": &"sustained", "hard_enemies": [&"front_guard", &"orange", &"yellow"]}, spec),
-		_make_wave(&"", &"cluster", [&"loop_boss", &"loop", &"zigzag"], 3, 2.2, {"pressure": true, "boss": true, "burst": 1, "max_live": 3, "interval": 6.0, "hard_enemies": [&"pair", &"orange"]}, spec),
+		_make_wave(&"", &"curve", [&"yellow", &"blue", &"orange", &"ranged", &"loop", &"zigzag"], 11, 1.0, {"pressure": true, "burst": 4, "max_live": 6, "interval": 2.9, "refill_delay": 0.55, "tier": &"standard", "hard_enemies": [&"pair", &"side_guard"]}, spec),
+		_make_wave(&"", &"mixed", [&"blue", &"yellow", &"orange", &"loop", &"zigzag", &"pair", &"side_guard", &"ranged"], 14, 1.3, {"pressure": true, "burst": 4, "max_live": 6, "interval": 2.9, "refill_delay": 0.55, "tier": &"sustained", "hard_enemies": [&"front_guard", &"orange", &"yellow"]}, spec),
+		_make_wave(&"", &"cluster", [&"loop_boss", &"loop", &"zigzag"], 3, 1.8, {"pressure": true, "boss": true, "burst": 1, "max_live": 3, "interval": 5.0, "hard_enemies": [&"pair", &"orange"]}, spec),
 	]
 
-	# Room 4: Burial Exhibition — Final combat level -> Final Boss (The Burial Device).
+	# Room 4: Burial Exhibition — Escalating ordinary and full combat waves -> Final Boss (The Burial Device).
 	var burial_geom: Dictionary = BURIAL_LAYOUT.to_geometry_dict()
 	var burial_lessons: Array[StringName] = []
 	var burial_waves: Array[Dictionary] = [
-		_make_wave(&"", &"mixed", [&"pair", &"zigzag", &"loop", &"ranged", &"orange", &"front_guard", &"side_guard", &"blue"], 16, 2.2, {"pressure": true, "burst": 3, "max_live": 6, "interval": 4.0, "tier": &"sustained", "hard_enemies": [&"yellow"]}, spec),
-		_make_wave(&"", &"cluster", [&"final_boss", &"side_guard", &"ranged"], 3, 0.0, {"pressure": true, "boss": true, "burst": 1, "max_live": 3, "interval": 6.5, "hard_enemies": [&"pair", &"zigzag", &"loop"]}, spec),
+		_make_wave(&"", &"curve", [&"yellow", &"blue", &"orange", &"ranged", &"side_guard", &"front_guard", &"pair"], 12, 1.1, {"pressure": true, "burst": 4, "max_live": 6, "interval": 2.9, "refill_delay": 0.55, "tier": &"standard", "hard_enemies": [&"loop", &"zigzag"]}, spec),
+		_make_wave(&"", &"mixed", [&"pair", &"zigzag", &"loop", &"ranged", &"orange", &"front_guard", &"side_guard", &"blue", &"yellow"], 16, 1.5, {"pressure": true, "burst": 4, "max_live": 6, "interval": 2.9, "refill_delay": 0.55, "tier": &"sustained", "hard_enemies": [&"yellow", &"blue"]}, spec),
+		_make_wave(&"", &"cluster", [&"final_boss", &"side_guard", &"ranged"], 3, 0.0, {"pressure": true, "boss": true, "burst": 1, "max_live": 3, "interval": 5.5, "hard_enemies": [&"pair", &"zigzag", &"loop"]}, spec),
 	]
 
 	var rooms: Array[Dictionary] = [

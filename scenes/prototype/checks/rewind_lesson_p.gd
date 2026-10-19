@@ -256,7 +256,74 @@ func _run() -> void:
 	expect(arena.time_controller.charges_remaining == 3 and is_equal_approx(arena.time_controller.meter, arena.time_controller.capacity) and not audio_mgr.instruction_busy(), "Skipping during SCRUB restores 3 charges, full meter, and stops speech")
 	arena.director.clear()
 
-	# 14. Scene exit while scrubbing cancels cleanly and restores valid non-frozen state.
+	# 14. Round T: ~1s wheel steps by timestamp (5-6 notches -> 5-6s), coarse timeline ticks, and Enter confirmation isolation.
+	lesson.reset_for_new_run()
+	cb["count"] = 0
+	var handled_during_confirm := [false]
+	var handled_during_completed := [false]
+	var confirm_probe := func(_age: float, _state: Dictionary) -> void:
+		handled_during_confirm[0] = root.is_input_handled()
+	var completed_probe := func() -> void:
+		handled_during_completed[0] = root.is_input_handled()
+		audio_mgr.say(&"tutorial.rewind_charges", 3, true)
+	er.confirmed.connect(confirm_probe)
+	lesson.completed.connect(completed_probe)
+
+	expect(lesson.begin(arena), "Lesson begins for Round T coarse wheel & Enter isolation check")
+	lesson.step(2.0)
+	expect(lesson.is_scrubbing and er.active, "Lesson enters SCRUB for Round T check")
+	var start_safe_age := er.choice_age(er.selected_index)
+	expect(er.selected_index >= lesson.min_safe_index and start_safe_age > 0.5, "Tutorial default selection starts at a safe pre-ambush timestamp (%.2fs)" % start_safe_age)
+	arena._input(_mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
+	var after_one_down_age := er.choice_age(er.selected_index)
+	expect(after_one_down_age >= start_safe_age + 0.75, "One wheel-down notch in tutorial advances ~1 world second older (%.2fs -> %.2fs)" % [start_safe_age, after_one_down_age])
+	arena._input(_mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	arena._input(_mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	expect(er.selected_index >= lesson.min_safe_index, "Coarse wheel-up notches in tutorial never select unsafe moments below min_safe_index")
+
+	# Confirm with Enter through Viewport.push_input to verify synchronous handled state + echo/release isolation.
+	var enter_press := _key_event(KEY_ENTER, true)
+	root.push_input(enter_press)
+	expect(handled_during_confirm[0] and handled_during_completed[0], "Enter press is marked handled BEFORE synchronous confirmed and completed signals fire")
+	expect(bool(arena.get("_suppress_enter_until_release")), "Enter confirmation arms _suppress_enter_until_release on Arena")
+
+	# Auto-repeat (echo) and release of Enter must be consumed and must keep tutorial.rewind_charges playing.
+	var enter_echo := _key_event(KEY_ENTER, true)
+	enter_echo.echo = true
+	root.push_input(enter_echo)
+	expect(root.is_input_handled() and bool(arena.get("_suppress_enter_until_release")), "Held Enter auto-repeat (echo) is consumed after confirmation")
+	var enter_release := _key_event(KEY_ENTER, false)
+	root.push_input(enter_release)
+	expect(root.is_input_handled() and not bool(arena.get("_suppress_enter_until_release")), "Enter release is consumed and clears _suppress_enter_until_release")
+	expect(String(audio_mgr.get("current_event")) == "tutorial.rewind_charges", "Enter echo/release after confirmation never dismisses or cuts off tutorial.rewind_charges")
+	er.confirmed.disconnect(confirm_probe)
+	lesson.completed.disconnect(completed_probe)
+	audio_mgr.stop_dialogue()
+	arena.director.clear()
+
+	# Verify normal 18s / 12Hz history with 5-6 wheel notches reaching ~5-6 world seconds and coarse timeline ticks.
+	arena.reset_arena()
+	arena.history.clear()
+	for i in range(216):
+		arena.history.record(1.0 / 12.0, arena.capture_state)
+	expect(arena.history.snapshot_count == 216 and is_equal_approx(arena.time_controller.settings.scrub_step_seconds, 1.0), "18s / 12Hz (216 snapshots) history fidelity and 1.0s scrub_step_seconds are preserved")
+	arena.time_controller.apply_hit(1000.0)
+	expect(er.active and er.choice_count == 217 and er.selected_index == 0, "Full 18s emergency rewind opens at NOW with 217 choices")
+	var ticks: PackedFloat32Array = ev.timeline_tick_fractions()
+	expect(ticks.size() >= 10 and ticks.size() <= 19, "Timeline uses coarse readable ticks (%d ticks for 18s buffer, never 36+)" % ticks.size())
+	for _n in range(5):
+		arena._input(_mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
+	var age_5 := er.choice_age(er.selected_index)
+	expect(absf(age_5 - 5.0) <= 0.12, "5 mouse-wheel-down notches reach ~5 world seconds (%.2fs)" % age_5)
+	arena._input(_mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
+	var age_6 := er.choice_age(er.selected_index)
+	expect(absf(age_6 - 6.0) <= 0.12, "6 mouse-wheel-down notches reach ~6 world seconds (%.2fs)" % age_6)
+	arena._input(_mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	var age_back_5 := er.choice_age(er.selected_index)
+	expect(absf(age_back_5 - 5.0) <= 0.12, "1 mouse-wheel-up notch from 6s steps back to ~5 world seconds (%.2fs)" % age_back_5)
+	er.confirm()
+
+	# 15. Scene exit while scrubbing cancels cleanly and restores valid non-frozen state.
 	lesson.reset_for_new_run()
 	expect(lesson.begin(arena), "Lesson begins for scene-exit cancellation check")
 	lesson.step(2.0)

@@ -20,6 +20,8 @@ signal ended
 
 ## Age reported for the checkpoint choice, which has no recorded age.
 const CHECKPOINT_AGE := -1.0
+## Default world seconds stepped per mouse-wheel / arrow notch.
+const DEFAULT_SCRUB_STEP_SECONDS := 1.0
 
 @export var time_controller: TimeController:
 	set = set_time_controller
@@ -28,6 +30,10 @@ const CHECKPOINT_AGE := -1.0
 var history: ReplayHistory
 ## Returns the current world snapshot; used when an emergency starts automatically.
 var capture_present: Callable
+## Optional per-session override for world seconds stepped per notch (0 = use TimeSettings).
+var scrub_step_seconds: float = 0.0
+## Optional lower bound on selectable choice index (0 = NOW allowed; >0 clamps tutorial scrub to safe moments).
+var min_selectable_index: int = 0
 
 var active: bool:
 	get: return _active
@@ -42,6 +48,8 @@ var _selected := 0
 var _choice_count := 0
 var _present: Dictionary = {}
 var _uses_checkpoint := false
+var _scrub_target_age := 0.0
+var _applying_step_target := false
 
 
 func _ready() -> void:
@@ -63,6 +71,22 @@ func set_time_controller(value: TimeController) -> void:
 		time_controller.attempt_started.connect(abandon)
 
 
+## World seconds stepped per wheel notch (~1.0s by default).
+func step_seconds() -> float:
+	if scrub_step_seconds > 0.0:
+		return scrub_step_seconds
+	if is_instance_valid(time_controller) and time_controller.settings != null:
+		return maxf(0.1, time_controller.settings.scrub_step_seconds)
+	return DEFAULT_SCRUB_STEP_SECONDS
+
+
+## Oldest recorded age in world seconds for the current session (0.0 when empty or checkpoint-only).
+func max_choice_age() -> float:
+	if not _active or _choice_count <= 1 or _uses_checkpoint:
+		return 0.0
+	return maxf(0.0, choice_age(_choice_count - 1))
+
+
 ## Opens the choice list with `present` as NOW. Returns false if already active.
 func begin(present: Dictionary) -> bool:
 	if _active:
@@ -73,20 +97,69 @@ func begin(present: Dictionary) -> bool:
 	_choice_count = 1 + recorded + (1 if _uses_checkpoint else 0)
 	_active = true
 	_selected = 0
+	min_selectable_index = 0
+	_scrub_target_age = 0.0
+	_applying_step_target = false
 	started.emit(_choice_count)
 	selection_changed.emit(0, 0.0, _present)
 	return true
 
 
-## Moves the selection; positive steps go further into the past (wheel down).
+## Moves the selection by `steps` wheel notches (~1 world second per notch by
+## recorded timestamp); positive steps go further into the past (wheel down),
+## negative steps go toward NOW (wheel up).
 func step_selection(steps: int) -> void:
-	select(_selected + steps)
+	if not _active or steps == 0 or _choice_count <= 1:
+		return
+	var lo := clampi(min_selectable_index, 0, _choice_count - 1)
+	var hi := _choice_count - 1
+	if _uses_checkpoint or history == null or history.snapshot_count <= 0:
+		select(clampi(_selected + steps, lo, hi))
+		return
+	var max_age := maxf(0.0, choice_age(hi))
+	if max_age <= 0.0001:
+		select(clampi(_selected + steps, lo, hi))
+		return
+	var min_age := maxf(0.0, choice_age(lo))
+	var step_sec := step_seconds()
+	var base_age := clampf(_scrub_target_age, min_age, max_age)
+	var target_age := clampf(base_age + float(steps) * step_sec, min_age, max_age)
+	var best_index := lo
+	if steps < 0 and target_age <= min_age + 0.0001:
+		best_index = lo
+	elif steps > 0 and target_age >= max_age - 0.0001:
+		best_index = hi
+	else:
+		var best_diff := INF
+		var start_i := maxi(1, lo) if target_age > 0.0001 else lo
+		for i in range(start_i, _choice_count):
+			var age_i := maxf(0.0, choice_age(i))
+			var diff := absf(age_i - target_age)
+			if diff < best_diff - 0.000001:
+				best_diff = diff
+				best_index = i
+	if steps > 0 and _selected < hi and best_index <= _selected:
+		best_index = _selected + 1
+		target_age = maxf(target_age, maxf(0.0, choice_age(best_index)))
+	elif steps < 0 and _selected > lo and best_index >= _selected:
+		best_index = _selected - 1
+		target_age = minf(target_age, maxf(0.0, choice_age(best_index)))
+	best_index = clampi(best_index, lo, hi)
+	if best_index == lo or best_index == hi:
+		target_age = maxf(0.0, choice_age(best_index))
+	_applying_step_target = true
+	select(best_index)
+	_applying_step_target = false
+	_scrub_target_age = target_age
 
 
 func select(index: int) -> void:
 	if not _active:
 		return
-	var clamped := clampi(index, 0, _choice_count - 1)
+	var lo := clampi(min_selectable_index, 0, maxi(0, _choice_count - 1))
+	var clamped := clampi(index, lo, _choice_count - 1)
+	if not _applying_step_target:
+		_scrub_target_age = maxf(0.0, choice_age(clamped))
 	if clamped == _selected:
 		return
 	_selected = clamped
@@ -159,3 +232,6 @@ func _close() -> void:
 	_choice_count = 0
 	_present = {}
 	_uses_checkpoint = false
+	min_selectable_index = 0
+	_scrub_target_age = 0.0
+	_applying_step_target = false

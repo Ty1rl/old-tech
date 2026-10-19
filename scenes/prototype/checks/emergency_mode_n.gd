@@ -165,12 +165,12 @@ func mini_arena_loop(gs: Node, t: TimeController, e: EmergencyRewind) -> void:
 		player.step(dt, player.global_position + Vector3.RIGHT)
 		history.record(dt * t.world_scale, capture)
 	expect(history.snapshot_count == samples and near_x(player, x_before_hit), "Frozen world neither moves nor records")
-	e.step_selection(12) # twelve moments at 12 Hz ~ one second back
+	e.step_selection(1) # one wheel notch ~ one world second back by timestamp
 	var chosen_index := e.selected_index
 	var age := e.choice_age(e.selected_index)
 	var chosen: Dictionary = e.choice_state(e.selected_index)
 	e.confirm()
-	expect(absf(age - 0.95) < 0.1, "Twelve wheel steps choose about one second back (%.2f)" % age)
+	expect(absf(age - 0.95) < 0.12, "One wheel step chooses about one world second back (%.2f)" % age)
 	expect(player.position.is_equal_approx(chosen.player.position) and player.global_position.x < x_before_hit - 3.0, "Confirm restores the player to the chosen moment")
 	expect(gs.state == gs.State.PLAYING and player.can_act and t.meter >= t.settings.recovery_floor - 0.001, "Play resumes with the recovery floor")
 	expect(history.snapshot_count == samples - chosen_index + 1, "History newer than the chosen moment is discarded")

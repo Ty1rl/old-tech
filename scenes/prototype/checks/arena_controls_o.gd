@@ -63,6 +63,11 @@ func run() -> void:
 	await check_capabilities(arena, t)
 	await check_emergency_flow(arena, t)
 	await check_scene_exit(arena, t)
+	var audio_mgr: Node = root.get_node_or_null("AudioManager")
+	if audio_mgr != null:
+		audio_mgr.stop_dialogue()
+		audio_mgr.set_music_context(&"intro")
+	call_group(&"world_audio", &"reset_state")
 	# Native compressed playback releases on the audio mixer thread.
 	await create_timer(.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))
@@ -174,16 +179,14 @@ func check_emergency_flow(arena: Node, t: TimeController) -> void:
 	arena.player.take_damage(10000.0)
 	await frames(1)
 	expect(arena.emergency_rewind.active and t.charges_remaining == 2, "Depletion opens recovery with one charge spent")
-	for i in range(3):
+	for i in range(2):
 		mouse(MOUSE_BUTTON_WHEEL_DOWN, true)
-	expect(arena.emergency_rewind.selected_index == 3, "Each wheel-down notch selects one older moment")
+	var two_notch_idx: int = arena.emergency_rewind.selected_index
+	expect(two_notch_idx > 1 and arena.emergency_rewind.choice_age(two_notch_idx) > 1.6, "Each wheel-down notch selects ~1 world second older")
 	mouse(MOUSE_BUTTON_WHEEL_UP, true)
-	expect(arena.emergency_rewind.selected_index == 2, "Wheel up selects one newer moment")
-	var guard := 0
-	while arena.emergency_rewind.choice_age(arena.emergency_rewind.selected_index) < 0.8 and guard < 40:
-		mouse(MOUSE_BUTTON_WHEEL_DOWN, true)
-		guard += 1
-	expect(arena.emergency_rewind.choice_age(arena.emergency_rewind.selected_index) < 1.3, "Chosen moment is between the wear and the repair")
+	expect(arena.emergency_rewind.selected_index < two_notch_idx and arena.emergency_rewind.selected_index >= 1, "Wheel up selects ~1 world second newer")
+	var chosen_age: float = arena.emergency_rewind.choice_age(arena.emergency_rewind.selected_index)
+	expect(chosen_age >= 0.75 and chosen_age < 1.3, "Chosen moment (~1s back) is between the wear and the repair (%.2fs)" % chosen_age)
 	mouse(MOUSE_BUTTON_LEFT, true)
 	mouse(MOUSE_BUTTON_LEFT, false)
 	await frames(1)

@@ -111,6 +111,7 @@ var _finishing_completion := false
 var _completed_count := 0
 var _last_history_clock := -1.0
 var _suppress_next_lmb_up := false
+var _suppress_enter_until_release := false
 
 
 func _ready() -> void:
@@ -166,6 +167,16 @@ func _input(event: InputEvent) -> void:
 		if is_inside_tree() and get_viewport() != null:
 			get_viewport().set_input_as_handled()
 		return
+	if _suppress_enter_until_release and event is InputEventKey:
+		var enter_code: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if enter_code == KEY_ENTER or enter_code == KEY_KP_ENTER:
+			if not event.pressed:
+				_suppress_enter_until_release = false
+				if is_instance_valid(_arena) and "_suppress_enter_until_release" in _arena:
+					_arena.set("_suppress_enter_until_release", false)
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
 	if not active or _is_interrupted_by_pause_or_modal():
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -174,6 +185,24 @@ func _input(event: InputEvent) -> void:
 			if is_inside_tree() and get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			return
+	if event is InputEventKey:
+		var key_code: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if key_code == KEY_ENTER or key_code == KEY_KP_ENTER:
+			if phase == Phase.STAGING:
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+			elif phase == Phase.SCRUB:
+				if is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				if event.pressed and not event.echo:
+					_suppress_enter_until_release = true
+					if is_instance_valid(_arena) and "_suppress_enter_until_release" in _arena:
+						_arena.set("_suppress_enter_until_release", true)
+					var er: EmergencyRewind = _arena.get("emergency_rewind") as EmergencyRewind if is_instance_valid(_arena) else null
+					if is_instance_valid(er) and er.active:
+						er.confirm()
+				return
 
 
 func _exit_tree() -> void:
@@ -193,6 +222,7 @@ func reset_for_new_run() -> void:
 	was_skipped = false
 	_completed_count = 0
 	_suppress_next_lmb_up = false
+	_suppress_enter_until_release = false
 	phase = Phase.IDLE
 	_sync_banner()
 
@@ -214,6 +244,8 @@ func begin(arena: Node) -> bool:
 	_arena = arena
 	was_skipped = false
 	_suppress_next_lmb_up = false
+	if not Input.is_key_pressed(KEY_ENTER) and not Input.is_key_pressed(KEY_KP_ENTER):
+		_suppress_enter_until_release = false
 	_staging_elapsed = 0.0
 	_shot_fired = false
 	_ambush_spawned = false
@@ -267,11 +299,14 @@ func begin(arena: Node) -> bool:
 		if is_instance_valid(player) and player.is_inside_tree():
 			player.set_visual_tool(preferred_slot)
 
-	# Keep the lesson scrub range short and focused while preserving the 18s/12Hz settings.
+	# Keep the lesson scrub range short and focused while preserving the 18s/12Hz settings,
+	# and pre-seed ~2s of safe baseline snapshots so ~1s wheel steps have multiple safe notches.
 	hist.clear()
 	_safe_fallback_state = _capture_clean_snapshot()
 	hist.seed_checkpoint(_safe_fallback_state)
 	hist.push(_safe_fallback_state)
+	for _s in range(24):
+		hist.record(hist.sample_interval + 0.0005, func() -> Dictionary: return _safe_fallback_state.duplicate(true))
 	_safe_snapshot_count = hist.snapshot_count
 	_last_history_clock = hist.clock
 
@@ -606,10 +641,10 @@ func _ensure_minimum_safe_history() -> void:
 		return
 	if _safe_fallback_state.is_empty():
 		_safe_fallback_state = _capture_clean_snapshot()
-	while hist.snapshot_count < 5:
+	while hist.snapshot_count < 24:
 		hist.record(hist.sample_interval + 0.001, func() -> Dictionary: return _safe_fallback_state.duplicate(true))
-	if _safe_snapshot_count < 3:
-		_safe_snapshot_count = maxi(3, hist.snapshot_count - 2)
+	if _safe_snapshot_count < 16:
+		_safe_snapshot_count = maxi(16, hist.snapshot_count - 2)
 
 
 func _trigger_forced_depletion() -> void:
@@ -641,6 +676,7 @@ func _trigger_forced_depletion() -> void:
 	# Select the default safe earlier moment AFTER EmergencyRewind.begin() has
 	# finished emitting both `started` and `selection_changed(0, 0.0, _present)`.
 	if is_instance_valid(er) and er.active:
+		er.min_selectable_index = _min_safe_index
 		_adjusting_selection = true
 		er.select(_default_safe_index)
 		_adjusting_selection = false
@@ -664,6 +700,9 @@ func _on_emergency_started(choice_count: int) -> void:
 	var max_idx: int = maxi(1, choice_count - 1)
 	_min_safe_index = clampi(1 + unsafe_newest, 1, maxi(1, max_idx - 1))
 	_default_safe_index = clampi(_min_safe_index + 1, _min_safe_index, maxi(_min_safe_index, max_idx - 1))
+	var er: EmergencyRewind = _arena.get("emergency_rewind") as EmergencyRewind
+	if is_instance_valid(er):
+		er.min_selectable_index = _min_safe_index
 	_sync_banner()
 
 
@@ -684,6 +723,8 @@ func _on_emergency_confirmed(_age_seconds: float, _state: Dictionary) -> void:
 	if phase != Phase.SCRUB:
 		return
 	_confirmed_in_lesson = true
+	if is_instance_valid(_arena) and "_suppress_enter_until_release" in _arena and bool(_arena.get("_suppress_enter_until_release")):
+		_suppress_enter_until_release = true
 
 
 func _on_emergency_ended() -> void:

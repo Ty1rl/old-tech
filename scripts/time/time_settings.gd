@@ -38,6 +38,8 @@ extends Resource
 @export_range(0.0, 1000.0, 1.0) var recovery_floor: float = 40.0
 ## Real seconds after a recovery during which hits cost nothing.
 @export_range(0.0, 10.0, 0.05) var recovery_grace_seconds: float = 1.5
+## World seconds stepped per mouse-wheel or arrow notch during emergency rewind.
+@export_range(0.1, 5.0, 0.1) var scrub_step_seconds: float = 1.0
 
 @export_group("Replay history")
 ## Bounded window of recorded snapshots, in WORLD seconds (slowed time records

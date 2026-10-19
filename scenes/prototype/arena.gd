@@ -47,6 +47,7 @@ var _space_action_held := false
 var _camera_rest_position := Vector3.ZERO
 var _repair_held := false
 var _suppress_next_lmb_release := false
+var _suppress_enter_until_release := false
 var _last_emergency_age := 0.0
 var time_feedback := ""
 var time_cue: CanvasLayer
@@ -385,37 +386,56 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 
+	if _suppress_enter_until_release and event is InputEventKey:
+		var enter_code: int = event.physical_keycode if event.physical_keycode else event.keycode
+		if enter_code == KEY_ENTER or enter_code == KEY_KP_ENTER:
+			if not event.pressed:
+				_suppress_enter_until_release = false
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
+
 	if emergency_rewind != null and emergency_rewind.active and not GameState.is_paused() and not _has_non_repair_popup():
 		if event is InputEventMouseButton and event.pressed:
 			if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
 				emergency_rewind.step_selection(1)
-				get_viewport().set_input_as_handled()
 				return
 			elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
 				emergency_rewind.step_selection(-1)
-				get_viewport().set_input_as_handled()
 				return
 			elif event.button_index == MOUSE_BUTTON_LEFT:
 				_suppress_next_lmb_release = true
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
 				emergency_rewind.confirm()
-				get_viewport().set_input_as_handled()
 				return
-		elif event is InputEventKey and event.pressed and not event.echo:
+		elif event is InputEventKey:
 			var key_code: int = event.physical_keycode if event.physical_keycode else event.keycode
 			if key_code == KEY_ENTER or key_code == KEY_KP_ENTER:
-				emergency_rewind.confirm()
-				get_viewport().set_input_as_handled()
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				if event.pressed and not event.echo:
+					_suppress_enter_until_release = true
+					emergency_rewind.confirm()
 				return
-			elif key_code == KEY_UP or key_code == KEY_LEFT:
-				emergency_rewind.step_selection(1)
-				get_viewport().set_input_as_handled()
-				return
-			elif key_code == KEY_DOWN or key_code == KEY_RIGHT:
-				emergency_rewind.step_selection(-1)
-				get_viewport().set_input_as_handled()
-				return
+			elif event.pressed and not event.echo:
+				if key_code == KEY_UP or key_code == KEY_LEFT:
+					if get_viewport() != null:
+						get_viewport().set_input_as_handled()
+					emergency_rewind.step_selection(1)
+					return
+				elif key_code == KEY_DOWN or key_code == KEY_RIGHT:
+					if get_viewport() != null:
+						get_viewport().set_input_as_handled()
+					emergency_rewind.step_selection(-1)
+					return
 		if event is InputEventMouse:
-			get_viewport().set_input_as_handled()
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
 			return
 
 	if event is InputEventKey:
@@ -543,6 +563,7 @@ func reset_arena() -> void:
 	feedback.reset_state()
 	_repair_held = false
 	_suppress_next_lmb_release = false
+	_suppress_enter_until_release = false
 	_last_emergency_age = 0.0
 	_space_action_held = Input.is_action_pressed(SLOW_ACTION)
 	if time_controller != null:
@@ -626,6 +647,8 @@ func _on_emergency_started(_choice_count: int) -> void:
 	_close_repair()
 	weapons.cancel_input()
 	player.reset_input()
+	if not Input.is_key_pressed(KEY_ENTER) and not Input.is_key_pressed(KEY_KP_ENTER):
+		_suppress_enter_until_release = false
 	feedback.clear_effects()
 	feedback.step(0.0, 0.0, 0.0, true, 0.0, weapons, equipment)
 	feedback.cue(&"emergency_start", player.global_position)

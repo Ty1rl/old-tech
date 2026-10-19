@@ -93,20 +93,70 @@ func _refresh() -> void:
 	timeline.queue_redraw()
 
 
+const MAX_TIMELINE_TICKS := 19
+
+
+func timeline_tick_fractions() -> PackedFloat32Array:
+	var fractions := PackedFloat32Array()
+	if not is_instance_valid(emergency_rewind) or not emergency_rewind.active:
+		return fractions
+	var count := emergency_rewind.choice_count
+	if count <= 1:
+		fractions.append(0.0)
+		fractions.append(1.0)
+		return fractions
+	var max_age := emergency_rewind.max_choice_age()
+	if max_age > 0.001:
+		var step_sec := maxf(0.25, emergency_rewind.step_seconds())
+		var raw_steps := ceili(max_age / step_sec)
+		if raw_steps <= MAX_TIMELINE_TICKS - 1:
+			fractions.append(0.0)
+			var whole_steps := int(floor(max_age / step_sec))
+			for s in range(1, whole_steps + 1):
+				var frac := clampf((float(s) * step_sec) / max_age, 0.0, 1.0)
+				if frac > 0.03 and frac < 0.97:
+					fractions.append(frac)
+			fractions.append(1.0)
+			return fractions
+		var capped_steps := MAX_TIMELINE_TICKS - 1
+		for s in range(capped_steps + 1):
+			fractions.append(float(s) / float(capped_steps))
+		return fractions
+	var coarse_steps := clampi(count - 1, 1, 12)
+	for s in range(coarse_steps + 1):
+		fractions.append(float(s) / float(coarse_steps))
+	return fractions
+
+
+func timeline_cursor_fraction() -> float:
+	if not is_instance_valid(emergency_rewind) or not emergency_rewind.active:
+		return 0.0
+	var count := emergency_rewind.choice_count
+	if count <= 1 or emergency_rewind.selected_index <= 0:
+		return 0.0
+	if emergency_rewind.selected_index >= count - 1:
+		return 1.0
+	var max_age := emergency_rewind.max_choice_age()
+	if max_age > 0.001:
+		return clampf(maxf(0.0, emergency_rewind.choice_age(emergency_rewind.selected_index)) / max_age, 0.0, 1.0)
+	return clampf(float(emergency_rewind.selected_index) / maxf(1.0, float(count - 1)), 0.0, 1.0)
+
+
 func _draw_timeline() -> void:
 	if not is_instance_valid(emergency_rewind) or not emergency_rewind.active:
 		return
 	var color := ToolStyle.CLOCK
 	var left := Vector2(8.0, timeline.size.y * 0.5)
 	var right := Vector2(maxf(left.x + 1.0, timeline.size.x - 8.0), left.y)
-	timeline.draw_line(left, right, Color(color, 0.32), 2.0, true)
-	var count := emergency_rewind.choice_count
-	# Bound rendering work for the 240-snapshot buffer; selection remains exact.
-	var stride := maxi(1, ceili(float(count) / 36.0))
-	for i in range(0, count, stride):
-		var at := right.lerp(left, float(i) / maxf(1.0, float(count - 1)))
-		timeline.draw_line(at + Vector2(0.0, -2.5), at + Vector2(0.0, 2.5), Color(color, 0.42), 1.0, true)
-	var cursor := right.lerp(left, float(emergency_rewind.selected_index) / maxf(1.0, float(count - 1)))
+	timeline.draw_line(left, right, Color(color, 0.36), 2.0, true)
+	var ticks := timeline_tick_fractions()
+	for idx in range(ticks.size()):
+		var at := right.lerp(left, ticks[idx])
+		var is_major := idx == 0 or idx == ticks.size() - 1 or (idx % 5 == 0)
+		var half_h := 3.5 if is_major else 2.2
+		var alpha := 0.68 if is_major else 0.46
+		timeline.draw_line(at + Vector2(0.0, -half_h), at + Vector2(0.0, half_h), Color(color, alpha), 1.5 if is_major else 1.15, true)
+	var cursor := right.lerp(left, timeline_cursor_fraction())
 	timeline.draw_circle(cursor, 4.5, color)
 	timeline.draw_circle(cursor, 2.0, UI.PAPER)
 

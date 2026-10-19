@@ -234,16 +234,19 @@ func check_full_window_choices() -> void:
 	t.apply_hit(500.0)
 	expect(e.choice_count == 217, "Full buffer offers NOW + 216 recorded moments")
 	e.step_selection(1)
-	expect(near(e.choice_age(1), 0.0, 0.001), "One notch is the newest recorded moment")
+	expect(near(e.choice_age(e.selected_index), 1.0, 0.1), "One notch steps ~1 world second back by timestamp (%.2f)" % e.choice_age(e.selected_index))
+	e.step_selection(4)
+	expect(near(e.choice_age(e.selected_index), 5.0, 0.1), "Five notches reach ~5 world seconds back (%.2f)" % e.choice_age(e.selected_index))
 	e.step_selection(1000)
 	expect(e.selected_index == 216 and e.choice_age(216) > 17.8, "Oldest choice is ~18 world seconds back (%.2f)" % e.choice_age(216))
 	e.step_selection(-1)
-	var chosen := e.choice_state(e.selected_index)
+	var chosen_idx := e.selected_index
+	var chosen := e.choice_state(chosen_idx)
 	var confirmed: Array[Dictionary] = []
 	e.confirmed.connect(func(_a: float, s: Dictionary) -> void: confirmed.append(s))
 	e.confirm()
 	expect(confirmed.size() == 1 and confirmed[0] == chosen, "Confirm restores exactly the previewed snapshot")
-	expect(h.snapshot_count == 2, "History newer than the chosen moment is discarded")
+	expect(h.snapshot_count == 216 - chosen_idx + 1, "History newer than the chosen moment is discarded")
 	core.free()
 
 

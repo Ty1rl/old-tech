@@ -138,6 +138,11 @@ func run() -> void:
 	view.step(ScrubView.DURATION * 0.5)
 	view.finish()
 	expect(not view.active, "Freed arena nodes can be stepped and finished safely")
+	var audio_mgr: Node = root.get_node_or_null("AudioManager")
+	if audio_mgr != null:
+		audio_mgr.stop_dialogue()
+		audio_mgr.set_music_context(&"intro")
+	call_group(&"world_audio", &"reset_state")
 	# Let native compressed playback leave the mixer before process teardown.
 	await create_timer(.3).timeout
 	print(JSON.stringify({"status": "passed" if failures.is_empty() else "failed", "checks": checks, "failures": failures}))

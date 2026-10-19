@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bake original museum-machine SFX; no runtime sample synthesis or source audio.
+"""Bake the softer Round P museum SFX; no runtime sample synthesis or source audio.
 Requires numpy for offline authoring only. Run from any directory. Deterministic.
 """
 from pathlib import Path
@@ -22,6 +22,16 @@ def modal(t, root, decay=18):
 def noise(t, seed, smooth=6):
     x=np.random.default_rng(seed).uniform(-1,1,len(t))
     return np.convolve(x, np.ones(smooth)/smooth, mode='same')
+
+def body(t, freq, decay=25):
+    # Short harmonic body instead of the old long, inharmonic metal partials.
+    return tone(t,freq,decay,.8)+tone(t,freq*2,decay*1.8,.12)
+
+def air_loop(t, seed, cutoff=1100):
+    # A single baked periodic airflow texture, not a permanent runtime synth.
+    x=np.random.default_rng(seed).uniform(-1,1,len(t))
+    frequencies=np.fft.rfftfreq(len(t),1/RATE)
+    return np.fft.irfft(np.fft.rfft(x)*np.exp(-(frequencies/cutoff)**4),n=len(t))
 
 def bake(name, duration, make, looping=False):
     t=np.arange(round(duration*RATE))/RATE
@@ -47,17 +57,17 @@ def cue(name, asset=None, gain=-12, priority=2, responsive=False, cooldown=.08, 
 
 def build():
     BANK.mkdir(parents=True,exist_ok=True)
-    # Metal/plucked spring, shutter/capacitor, and low air/wood share resonances.
-    bake('ring_launch',.29,lambda t: modal(t,290,13)+.6*noise(t,1)*np.exp(-30*t))
-    bake('ring_return',.24,lambda t: modal(t,420,20)+tone(t,210,28,.6))
-    bake('cable_cut',.24,lambda t: modal(t,870,22)+noise(t,2,2)*np.exp(-48*t)*.8)
-    bake('hit',.18,lambda t: modal(t,180,35)+noise(t,3)*np.exp(-45*t))
-    bake('flash_fire',.22,lambda t: noise(t,4,2)*np.exp(-32*t)+tone(t,92,19,.8)+tone(t,740,50,.3))
-    bake('flash_charged',.48,lambda t: noise(t,5,3)*np.exp(-16*t)+tone(t,53,9,.8)+modal(t,320,18)*.4)
-    bake('flash_ready',.26,lambda t: tone(t,660,12)+tone(np.maximum(0,t-.07),990,14)* (t>=.07))
-    bake('pierce_hit',.31,lambda t: noise(t,6,2)*np.exp(-36*t)+modal(t,1220,20)*.7)
-    bake('cone_pulse',.24,lambda t: noise(t,7,9)*np.exp(-18*t)+tone(t,62,17,.9))
-    bake('vent',.38,lambda t: noise(t,8,4)*np.exp(-10*t)+modal(t,130,25)*.6)
+    # Short pew/body/air gestures; no bright ringing tail on repeated actions.
+    bake('ring_launch',.18,lambda t: body(t,230,30)+.5*noise(t,1,15)*np.exp(-26*t))
+    bake('ring_return',.14,lambda t: body(t,310,38)+tone(t,155,40,.25))
+    bake('cable_cut',.12,lambda t: body(t,640,55)*.3+noise(t,2,10)*np.exp(-48*t))
+    bake('hit',.11,lambda t: body(t,145,48)+noise(t,3,20)*np.exp(-50*t)*.25)
+    bake('flash_fire',.14,lambda t: np.sin(TAU*(105*t+360*(1-np.exp(-28*t))/28))*np.exp(-25*t)+noise(t,4,16)*np.exp(-40*t)*.15)
+    bake('flash_charged',.28,lambda t: body(t,68,18)*.85+np.sin(TAU*(130*t+430*(1-np.exp(-20*t))/20))*np.exp(-17*t)*.65+noise(t,5,15)*np.exp(-22*t)*.2)
+    bake('flash_ready',.18,lambda t: tone(t,550,25,.7)+tone(np.maximum(0,t-.05),740,30,.35)*(t>=.05))
+    bake('pierce_hit',.16,lambda t: noise(t,6,10)*np.exp(-35*t)+body(t,520,45)*.35)
+    bake('cone_pulse',.16,lambda t: noise(t,7,12)*np.exp(-23*t)+tone(t,72,25,.14))
+    bake('vent',.24,lambda t: noise(t,8,14)*np.exp(-14*t)+body(t,115,32)*.1)
     bake('core_break',.58,lambda t: modal(t,86,9)+noise(t,9)*np.exp(-12*t)+tone(t,43,8,.5))
     bake('repair_step',.24,lambda t: modal(t,520,27)+tone(np.maximum(0,t-.06),780,26,.5)*(t>=.06))
     bake('repair_full',.62,lambda t: sum(tone(np.maximum(0,t-d),f,12,a)*(t>=d) for d,f,a in [(0,440,.7),(.10,660,.6),(.20,880,.5)]))
@@ -67,36 +77,39 @@ def build():
     bake('ui_click',.09,lambda t: modal(t,610,70)+noise(t,12,2)*np.exp(-85*t)*.4)
     bake('scrub_older',1,lambda t: .45*np.sin(TAU*96*t)+.24*np.sin(TAU*192*t+.8*np.sin(TAU*5*t))+.10*np.sin(TAU*1370*t)*(np.sin(TAU*12*t)**8),True)
     bake('scrub_newer',1,lambda t: .4*np.sin(TAU*144*t)+.21*np.sin(TAU*288*t+.6*np.sin(TAU*7*t))+.08*np.sin(TAU*2050*t)*(np.sin(TAU*9*t)**8),True)
-    bake('ring_loop',1,lambda t: (np.sin(TAU*144*t)*.45+np.sin(TAU*432*t)*.2)*(1+.15*np.cos(TAU*12*t)),True)
-    bake('charge_loop',1,lambda t: np.sin(TAU*176*t)*.35+np.sin(TAU*352*t+.7*np.sin(TAU*8*t))*.24,True)
-    bake('cone_loop',1,lambda t: sum(np.sin(TAU*f*t+i)*a for i,(f,a) in enumerate([(64,.4),(71,.24),(173,.15),(397,.12),(1031,.06)])),True)
+    bake('ring_loop',1,lambda t: (np.sin(TAU*144*t)*.4+np.sin(TAU*288*t)*.06)*(1+.06*np.cos(TAU*3*t))+air_loop(t,31,700)*.08,True)
+    bake('charge_loop',1,lambda t: np.sin(TAU*176*t)*.4+np.sin(TAU*352*t)*.055,True)
+    bake('cone_loop',1,lambda t: air_loop(t,32,1100)+np.sin(TAU*66*t)*.025,True)
+    # Time motor and signed scrub content deliberately retain their identities.
     bake('clock_loop',1,lambda t: np.sin(TAU*64*t)*.30+np.sin(TAU*192*t)*.1+np.sin(TAU*1152*t)*(.5+.5*np.cos(TAU*8*t))**18*.35,True)
-    families={'cable':(180,1),'glass':(690,2),'steam':(76,3),'shield':(120,4),'relay':(340,5),'pack':(235,6),'boss':(55,7)}
+    families={'cable':(180,1),'glass':(360,2),'steam':(76,3),'shield':(120,4),'relay':(240,5),'pack':(235,6),'boss':(55,7)}
     for family,(freq,seed) in families.items():
-        for event,duration,decay,mul in [('warning',.55,6,1.5),('attack',.27,19,1),('hurt',.19,30,1.9),('death',.65,7,.55)]:
+        for event,duration,decay,mul in [('warning',.34,14,1.5),('attack',.16,30,1),('hurt',.10,48,1.5),('death',.36,16,.65)]:
             def make(t,f=freq*mul,d=decay,s=seed,event=event,family=family):
-                x=modal(t,f,d)
-                if family=='steam': x=.4*x+noise(t,s,8)*np.exp(-d*t)
-                elif family=='glass': x+=tone(t,f*3.17,d*.8,.3)
-                elif family=='relay': x*=.6+.4*np.cos(TAU*18*t)
-                elif family=='boss': x+=tone(t,f*.5,d*.7,.8)
-                if event=='warning': x+=modal(np.maximum(0,t-.14),f*1.12,d)*(t>=.14)*.7
+                x=body(t,f,d)
+                if family=='steam': x=.1*x+noise(t,s,16)*np.exp(-d*t)
+                elif family=='glass': x+=tone(t,f*2,d*2,.10)
+                elif family=='relay': x*=.85+.15*np.cos(TAU*4*t)
+                elif family=='pack': x+=noise(t,s,24)*np.exp(-d*t)*.2
+                elif family=='boss': x+=tone(t,f*.5,d,.5)
+                if event=='warning': x+=body(np.maximum(0,t-.10),f*1.12,d*1.6)*(t>=.10)*.30
                 return x
             bake(f'{family}_{event}',duration,make)
     visual={'ring_launch':'ring_launch','ring_return':'ring_return','flash_fire':'flash_fire','flash_charged':'flash_fire','cone_pulse':'cone_pulse','hit':'hit','cable_cut':'cable_cut','vent':'vent','core_break':'core_break','repair_step':'repair_step','player_hurt':'player_hurt'}
     for name in ['ring_launch','ring_return','flash_fire','flash_charged','flash_ready','pierce_hit','cone_pulse','hit','cable_cut','vent','core_break','repair_step','repair_full','room_open','player_hurt','recovery_confirm','ui_click']:
         responsive=name in ['repair_step','repair_full','recovery_confirm','ui_click']
         priority=5 if name in ['player_hurt','recovery_confirm','repair_full'] else (4 if name in ['core_break','room_open','cable_cut','flash_charged'] else 2)
-        cue(name,gain=-10 if priority>=4 else -14,priority=priority,responsive=responsive,cooldown=.08 if responsive else .10,effect=visual.get(name,''))
-    cue('flash_pierce','flash_charged',gain=-10,priority=4,effect='flash_fire')
-    cue('hostile_warning','relay_warning',priority=4,cooldown=.28,effect='hostile_warning')
-    cue('hostile_fire','relay_attack',priority=3,effect='hostile_fire')
+        gain={'ring_launch':-15,'ring_return':-18,'cable_cut':-14,'hit':-19,'flash_fire':-16,'flash_charged':-12,'flash_ready':-16,'pierce_hit':-15,'cone_pulse':-18,'vent':-17}.get(name,-10 if priority>=4 else -14)
+        cue(name,gain=gain,priority=priority,responsive=responsive,cooldown=.08 if responsive else .10,effect=visual.get(name,''))
+    cue('flash_pierce','flash_charged',gain=-12,priority=4,effect='flash_fire')
+    cue('hostile_warning','relay_warning',gain=-15,priority=4,cooldown=.65,effect='hostile_warning')
+    cue('hostile_fire','relay_attack',gain=-18,priority=3,effect='hostile_fire')
     for name in ['ring_loop','charge_loop','cone_loop','clock_loop','scrub_older','scrub_newer']:
-        cue(name,gain=-24 if name in ['clock_loop','scrub_older','scrub_newer'] else -28,responsive=name in ['clock_loop','scrub_older','scrub_newer'])
+        cue(name,gain=-24 if name in ['clock_loop','scrub_older','scrub_newer'] else -32,responsive=name in ['clock_loop','scrub_older','scrub_newer'])
     kinds={'target':'relay','swarmer':'pack','brute':'shield','skirmisher':'relay','warden':'shield','ranged':'relay','blue':'cable','yellow':'glass','orange':'steam','side_guard':'shield','front_guard':'shield','loop':'cable','zigzag':'cable','pair':'glass','loop_boss':'boss','sequence_boss':'boss','final_boss':'boss'}
     for i,(kind,family) in enumerate(kinds.items()):
         for event in ['warning','attack','hurt','death']:
-            cue(f'enemy_{kind}_{event}',f'{family}_{event}',gain=-13,priority=4 if event=='warning' else 2,cooldown=.4 if event=='warning' else .18,pitch=round(.82+i*.025,3))
+            cue(f'enemy_{kind}_{event}',f'{family}_{event}',gain={'warning':-15,'attack':-18,'hurt':-20,'death':-18}[event],priority=4 if event=='warning' else 2,cooldown={'warning':.70,'attack':.24,'hurt':.32,'death':.35}[event],pitch=round(.82+i*.025,3))
     write_library()
     return kinds
 
@@ -107,7 +120,7 @@ def write_library():
     for i,c in enumerate(CUES):
         resources += ['',f'[sub_resource type="Resource" id="Cue{i}"]','script = ExtResource("2")',f'id = &"{c["id"]}"',f'stream = ExtResource("s{assets.index(c["asset"])}")',f'volume_db = {float(c["gain"])}',f'priority = {c["priority"]}',f'responsive = {str(c["responsive"]).lower()}',f'cooldown = {c["cooldown"]}',f'pitch = {float(c["pitch"])}',f'looping = {str(ASSETS[c["asset"]]["loop"]).lower()}',f'effect = &"{c["effect"]}"']
     resources += ['','[resource]','script = ExtResource("1")','cues = Array[ExtResource("2")](['+', '.join(f'SubResource("Cue{i}")' for i in range(len(CUES)))+'])','']
-    resources += ['music = ExtResource("music")','music_volume_db = -22.0','']
+    resources += ['music = ExtResource("music")','music_volume_db = -26.0','']
     (BANK/'palette.tres').write_text('\n'.join(resources))
 
 def reel(out):

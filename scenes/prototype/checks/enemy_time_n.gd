@@ -268,6 +268,36 @@ func run() -> void:
 	warden._step_part_attack(1, player, 0)
 	expect(director.capture_state() == stopped, "direct committed strike also respects emergency freeze")
 
+	# Four-arm units threaten their whole footprint, not just a tiny front patch.
+	fresh()
+	var loop: CombatPatternEnemy = director.spawn(&"loop", Vector3.ZERO)
+	player.position = Vector3(0, 0, 3.5) # Behind its initial facing, alongside an arm.
+	loop._step_part_attack(.02, player, 3.5)
+	expect(loop.attack_phase == &"windup" and player.hits.is_empty(), "Loop warns before its full-span attack")
+	var warning: TorusMesh = loop.pattern_visual.warning.get_child(0).mesh
+	expect(is_equal_approx(warning.outer_radius, 4.15), "Loop warning covers the actual circular strike")
+	loop._step_part_attack(loop.attack_timer + .01, player, 3.5)
+	expect(loop.attack_phase == &"commit" and player.hits.is_empty(), "Loop commit preserves a dodge window")
+	loop._step_part_attack(loop.attack_timer + .01, player, 3.5)
+	expect(player.hits == [loop.contact_damage] and controller.meter < controller.capacity, "Loop arm strike damages the time reserve behind the unit")
+	loop._step_part_attack(.02, player, 3.5)
+	expect(player.hits.size() == 1, "Loop recovery does not repeat damage every frame")
+	fresh()
+	loop = director.spawn(&"loop", Vector3.ZERO)
+	loop.attack_phase = &"commit"
+	loop.attack_timer = .01
+	player.position = Vector3(0, 0, 4.3)
+	loop._step_part_attack(.02, player, 4.3)
+	expect(player.hits.is_empty(), "Moving outside the loop warning avoids the strike")
+	loop.attack_phase = &"commit"
+	loop.attack_timer = .01
+	player.position = Vector3(0, 0, 3.5)
+	loop._step_part_attack(0, player, 3.5)
+	expect(player.hits.is_empty() and loop.attack_phase == &"commit", "Frozen time cannot deliver a loop strike")
+	loop.contact_damage = 0.0 # Campaign marks safe tutorial specimens this way.
+	loop._step_part_attack(.02, player, 3.5)
+	expect(controller.meter == controller.capacity, "Safe loop practice remains harmless")
+
 	# Pattern strike and pressure consumers use the same active-player contract.
 	fresh(5)
 	var boss: Node3D = director.spawn(&"loop_boss", Vector3.ZERO)

@@ -85,7 +85,7 @@ func has_cuttable_part() -> bool:
 
 func movement_radius() -> float:
 	# Wide links/supports keep their physical room while turning or being shoved;
-	# body contact damage still uses the smaller configured body radius.
+	# Loop strikes reach across the arms; other patterns use body contact.
 	return PatternVisual.silhouette_radius(kind) if handles(kind) else radius
 
 func attack_radius(_tool: StringName) -> float:
@@ -368,7 +368,7 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 		return
 	if health <= 0 or world_delta <= 0 or not is_instance_valid(player) or not player.can_act: return
 	var mode := active_pattern()
-	var reach := 4.1 if is_boss() and mode == &"loop" else radius + PLAYER_CONTACT_RADIUS + 0.2
+	var reach := float(Tuning.PATTERNS.loop_reach) if mode == &"loop" else radius + PLAYER_CONTACT_RADIUS + 0.2
 	var trigger := 9.5 if is_boss() and mode in [&"pair", &"zigzag", &"core"] else reach
 	if attack_phase == &"approach":
 		if distance <= trigger:
@@ -401,7 +401,7 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 			_emit_enemy_event(&"attack", position)
 		if (not is_boss() or mode == &"loop") and distance <= reach and player.can_act:
 			var toward: Vector3 = player.position - position
-			if is_boss() or toward.normalized().dot(facing) > .2:
+			if is_boss() or mode == &"loop" or toward.normalized().dot(facing) > .2:
 				var controller: TimeController = player.time_controller
 				var before := controller.meter
 				player.take_damage(contact_damage)

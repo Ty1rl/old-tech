@@ -1,6 +1,7 @@
 class_name CombatPatternVisual
 extends Node3D
 # All interactive geometry is built from these same local query anchors.
+const Tuning = preload("res://scenes/prototype/tuning.gd")
 const Style = preload("res://scenes/prototype/tool_style.gd")
 const BLUE := Style.RING
 const ORANGE := Style.CONE
@@ -326,11 +327,11 @@ func build(mode: StringName, is_boss: bool, identity: StringName = &"", stage :=
 	add_child(countdown)
 	warning = Node3D.new()
 	add_child(warning)
-	if boss and mode == &"loop":
+	if mode == &"loop":
 		var ring := MeshInstance3D.new()
 		var mesh := TorusMesh.new()
-		mesh.inner_radius = 3.95
-		mesh.outer_radius = 4.15
+		mesh.inner_radius = float(Tuning.PATTERNS.loop_reach) - .15
+		mesh.outer_radius = float(Tuning.PATTERNS.loop_reach) + .05
 		ring.mesh = mesh
 		ring.position.y = .035
 		ring.material_override = mat(Color("ef6659"), true)

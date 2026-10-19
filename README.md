@@ -31,5 +31,6 @@ The existing **Web** preset remains available without that hosting requirement.
 
 Web Threaded streams speech, effects and music through Godot's mixer and limiter,
 with a 50 ms requested audio buffer. The single-threaded Web preset prepares
-browser-native speech and effects on the loading screen and keeps a larger music
-buffer. Desktop playback is unchanged.
+browser-native speech and effects on the loading screen. Previously packaged
+single-threaded fallback builds retain their larger buffer. Desktop playback is
+unchanged.

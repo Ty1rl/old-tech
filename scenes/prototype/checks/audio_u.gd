@@ -44,7 +44,7 @@ func run() -> void:
 	expect((await manager.prepare_web_samples()).is_empty(), "Native loading does not decode or register browser audio samples")
 
 	manager.configure_playback_types(true)
-	expect(manager.web_sample_voice and manager.voice.playback_type == AudioServer.PLAYBACK_TYPE_SAMPLE and manager.music.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Web voice uses browser samples while music streams on the mixer thread in threaded exports")
+	expect(manager.web_sample_voice and manager.voice.playback_type == AudioServer.PLAYBACK_TYPE_SAMPLE and manager.music.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Legacy Web policy uses sampled voice and streamed music")
 	manager.configure_playback_types(false)
 	expect(not manager.web_sample_voice and manager.voice.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Restoring native policy returns Voice to Stream")
 

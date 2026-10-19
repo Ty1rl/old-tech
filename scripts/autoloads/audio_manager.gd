@@ -51,7 +51,7 @@ func configure_playback_types(for_web: bool = OS.has_feature("web")) -> void:
 	if is_instance_valid(voice):
 		voice.playback_type = AudioServer.PLAYBACK_TYPE_SAMPLE if for_web else AudioServer.PLAYBACK_TYPE_STREAM
 	if is_instance_valid(music):
-		music.playback_type = AudioServer.PLAYBACK_TYPE_SAMPLE if for_web else AudioServer.PLAYBACK_TYPE_STREAM
+		music.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 
 
 func prepare_web_samples() -> Dictionary:
@@ -59,8 +59,7 @@ func prepare_web_samples() -> Dictionary:
 		return {}
 	# Web Sample playback decodes a whole clip on its first play. Do that on
 	# the loading screen, one clip per frame, instead of during a shot or hit.
-	# Music is prepared only when its context starts. The four fixed tracks total
-	# about 99 MiB decoded at 48 kHz; never include them in this eager warmup.
+	# Keep music streamed to avoid retaining large decoded browser buffers.
 	var streams: Array[AudioStream] = []
 	for variants: Array in library.clips.values():
 		for stream: AudioStream in variants:

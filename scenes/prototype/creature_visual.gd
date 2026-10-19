@@ -205,25 +205,15 @@ func sync(cut: bool, exposed: bool, broken: bool, _heat_ratio: float) -> void:
 	if shield_rim: shield_rim.visible = not exposed
 	for companion in split_companion: companion.visible = not cut
 	if is_instance_valid(instruction):
-		if exposed:
-			instruction.text = "Click yellow" if kind == &"yellow" else "Charge yellow"
-			instruction.modulate = Style.BEAM
-		elif kind == &"orange":
-			instruction.text = "Heat orange"
-			instruction.modulate = Style.CONE
-		elif kind == &"blue":
-			instruction.text = "Cut blue"
-			instruction.modulate = Style.RING
-		else:
-			instruction.text = "Cut blue / Heat orange"
-			instruction.modulate = Style.REPAIR_GUIDE
-		instruction.visible = instruction_visible and not broken
+		instruction.text = ""
+		instruction.visible = false
 
 
-func set_instruction_visible(value: bool) -> void:
-	instruction_visible = value
+func set_instruction_visible(_value: bool) -> void:
+	instruction_visible = false
 	if is_instance_valid(instruction):
-		instruction.visible = value and not instruction.text.is_empty()
+		instruction.text = ""
+		instruction.visible = false
 
 
 func _resolve_attack_phase(motion_state: Variant) -> StringName:

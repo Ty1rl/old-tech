@@ -79,6 +79,7 @@ var base_body_color: Color = Color("5a7696")
 var hp_bar_fill: MeshInstance3D
 var hp_bar_material: StandardMaterial3D
 var feedback_label: Label3D
+var instruction_visible: bool = false
 
 
 func _ready() -> void:
@@ -95,6 +96,21 @@ func combat_id() -> int:
 	return rewind_id
 
 
+func _configured_max_health(p_kind: StringName, cfg: Dictionary) -> float:
+	if p_kind == &"ranged":
+		return minf(float(cfg.get("health", 100.0)), float(Tuning.BEAM.min_damage))
+	return float(cfg.get("health", 100.0))
+
+
+func set_instruction_visible(_value: bool) -> void:
+	instruction_visible = false
+	if is_instance_valid(part_visual) and part_visual.has_method("set_instruction_visible"):
+		part_visual.set_instruction_visible(false)
+	if is_instance_valid(feedback_label):
+		feedback_label.text = ""
+		feedback_label.visible = false
+
+
 func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> void:
 	_ensure_navigation()
 	if cover == null:
@@ -105,7 +121,7 @@ func configure(p_kind: StringName, spawn_pos: Vector3, orbit_seed: int = 0) -> v
 		rewind_id = 1
 	kind = p_kind if Tuning.ENEMIES.has(String(p_kind)) else &"target"
 	var cfg: Dictionary = Tuning.ENEMIES[String(kind)]
-	max_health = float(cfg.get("health", 100.0))
+	max_health = _configured_max_health(kind, cfg)
 	health = max_health
 	move_speed = float(cfg.get("speed", 0.0))
 	radius = float(cfg.get("radius", 0.7))
@@ -184,8 +200,8 @@ func apply_control(direction: Vector3, impulse: float, stagger_seconds: float) -
 		if is_instance_valid(body_material):
 			body_material.albedo_color = Color("8de8ff")
 		if is_instance_valid(feedback_label):
-			feedback_label.text = "STAGGER" if eff_stagger > 0.0 else "SHOVE"
-			feedback_label.modulate = Color("8de8ff")
+			feedback_label.text = ""
+			feedback_label.visible = false
 
 
 func capture_state() -> Dictionary:
@@ -234,7 +250,7 @@ func restore_state(data: Dictionary) -> void:
 	var kind_changed := (kind != target_kind) or not is_instance_valid(visual_root)
 	kind = target_kind
 	var cfg: Dictionary = Tuning.ENEMIES[String(kind)]
-	max_health = float(cfg.get("health", 100.0))
+	max_health = _configured_max_health(kind, cfg)
 	move_speed = float(cfg.get("speed", 0.0))
 	radius = float(cfg.get("radius", 0.7))
 	contact_damage = float(cfg.get("damage", 0.0))
@@ -271,7 +287,7 @@ func restore_state(data: Dictionary) -> void:
 		"armored": bool(data.get("last_hit_armored", false)),
 		"killed": bool(data.get("last_hit_killed", false)),
 	}
-	var default_fb_text := "STAGGER" if stagger_timer > 0.0 else ""
+	var default_fb_text := ""
 	var default_fb_col := Color("8de8ff") if stagger_timer > 0.0 else Color.WHITE
 	_sync_derived_visuals(
 		String(data.get("feedback_text", default_fb_text)),
@@ -279,7 +295,7 @@ func restore_state(data: Dictionary) -> void:
 	)
 
 
-func _sync_derived_visuals(fb_text: String, fb_color: Color) -> void:
+func _sync_derived_visuals(fb_text: String, _fb_color: Color) -> void:
 	_update_visual_facing()
 	_update_health_visuals()
 	_update_warden_visuals()
@@ -297,11 +313,8 @@ func _sync_derived_visuals(fb_text: String, fb_color: Color) -> void:
 		else:
 			body_material.albedo_color = base_body_color
 	if is_instance_valid(feedback_label):
-		if feedback_timer > 0.0:
-			feedback_label.text = fb_text
-			feedback_label.modulate = fb_color
-		else:
-			feedback_label.text = ""
+		feedback_label.text = ""
+		feedback_label.visible = false
 
 
 func _make_mat(color: Color, unshaded: bool = false) -> StandardMaterial3D:
@@ -465,6 +478,7 @@ func _build_visuals() -> void:
 	feedback_label.font_size = 28
 	feedback_label.outline_size = 6
 	feedback_label.text = ""
+	feedback_label.visible = false
 	status_root.add_child(feedback_label)
 
 
@@ -578,7 +592,8 @@ func receive_attack(tool: StringName, amount: float, contact_world: Vector3, con
 	if mechanism() != &"":
 		return _variant_attack(tool, amount, contact_world, context)
 	if kind != &"warden":
-		var ordinary := hit(amount, contact_world)
+		var effective_amount := maxf(amount, health) if (kind == &"ranged" and tool == &"beam") else amount
+		var ordinary := hit(effective_amount, contact_world)
 		ordinary["connected"] = true
 		ordinary["cue"] = &""
 		return ordinary
@@ -674,8 +689,9 @@ func _variant_attack(tool: StringName, amount: float, contact: Vector3, context:
 	result["connected"] = true
 	result["cue"] = cue
 	result["armored"] = not decisive
-	if not decisive and is_instance_valid(feedback_label) and damage > 0:
-		feedback_label.text = "-%.0f BODY" % result.dealt
+	if is_instance_valid(feedback_label):
+		feedback_label.text = ""
+		feedback_label.visible = false
 	_update_warden_visuals()
 	return result
 
@@ -703,12 +719,12 @@ func hit(amount: float, contact_world: Vector3) -> Dictionary:
 		_emit_enemy_event(&"hurt", contact_world, clampf(dealt / 80.0, .2, 1.0))
 
 	flash_timer = 0.15
-	feedback_timer = 0.65
+	feedback_timer = 0.0
 	if is_instance_valid(body_material):
 		body_material.albedo_color = Color("a8d0f0") if armored else Color.WHITE
 	if is_instance_valid(feedback_label):
-		feedback_label.text = "-%.0f ARMOR" % dealt if armored else "-%.0f" % dealt
-		feedback_label.modulate = Color("99c8f2") if armored else Color("ffe885")
+		feedback_label.text = ""
+		feedback_label.visible = false
 	_update_health_visuals()
 
 	last_hit_result = {"dealt": dealt, "armored": armored, "killed": killed}
@@ -983,9 +999,10 @@ func _step_ranged(dt: float, player: Node3D, distance: float) -> void:
 			attack_phase = &"windup"
 			attack_timer = RANGED_WINDUP
 			_emit_enemy_event(&"warning", position)
-			feedback_label.text = "MOVE ASIDE"
-			feedback_label.modulate = Color("ffad95")
-			feedback_timer = RANGED_WINDUP
+			if is_instance_valid(feedback_label):
+				feedback_label.text = ""
+				feedback_label.visible = false
+			feedback_timer = 0.0
 	else:
 		attack_timer = maxf(0, attack_timer - dt)
 		if attack_timer <= 0:
@@ -1045,8 +1062,10 @@ func _step_part_attack(world_delta: float, player: Node3D, distance: float) -> v
 		if distance <= reach:
 			attack_phase = &"windup"
 			attack_timer = float(Tuning.MATCHUPS.attack_windup)
-			feedback_label.text = "!"
-			feedback_timer = attack_timer
+			if is_instance_valid(feedback_label):
+				feedback_label.text = ""
+				feedback_label.visible = false
+			feedback_timer = 0.0
 			_emit_enemy_event(&"warning", position)
 		return
 	attack_timer = maxf(0.0, attack_timer - world_delta)

@@ -144,6 +144,34 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Sandbox"
 
+[node name="DebugLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+layout_mode = 2
+text = "Current room"
+
+[node name="ActionPicker" type="OptionButton" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ApplyAction" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run action"
+
+[node name="ReadoutLabel" type="Label" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+layout_mode = 2
+text = "Diagnostic readout"
+
+[node name="ReadoutPicker" type="OptionButton" parent="Margin/Center/Panel/Stack/Scroll/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+item_count = 3
+popup/item_0/text = "Full"
+popup/item_0/id = 0
+popup/item_1/text = "Dim"
+popup/item_1/id = 1
+popup/item_2/text = "Hidden"
+popup/item_2/id = 2
+
 [node name="BackButton" type="Button" parent="Margin/Center/Panel/Stack/Scroll/Body"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -158,3 +186,6 @@ text = "Back"
 [connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/SandboxButton" to="." method="_on_sandbox"]
 
 [connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/BackButton" to="." method="_on_back"]
+
+[connection signal="pressed" from="Margin/Center/Panel/Stack/Scroll/Body/ApplyAction" to="." method="_on_apply_action"]
+[connection signal="item_selected" from="Margin/Center/Panel/Stack/Scroll/Body/ReadoutPicker" to="." method="_on_readout"]

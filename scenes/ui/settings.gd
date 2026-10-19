@@ -4,7 +4,6 @@ extends "res://scenes/ui/menu_layout.gd"
 @onready var tutorial: CheckButton = %Tutorial
 @onready var volume: HSlider = %Volume
 @onready var voice_volume: HSlider = %VoiceVolume
-@onready var hud: OptionButton = %Hud
 @onready var developer_button: Button = %DeveloperButton
 var widgets: Dictionary = {}
 
@@ -18,8 +17,7 @@ func _ready() -> void:
 	volume.set_value_no_signal(float(prefs.volume) * 100)
 	voice_volume.set_value_no_signal(float(prefs.voice_volume) * 100)
 	voice_volume.value_changed.connect(_on_voice_volume)
-	hud.select(prefs.hud)
-	widgets = {"sound": sound, "fullscreen": fullscreen, "tutorial": tutorial, "volume": volume, "hud": hud}
+	widgets = {"sound": sound, "fullscreen": fullscreen, "tutorial": tutorial, "volume": volume}
 	UI.focus_on_open(self, sound)
 
 func _on_sound(value: bool) -> void: GameState.set_setting("sound", value)
@@ -27,7 +25,6 @@ func _on_fullscreen(value: bool) -> void: GameState.set_setting("fullscreen", va
 func _on_tutorial(value: bool) -> void: GameState.set_setting("tutorial", value)
 func _on_volume(value: float) -> void: GameState.set_setting("volume", value / 100)
 func _on_voice_volume(value: float) -> void: GameState.set_setting("voice_volume", value / 100)
-func _on_hud(value: int) -> void: GameState.set_setting("hud", value)
 func _on_back() -> void: SceneManager.close_popup(&"Settings")
 
 func _on_developer() -> void:

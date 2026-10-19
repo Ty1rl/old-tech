@@ -1544,6 +1544,7 @@ func _step_pressure(world_delta: float) -> void:
 	if _pending > 0 and _spawn_timer <= 0.0:
 		var space := maxi(0, int(wave.max_live) - director.enemies.size())
 		var count := mini(_pending, mini(int(wave.burst), space))
+		if is_boss_wave and _spawned == 0: count = mini(count, 1)
 		if count > 0:
 			var wave_enemies: Array = wave.get("enemies", [])
 			var kinds: Array = []
@@ -1690,7 +1691,8 @@ func _update_run_hud() -> void:
 		or (rewind_lesson != null and rewind_lesson.active)
 		or is_emergency_active()
 	)
-	run_hint.visible = not tutorial.visible and not demo_or_scrub and equipment.repairing == &"" and not run_hint.text.is_empty()
+	var contextual := mode in [&"pickup", &"practice", &"exit"] or SceneManager.developer_tools
+	run_hint.visible = contextual and not tutorial.visible and not demo_or_scrub and equipment.repairing == &"" and not run_hint.text.is_empty()
 
 
 func capture_state() -> Dictionary:

@@ -4,6 +4,15 @@ const PatternEnemy = preload("res://scenes/prototype/pattern_enemy.gd")
 @onready var room_picker: OptionButton = %RoomPicker
 @onready var encounter_picker: OptionButton = %EncounterPicker
 @onready var phase_picker: OptionButton = %PhasePicker
+@onready var action_picker: OptionButton = %ActionPicker
+@onready var apply_action: Button = %ApplyAction
+@onready var readout_picker: OptionButton = %ReadoutPicker
+const ACTIONS := {
+    "Spawn target": &"target", "Spawn blue": &"blue", "Spawn yellow": &"yellow",
+    "Spawn orange": &"orange", "Spawn small pack": &"pack", "Spawn guard": &"side_guard",
+    "Show front guard": &"front_guard", "Start sandbox encounter": &"encounter",
+    "Clear enemies": &"clear", "Retry room / reset sandbox": &"reset",
+}
 
 func _ready() -> void:
 	if not SceneManager.developer_tools:
@@ -12,6 +21,11 @@ func _ready() -> void:
 	super._ready()
 	for room: Dictionary in Rooms.definitions(): room_picker.add_item(room.title)
 	_update_encounters()
+	for label: String in ACTIONS: action_picker.add_item(label)
+	var scene := SceneManager.get_current_scene()
+	apply_action.disabled = scene == null or not scene.has_method("run_developer_action")
+	readout_picker.select(int(GameState.preferences().hud))
+	UI.wire_focus(self)
 	UI.focus_on_open(self, room_picker)
 
 func _update_encounters() -> void:
@@ -49,3 +63,14 @@ func _on_encounter(_index: int) -> void: _update_phases()
 func _on_sandbox() -> void:
 	if SceneManager.developer_tools: SceneManager.start_play(true)
 func _on_back() -> void: SceneManager.close_popup(&"Developer")
+
+func _on_apply_action() -> void:
+	if not SceneManager.developer_tools: return
+	var scene := SceneManager.get_current_scene()
+	if scene == null or not scene.has_method("run_developer_action"): return
+	var action: StringName = ACTIONS[action_picker.get_item_text(action_picker.selected)]
+	SceneManager.close_popup(&"Developer")
+	scene.run_developer_action(action)
+
+func _on_readout(value: int) -> void:
+	if SceneManager.developer_tools: GameState.set_setting("hud", value)

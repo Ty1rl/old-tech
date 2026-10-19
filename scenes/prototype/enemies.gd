@@ -240,10 +240,22 @@ func spawn_formation(formation: StringName, kinds: Array, player: Node3D, seed: 
 	var result: Array[Node3D] = []
 	if not is_instance_valid(player) or kinds.is_empty(): return result
 	if cover == null: cover = CoverScript.new()
-	var slots: Array = flow.layout(formation, kinds, player.position, cover, seed, enemies)
+	# Ranged arrivals take independent, seeded flanks instead of joining the
+	# melee clump. Reuse the same bounded cover/spacing/escape-lane placement.
+	var melee: Array = []
+	var ranged_count := 0
+	for kind in kinds.slice(0, Flow.MAX_MEMBERS):
+		if kind == &"ranged": ranged_count += 1
+		else: melee.append(kind)
+	var slots: Array = flow.layout(formation, melee, player.position, cover, seed, enemies)
 	for slot: Dictionary in slots:
 		var enemy := spawn(StringName(slot.kind), slot.position)
 		if enemy != null: result.append(enemy)
+	for index in range(ranged_count):
+		var ranged_slots: Array = flow.layout(&"mixed", [&"ranged"], player.position, cover, seed + 17 + index * 31, enemies)
+		if not ranged_slots.is_empty():
+			var enemy := spawn(&"ranged", ranged_slots[0].position)
+			if enemy != null: result.append(enemy)
 	flow.add(formation, result)
 	_draw_arrivals()
 	return result

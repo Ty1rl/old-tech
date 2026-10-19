@@ -65,6 +65,7 @@ static func formation_ids() -> Array[StringName]:
 	return FORMATION_IDS.duplicate()
 
 
+const PatternEnemy = preload("res://scenes/prototype/pattern_enemy.gd")
 const DifficultySpec = preload("res://scenes/prototype/settings/campaign_difficulty.gd")
 
 
@@ -115,10 +116,15 @@ static func _apply_difficulty(wave: Dictionary, spec: CampaignDifficulty) -> Dic
 				enemies.append(extra_kind)
 	wave["enemies"] = enemies
 	if bool(wave.get("boss", false)):
-		wave["burst"] = 1
+		# One boss, then mostly small escorts. Campaign spawns the boss alone first.
+		var boss_kind := StringName(enemies[0])
+		var boss_enemies: Array[StringName] = [boss_kind]
+		boss_enemies.append_array(PatternEnemy.recommended_boss_escorts(boss_kind, spec.id == &"hard"))
+		wave["enemies"] = boss_enemies
+		wave["burst"] = 2
 		wave["count"] = 1 + maxi(spec.boss_escort_count, 0)
-		wave["max_live"] = clampi(1 + maxi(spec.boss_escort_count, 0), 1, 4)
-		wave["interval"] = maxf(2.0, float(wave.get("interval", 6.5)) * spec.interval_scale)
+		wave["max_live"] = clampi(1 + maxi(spec.boss_escort_count, 0), 1, 8 if spec.id == &"hard" else 6)
+		wave["interval"] = maxf(2.0, 3.6 * spec.interval_scale)
 		wave["refill_delay"] = maxf(0.2, float(wave.get("refill_delay", 0.75)) * spec.refill_delay_scale)
 		if float(wave.get("recovery", 0.0)) > 0.0:
 			wave["recovery"] = maxf(0.25, float(wave.get("recovery", 0.0)) * spec.recovery_scale)

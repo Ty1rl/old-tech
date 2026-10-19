@@ -14,5 +14,5 @@ sustained_max_live = 6
 interval_scale = 1.0
 refill_delay_scale = 1.0
 recovery_scale = 1.0
-boss_escort_count = 2
+boss_escort_count = 6
 mixed_reinforcements = false

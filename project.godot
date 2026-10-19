@@ -26,6 +26,10 @@ AudioManager="*res://scripts/audio/dialogue_manager.tscn"
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[gui]
+
+theme/custom="res://scenes/ui/museum_theme.tres"
+
 [input]
 
 pause={

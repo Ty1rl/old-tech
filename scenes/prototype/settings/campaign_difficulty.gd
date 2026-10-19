@@ -14,7 +14,7 @@ const HARD_PATH := "res://scenes/prototype/settings/difficulty_hard.tres"
 @export var interval_scale: float = 1.0
 @export var refill_delay_scale: float = 1.0
 @export var recovery_scale: float = 1.0
-@export var boss_escort_count: int = 2
+@export var boss_escort_count: int = 6
 @export var mixed_reinforcements: bool = false
 
 

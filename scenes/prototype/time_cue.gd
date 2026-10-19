@@ -43,7 +43,8 @@ func update_state(world_scale: float, inspecting: bool) -> void:
 	target_amount = .24 if inspecting else .16 if world_scale < .999 else 0.0
 	caption.text = "TIME FROZEN · SCROLL TO REVIEW" if inspecting else "TIME SLOW"
 	caption.modulate = Color(.8,.7,1) if inspecting else Color(.65,.85,1)
-	caption.visible = target_amount > 0
+	var manager := get_node_or_null("/root/SceneManager")
+	caption.visible = manager != null and manager.developer_tools and target_amount > 0
 	material.set_shader_parameter("tint",Color(.3,.18,.55) if inspecting else Color(.12,.3,.55))
 
 func _process(delta: float) -> void:

@@ -32,12 +32,14 @@ var _hint_state := -1
 var _muted := false
 var _repair_overlay: CanvasLayer
 var _repair_gauge: Control
+var _caption_time := 0.0
+var _developer_tools := false
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_font = ThemeDB.fallback_font
+	_font = preload("res://assets/fonts/inter_regular.tres")
 	var config := ConfigFile.new()
 	if config.load(READOUT_FILE) == OK:
 		readout_mode = clampi(int(config.get_value("hud", "readout", 1)), 0, 2)
@@ -77,22 +79,23 @@ func cycle_readout() -> void:
 func set_combat_hint(muted: bool) -> void:
 	var manager := get_node_or_null("/root/SceneManager")
 	var developer := bool(manager.developer_tools) if manager else false
+	_developer_tools = developer
 	_muted = muted
 	var slow: bool = is_instance_valid(time_controller) and time_controller.slow_unlocked
 	var next := int(muted) + 2 * int(developer) + 4 * int(slow)
 	if next == _hint_state: return
 	_hint_state = next
-	key_hint.text = "E toggle repair"
-	if slow: key_hint.text += " · hold Space: slow"
-	key_hint.text += " · M sound: %s · F7 numbers" % ("off" if muted else "on")
-	if developer: key_hint.text += " · F10 encounters"
+	# Gameplay uses the arcs and contextual teaching. Debug help lives in F10.
+	key_hint.text = ""
 
 func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> void:
 	checkpoints = equipment.repair_steps
 	tracked_player = player
 	var camera: Camera3D = player.camera
 	visible = not camera.is_position_behind(player.global_position)
+	var previous_tool := selected
 	selected = clampi(weapons.selected_tool - 1, 0, 2)
+	if previous_tool != selected: _caption_time = 1.2
 	repairing = equipment.repairing != &""
 	if repairing and equipment.repairing in TOOLS:
 		selected = TOOLS.find(equipment.repairing)
@@ -104,17 +107,15 @@ func update_status(player: Node3D, weapons: Node3D, equipment: RefCounted) -> vo
 	charge_fraction = clampf(float(presentation.get("charge", 0.0)), 0, 1)
 	for i in range(TOOLS.size()):
 		fractions[i] = clampf(equipment.condition(TOOLS[i]), 0, 1)
-	caption = "Find the illuminated exhibit"
+	caption = ""
 	if selected + 1 in available_tools:
-		caption = NAMES[selected]
-		if repairing: caption += " · repairing · E close"
-		elif fractions[selected] <= .00001: caption += " · empty · E repair"
-		elif fractions[selected] < .999: caption += " · %.0f%% · E repair" % (fractions[selected] * 100)
-		else: caption += " · full"
+		if fractions[selected] <= .00001: caption = "E · repair"
+		elif _caption_time > 0: caption = NAMES[selected]
 	queue_redraw()
 
 func _process(delta: float) -> void:
 	set_combat_hint(_muted)
+	_caption_time = maxf(0.0, _caption_time - delta)
 	_hit_light = maxf(0.0, _hit_light - delta * 1.6)
 	var scale := UI.scale_for(self)
 	if not is_equal_approx(_scale, scale):
@@ -123,7 +124,7 @@ func _process(delta: float) -> void:
 	key_hint.position = Vector2(16, size.y - 28 * _scale)
 	key_hint.size.x = size.x - 32
 	var emergency := is_instance_valid(time_controller) and time_controller.emergency_active
-	key_hint.visible = not emergency and not repairing
+	key_hint.visible = false
 	_repair_overlay.visible = repairing and is_visible_in_tree() and not get_tree().paused and not emergency
 	if _repair_overlay.visible: _repair_gauge.queue_redraw()
 	if is_instance_valid(tracked_player):
@@ -151,7 +152,7 @@ func _draw() -> void:
 		var middle := (start + end) * .5
 		_draw_centered(str(i + 1), center + Vector2(cos(middle), sin(middle)) * (radius + 19 * _scale), 12, color)
 	if not repairing: _draw_time(self, center)
-	if not (is_instance_valid(time_controller) and time_controller.emergency_active):
+	if not repairing and not (is_instance_valid(time_controller) and time_controller.emergency_active):
 		_draw_centered(caption, center + Vector2(0, 125) * _scale, 12, Color("ece4d2", .8))
 	if charging:
 		var pointer := (get_viewport().get_mouse_position() + Vector2(0, -24 * _scale)).clamp(Vector2.ONE * 16 * _scale, size - Vector2.ONE * 16 * _scale)
@@ -178,7 +179,7 @@ func _draw_time(surface: Control, origin: Vector2) -> void:
 				if i < time_controller.charges_remaining: surface.draw_colored_polygon(points, TIME_COLOR)
 				else:
 					points.append(points[0]); surface.draw_polyline(points, Color(TIME_COLOR, .4), _scale, true)
-		if (repairing or readout_mode < 2) and not time_controller.emergency_active:
+		if _developer_tools and (repairing or readout_mode < 2) and not time_controller.emergency_active:
 			_draw_centered(time_readout(), origin + Vector2(0, 104) * _scale, 12, Color(TIME_COLOR, 1.0 if repairing else READOUT_ALPHA[readout_mode]), surface)
 
 func rewind_pips_visible() -> bool:

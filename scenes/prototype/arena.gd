@@ -54,6 +54,11 @@ var feedback: Node3D
 var scrub_view: RefCounted = ScrubView.new()
 var _scrub_speed := 0.0
 var _recent_kills: Array[int] = []
+const DEVELOPER_KEYS := {
+	KEY_F1: &"target", KEY_F2: &"blue", KEY_F3: &"yellow", KEY_F4: &"orange",
+	KEY_F5: &"pack", KEY_F6: &"encounter", KEY_F7: &"readout",
+	KEY_F8: &"side_guard", KEY_F9: &"front_guard", KEY_BACKSPACE: &"clear",
+}
 
 
 func _ready() -> void:
@@ -278,11 +283,13 @@ func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	hud = Label.new()
+	hud.visible = false
 	hud.position = Vector2(16, 12)
 	hud.add_theme_font_size_override("font_size", 17)
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(hud)
 	slow_bar = ProgressBar.new()
+	slow_bar.visible = false
 	slow_bar.position = Vector2(16, 130)
 	slow_bar.size = Vector2(240, 16)
 	slow_bar.max_value = time_controller.capacity if time_controller != null else 100.0
@@ -431,9 +438,8 @@ func _input(event: InputEvent) -> void:
 			_update_hud()
 			get_viewport().set_input_as_handled()
 			return
-		if code == KEY_F7 and event.pressed and not event.echo:
-			status_hud.cycle_readout()
-			_update_hud()
+		if code == KEY_F7 and event.pressed and not event.echo and SceneManager.developer_tools:
+			run_developer_action(&"readout")
 			get_viewport().set_input_as_handled()
 			return
 	if event is InputEventKey and event.pressed and not event.echo and not _has_non_repair_popup() and (emergency_rewind == null or not emergency_rewind.active):
@@ -454,8 +460,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if emergency_rewind != null and emergency_rewind.active:
 		return
 	if SceneManager.has_popup():
-		if event is InputEventKey and event.pressed and event.physical_keycode == KEY_R:
-			reset_arena()
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var code: int = event.physical_keycode if event.physical_keycode else event.keycode
@@ -467,6 +471,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if code == KEY_4:
 			return
+		if DEVELOPER_KEYS.has(code):
+			run_developer_action(DEVELOPER_KEYS[code])
+			return
 		match code:
 			KEY_EQUAL, KEY_PLUS:
 				_set_zoom(zoom - 2.0)
@@ -474,56 +481,49 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_MINUS:
 				_set_zoom(zoom + 2.0)
 				return
-			KEY_F7:
-				status_hud.cycle_readout()
-				_update_hud()
-				return
 			KEY_E:
 				if _player_can_act() and not _owned_tool_slots().is_empty():
 					_open_smart_repair()
 				return
 			KEY_R:
-				reset_arena()
-				return
-			KEY_BACKSPACE:
-				director.clear()
-				history.clear()
-				history.seed_checkpoint(capture_state())
-				return
-			KEY_F1, KEY_F2, KEY_F3, KEY_F4:
-				var kinds := [&"target", &"blue", &"yellow", &"orange"]
-				director.spawn(kinds[code - KEY_F1], _spawn_position())
-				history.clear()
-				history.seed_checkpoint(capture_state())
-				return
-			KEY_F5:
-				director.spawn_group()
-				history.clear()
-				history.seed_checkpoint(capture_state())
-				return
-			KEY_F8:
-				director.spawn(&"side_guard", _spawn_position())
-				history.clear()
-				history.seed_checkpoint(capture_state())
-				return
-			KEY_F9:
-				reset_arena()
-				director.clear()
-				_set_zoom(float(Tuning.VIEW.showcase_size))
-				director.spawn(&"front_guard", Vector3(0, 0, -7))
-				history.clear()
-				history.seed_checkpoint(capture_state())
-				_update_hud()
-				return
-			KEY_F6:
-				reset_arena()
-				director.start_encounter()
-				history.clear()
-				history.seed_checkpoint(capture_state())
+				run_developer_action(&"reset")
 				return
 	aim = floor_aim(get_viewport().get_mouse_position())
 	if aim_valid and _player_can_act():
 		weapons.handle_event(event, player, aim)
+
+
+## Native opt-in test actions. The developer popup and keyboard use one path.
+func run_developer_action(action: StringName) -> void:
+	if not SceneManager.developer_tools or emergency_rewind.active:
+		return
+	match action:
+		&"readout":
+			status_hud.cycle_readout()
+			_update_hud()
+			return
+		&"reset":
+			if has_method("retry_room"): call("retry_room")
+			else: reset_arena()
+		&"clear":
+			director.clear()
+		&"pack":
+			director.spawn_group()
+		&"encounter":
+			reset_arena()
+			director.start_encounter()
+		&"front_guard":
+			reset_arena()
+			director.clear()
+			_set_zoom(float(Tuning.VIEW.showcase_size))
+			director.spawn(&"front_guard", Vector3(0, 0, -7))
+		&"target", &"blue", &"yellow", &"orange", &"side_guard":
+			director.spawn(action, _spawn_position())
+		_:
+			return
+	history.clear()
+	history.seed_checkpoint(capture_state())
+	_update_hud()
 
 
 func _spawn_position() -> Vector3:
@@ -766,7 +766,7 @@ func _update_hud() -> void:
 		player.visual.held_tool.visible = not _owned_tool_slots().is_empty()
 	status_hud.set_combat_hint(feedback.muted)
 	var repair_open: bool = equipment.repairing != &"" or SceneManager.has_popup(&"Repair")
-	var alpha: float = TimeStatusHUD.READOUT_ALPHA[status_hud.readout_mode] if not repair_open else 0.0
+	var alpha: float = TimeStatusHUD.READOUT_ALPHA[status_hud.readout_mode] if SceneManager.developer_tools and not repair_open else 0.0
 	hud.modulate.a = alpha
 	hud.visible = alpha > 0.0
 	slow_bar.modulate.a = alpha

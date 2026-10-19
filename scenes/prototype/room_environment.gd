@@ -21,6 +21,7 @@ const PERIMETER_BOUNDARY_SCENE := preload("res://scenes/rooms/perimeter_boundary
 const TOOL_PICKUP_SCENE := preload("res://scenes/rooms/tool_pickup_pedestal.tscn")
 const WALL_BANNER_SCENE := preload("res://scenes/rooms/wall_banner.tscn")
 const EXIT_FLOOR_ARROW_SCENE := preload("res://scenes/rooms/exit_floor_arrow.tscn")
+const SURROUND_SCENE := preload("res://scenes/rooms/museum_surround.tscn")
 
 signal exit_state_changed(open: bool)
 signal room_completed(room_id: StringName)
@@ -356,6 +357,8 @@ func get_collider_world_rectangles(target_parent: Node3D) -> Array[Rect2]:
 
 
 func _ensure_room_roots() -> void:
+	if not has_node("MuseumSurround"):
+		add_child(SURROUND_SCENE.instantiate())
 	if floor_accents_root == null or not is_instance_valid(floor_accents_root):
 		floor_accents_root = Node3D.new()
 		floor_accents_root.name = "FloorAccents"
